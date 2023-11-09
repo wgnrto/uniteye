@@ -1,0 +1,123 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &3485875271603776584
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8148365448440035643}
+  - component: {fileID: 3128903029877491951}
+  - component: {fileID: 3128903029877491936}
+  - component: {fileID: 3128903029877491944}
+  - component: {fileID: 3128903029877491945}
+  m_Layer: 0
+  m_Name: UnitEye
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8148365448440035643
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3485875271603776584}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &3128903029877491951
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3485875271603776584}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 896eb57cbfb900e4fbba99cb025b6f16, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  webCamName: HP HD Camera
+  webCamResolution: {x: 1920, y: 1080}
+  staticInput: {fileID: 0}
+  rawImage: {fileID: 0}
+  targetFramerate: 120
+  webCamTexture: {fileID: 0}
+  inputRT: {fileID: 0}
+  mirrorImage: 0
+--- !u!114 &3128903029877491936
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3485875271603776584}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05df763e3ac34b245986eeaddf61cb1f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  webCamInput: {fileID: 3128903029877491951}
+  image: {fileID: 0}
+  poseShader: {fileID: 4800000, guid: 53b40831901b386419606fafb90ff9c1, type: 3}
+  humanExistThreshold: 0.5
+  faceShader: {fileID: 4800000, guid: 8d349fe931d52f440a93aec0e3ec67ea, type: 3}
+  faceLineTemplateMesh: {fileID: 4300000, guid: 4d1b450bb6d281641af6c72e8b37cfcb, type: 2}
+  handShader: {fileID: 4800000, guid: 1b792b8e71d565242ae238f771a1db59, type: 3}
+  handScoreThreshold: 0.5
+  holisticInferenceType: 4
+--- !u!114 &3128903029877491944
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3485875271603776584}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 90a247a81d15d934a806676e3fe51cfa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  webCamInput: {fileID: 3128903029877491951}
+  csvLogger: {fileID: 3128903029877491945}
+  gazeLocation: {x: 0, y: 0}
+  dot: {fileID: 2800000, guid: eb5d38b489ce2d54c905340366bccf6b, type: 3}
+  drawDot: 1
+  showEyes: 1
+  visualizeAOI: 0
+  showGazeUI: 1
+  _calibrations: 2
+  _filtering: 5
+  easefactor: 0.4
+  Q: 0.00001
+  R: 0.0001
+  beta: 0.001
+  mincutoff: 0.001
+  dcutoff: 1
+--- !u!114 &3128903029877491945
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3485875271603776584}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d486d78a19cbd5439f3343366ad7d0d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _baseFolderPath: 
+  _baseFileName: UnitEyeLog
+  useDefaultFolder: 1
+  timeUntilWrite: 10
+  logsPerSecond: 999
