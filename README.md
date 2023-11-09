@@ -37,7 +37,7 @@ The `UnitEye/` folder is a complete Unity project with our packages included. If
 ## Graphics API Troubleshooting
 If the eye tracking isn't working at all, your GPU is most likely incompatible with our eye tracking pipeline in [Barracuda](https://docs.unity3d.com/Packages/com.unity.barracuda@2.0/manual/index.html) when using the Direct3D11 Graphics API. To fix this go through the following steps:
 
-![](/Documentation/Images/GraphicsAPI.png)
+![](./Documentation/Images/GraphicsAPI.png)
 
 Open your Project Settings window (`Edit` -> `Project Settings`). Select the `Player` settings, scroll down and open the `Other Settings` for the Windows, Mac and Linux player. Untick the `Auto Graphics API for Windows` checkbox (1), add either `Vulkan` or `OpenGLCore` through the `+` menu (2 and 3) and rearrange them so they are above `Direct3D11` in the list (4). Unity will then ask you to reopen the project. Afterward, the eye tracking should be working. We recommend testing between the two alternative APIs to find the one with the better performance. This bug isn't mentioned in the Unity Barracuda [documentation](https://docs.unity3d.com/Packages/com.unity.barracuda@2.0/manual/SupportedPlatforms.html) for Windows.
 
@@ -88,7 +88,7 @@ Included in the package are several example scenes, the best starting point is t
 #### Web Cam Input: 
 This component manages the connection between Unity and your webcam.
 
-![](/Documentation/Images/WebCamInputInspector.png)
+![](./Documentation/Images/WebCamInputInspector.png)
 
 You can select your webcam by pressing the `Select` button, which opens a drop-down list with all the plugged-in webcams that Unity can see. Below that you can select a desired resolution and Unity will use the closest available resolution that your webcam can provide. The default here is 1080p. You can also set a maximum frame rate limit if you run into a bug where your webcam freezes when the application is running at several hundred frames per second.
 
@@ -97,14 +97,14 @@ Optional settings include a RawImage reference if you wish to have the webcam im
 #### Visualizer:
 This is a component from the preexisting [HolisticBarracuda](https://github.com/creativeIKEP/HolisticBarracuda) package. We use a custom version of this package, so you shouldn't download it separately!
 
-![](/Documentation/Images/VisuallizerInspector.png)
+![](./Documentation/Images/VisuallizerInspector.png)
 
 The main purpose of this component is to visualize all the tracking features of HolisticBarracuda, namely the face mesh, pose and hand tracking. We currently only utilize the face mesh for our eye tracking, but you might want to use more features from HolisticBarracuda in your project! This component is disabled by default as its main purpose is debugging and will degrade the frame rate when enabled. Most settings should be left standard, but you can play around with the `Holistic Inference Type` to check out the different tracking options.
 
 #### Gaze:
 This is our main component that handles the entire eye-tracking pipeline.
 
-![](/Documentation/Images/GazeInspector.png)
+![](./Documentation/Images/GazeInspector.png)
 
 The first setting is a reference to the [Web Cam Input](#web-cam-input) component you wish to use. After that you can select a texture to use as the gaze location dot, we include a simple cross-hair in our package. If you wish to use our [CSV Logger](#csv-logger), simply reference the CSV Logger component from the scene, our prefab already has one included. Below that you have 4 toggle boxes, these can be used to toggle the gaze location dot, show or hide the eye crops, toggle the visualization of our [Area Of Interest](#area-of-interest) system and show the button to toggle our runtime [Gaze UI](#gaze-ui).
 
@@ -115,7 +115,7 @@ The last setting is the filtering selection. We currently offer a [Kalman](https
 #### CSV Logger:
 This is the last component in our prefab and handles our CSV logging. If you do not wish to use the CSV Logging, simply disable this component and nothing will be logged!
 
-![](/Documentation/Images/CSVLoggerInspector.png)
+![](./Documentation/Images/CSVLoggerInspector.png)
 
 The first setting is the base filename you want to give to the .csv files we create. When you hit play in the Editor or run a built application, we automatically append the current timestamp to the filename. This is done to prevent accidental file overwriting when you have multiple runs. An example name would be `UnitEyeLog_20221021_162115.csv`, the formatting being `BaseName_YYYYMMDD_HHMMSS.csv`.
 
@@ -140,7 +140,7 @@ Our example scenes also include a main menu system to allow you to click through
 ## Gaze UI
 We offer a built-in GUI overlay which gives you access to some settings at runtime. When the `Show Gaze` UI button ` checkbox in a [Gaze](#gaze) component is ticked, you will see a button to toggle the GUI. When you click `Show Gaze UI` at runtime, you will see the following overlay:
 
-<img src="/Documentation/Images/GazeUI.png" width="500" height="495">
+<img src="./Documentation/Images/GazeUI.png" width="500" height="495">
 
 This entire window is draggable with the bar at the top. You can go through all the webcams that are currently available in Unity with the `Webcam controls` section. Below that you can `Toggle UI Overlays` similar to the Inspector settings in the [Gaze](#gaze) component. 
 
@@ -159,7 +159,7 @@ Every room and computer setup needs calibration to ensure good tracking accuracy
 
 When you load a new scene similar to `GazeCalibration` and add the component, you have access to the following settings in the inspector:
 
-![](/Documentation/Images/GazeCalibrationInspector.png)
+![](./Documentation/Images/GazeCalibrationInspector.png)
 
 The Points drop-down will give you a list of all the point coordinates for the current calibration round. After that you can select a texture to use as the calibration dot, we include a default CalibrationDot with our package. The speed that the dot moves can also be changed, as well as the padding around the edges in pixels. The current Round shows the current round when calibrating.
 
@@ -169,7 +169,7 @@ Rounding off, you can select the Calibration Type to calibrate against (in a run
 
 When you start a calibration sequence either through a new scene or at runtime through [Gaze UI](#gaze-ui), you will see the following screen:
 
-![](/Documentation/Images/CalibrationScreen.png)
+![](./Documentation/Images/CalibrationScreen.png)
 
 Once you left click with your mouse, the calibration will start and your task is to follow the calibration dot with your eyes. After each round, the calibration will pause, requiring you to press left click again to continue with the next round. As you can see we show ghost dots to visualize where the dot will be moving to. You can blink when the dot is stationary and between rounds, but try not to blink while the dot is moving!
 
@@ -184,7 +184,7 @@ To test the accuracy of our eye tracker, we offer an evaluation sequence. The ge
 
 When you load a new scene similar to `GazeEvaluation` and add the component, you have access to the following settings in the inspector:
 
-![](/Documentation/Images/GazeEvaluationInspector.png)
+![](./Documentation/Images/GazeEvaluationInspector.png)
 
 First, you can select a texture to use as the evaluation dot. Then you can choose the Duration in seconds, this being the time that the dot will appear at each location. We only use data from the middle 50% of the duration (so from 25% to 75% of the duration) for the evaluation to give the user time to find the new location. Padding around the edges in pixels and the pixel size of the dot are the next settings. You can then define the number of rows and columns for our point grid. Finally, choose if you want to display the potential points on the grid as ghost dots and whether or not to quit the app after evaluating.
 
@@ -192,7 +192,7 @@ We evaluate all calibration types other than none at the same time, so there's n
 
 When you start an evaluation sequence either through a new scene or at runtime through [Gaze UI](#gaze-ui), you will see the following screen (the screenshot includes ghost dots to visualize the grid, this is not the default setting!):
 
-![](/Documentation/Images/EvaluationScreen.png)
+![](./Documentation/Images/EvaluationScreen.png)
 
 Once you left click with your mouse, the evaluation will start and your task is to look at the evaluation dot. When the duration left hits 0, the dot will appear at a new random location on the grid and you should once again look at it. This will repeat until we've gone through `rows * columns` locations or until you press the `S` key to stop early. Afterward, we calculate the RMSE of each calibration type of our eye tracker and display it on the screen as a centimeter error based on your screen size. This is also included in the .csv file when you do a runtime evaluation.
 
