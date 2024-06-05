@@ -1,28 +1,34 @@
-# UnitEye
+# UnitEye: Introducing a User-Friendly Plugin to Democratize Eye Tracking Technology in Unity Environments ([MuC '24]([https://muc2024.mensch-und-computer.de/en/]))
+
+ [Tobias Wagner*]([https://scholar.google.de/citations?user=cR1_0-EAAAAJ&hl=en](https://scholar.google.de/citations?user=uqCJ2qsAAAAJ&hl=de&oi=ao)), [Mark Colley*](https://scholar.google.de/citations?user=Kt5I7wYAAAAJ&hl=de&oi=ao), Daniel Breckel, Michael Kösel, Enrico Rukzio (*=equal contribution)
+
+Full paper; doi: [10.1145/3670653.3670655](https://dl.acm.org/doi/10.1145/3670653.3670655)
+
 Webcam-based eye-tracking for Unity
 
+
 ## Our Features
-* Easy to use webcam-based eye tracker for Unity projects that require no specialized hardware other than a webcam
+* Easy-to-use webcam-based eye tracker for Unity projects that require no specialized hardware other than a webcam
 * Filtering of the gaze location to obtain more stable results
 * Calibration to make it work for your setup
 * Evaluation to test the accuracy
 * Area of interest system to designate areas or objects on the screen to track
 * CSV logging to log all the data
-* Distance to the camera, blinking and drowsiness detection
+* Distance to the camera, blinking, and drowsiness detection
 * Built-in GUI for runtime configuration
 * Easy API to get started quickly
 
 > :warning: **Known Issues**
 > * Your GPU might be incompatible with our eye tracking pipeline and Direct3D11, to fix this follow our [Graphics API Troubleshooting](#graphics-api-troubleshooting).
-> * Since we use a webcam and no infrared lighting, the accuracy heavily depends on the quality of your webcam and the lighting in your room. A dark room and a cheap 720p webcam will most likely not result in usable accuracy. The upside of our approach is that we are fairly resistant to glasses and contact lenses, this is an issue for infrared based approaches.
+> * Since we use a webcam and no infrared lighting, accuracy heavily depends on the quality of your webcam and the lighting in your room. A dark room and a cheap 720p webcam will most likely not result in usable accuracy. The upside of our approach is that we are fairly resistant to glasses and contact lenses, which is an issue for infrared-based approaches.
 > * The eye tracking performance degrades when you're not in the center of the webcam image. This is due to our underlying neural network from [EyeMU](https://github.com/FIGLAB/EyeMU) being very sensitive to positional changes and probably also due to optical distortion towards the edges. This can partly be mitigated by moving your head around while calibrating.
-> * The current [EyeMU](https://github.com/FIGLAB/EyeMU) model is unable to generate gaze locations outside of the screen (it is however shifted to the bottom right for us, resulting in pseudo off-screen values). We do include an 'off-screen' AOI in our Gaze component, but it mostly doesn't do much. This is probably due to model structure and/or insufficient training.
+> * The current [EyeMU](https://github.com/FIGLAB/EyeMU) model is unable to generate gaze locations outside of the screen (it is, however, shifted to the bottom right for us, resulting in pseudo off-screen values). We do include an 'off-screen' AOI in our Gaze component, but it mostly doesn't do much. This is probably due to model structure and/or insufficient training.
 > * The tracking in the middle of the screen can at times be inaccurate, this is probably due to insufficient training of the [EyeMU](https://github.com/FIGLAB/EyeMU) model across a wide range of setups and webcams.
-> * Since this is a first version, the accuracy is not up to par with commercial infrared based eye trackers. However, during our testing, if the room (mainly the face) is well lit through frontal lighting and the distance and position doesn't change a lot from the calibration, we've seen RMSEs of 2.5cm x and y on a 24" monitor with a distance of 60cm to the webcam (Logitech C920 running at 960x540 resolution). This equates to a visual angle of ~2.4°.
+> * Since this is as first version, the accuracy is not up to par with commercial infrared-based eye trackers. However, during our testing, if the room (mainly the face) is well lit through frontal lighting and the distance and position doesn't change a lot from the calibration, we've seen RMSEs of 2.5cm x and y on a 24" monitor with a distance of 60cm to the webcam (Logitech C920 running at 960x540 resolution). This equates to a visual angle of ~2.4°.
 > * We use the face mesh from [HolisticBarracuda](https://github.com/creativeIKEP/HolisticBarracuda) to get the locations for our eye crops that we feed into the [EyeMU](https://github.com/FIGLAB/EyeMU) NN, HolisticBarracuda itself uses a to .onnx converted version of [Mediapipe's](https://google.github.io/mediapipe/) Holistic approach that is based on an older version. Thus, the eye crops are quite unstable which leads to a need for heavy filtering of the gaze location.
 > * The current eye tracking pipeline runs blocking synchronously, meaning the frame rate of a project can only be as high as our neural network pipeline runs at. This was 40 FPS in Editor and 70 FPS in a build on a system with an i7 3820 (ancient), 16GB of DDR3 RAM (also ancient) and an AMD Vega56 GPU.
 > * We've attempted to run the eye tracker on Android, however the performance was quite lackluster and Unity handles the front camera on Android in a weird way which would require us to rewrite parts of the eye tracking pipeline to handle camera rotation. This was deemed out of scope for the current project.
-> * During development we encountered a bug on one of our systems where the webcam (namely a **Logitech C920**) would only deliver around 1-2 fps when the requested resolution was set to the full 1080p. This was not reproduced on other systems and appears to be a fairly old bug in [Unity](https://answers.unity.com/questions/1426135/hd-webcam-is-slow-in-pc.html) itself. Upgrading to newer Unity versions did not fix the bug. We suspect this is a rare bug that only happens with Logitech webcams (that do not have USB 3.0) and is out of our control.
+> * During development, we encountered a bug on one of our systems where the webcam (namely a **Logitech C920**) would only deliver around 1-2 fps when the requested resolution was set to the full 1080p. This was not reproduced on other systems and appears to be a fairly old bug in [Unity](https://answers.unity.com/questions/1426135/hd-webcam-is-slow-in-pc.html). Upgrading to newer Unity versions did not fix the bug. We suspect this is a rare bug that only happens with Logitech webcams (that do not have USB 3.0) and is out of our control.
 
 ## Used Sources and Libraries
 * [Barracuda](https://docs.unity3d.com/Packages/com.unity.barracuda@2.0/manual/index.html), this is Unity's neural network inference library based around the [.onnx](https://onnx.ai/) file type
@@ -32,7 +38,7 @@ Webcam-based eye-tracking for Unity
 * Other smaller code sources are referenced in code comments
 
 ## Quick Demo
-The `UnitEye/` folder is a complete Unity project with our packages included. If you want to have a quick look at our eye tracker, simply open that folder as a project through Unity Hub. [Getting Started](#getting-started) will walk you through the features. Use [Installation](#installation) to add our packages to an already existing project. For a small demo where we use our eye tracker in a basic game, read [Gaze Game](#gaze-game)!
+The `UnitEye/` folder is a complete Unity project with our packages included. If you want to quickly look at our eye tracker, simply open that folder as a project through Unity Hub. [Getting Started](#getting-started) will walk you through the features. Use [Installation](#installation) to add our packages to an existing project. For a small demo where we use our eye tracker in a basic game, read [Gaze Game](#gaze-game)!
 
 ## Graphics API Troubleshooting
 If the eye tracking isn't working at all, your GPU is most likely incompatible with our eye tracking pipeline in [Barracuda](https://docs.unity3d.com/Packages/com.unity.barracuda@2.0/manual/index.html) when using the Direct3D11 Graphics API. To fix this go through the following steps:
@@ -44,7 +50,7 @@ Open your Project Settings window (`Edit` -> `Project Settings`). Select the `Pl
 ## Installation
 To get started with UnitEye in your project, you have to first copy `UnitEye`, `HolisticBarracuda`, and `com.github.homuler.mediapipe` from the root into your own projects `Packages/` folder.
 The `HolisticBarracuda` package requires some extra dependencies, which have to be added to your project `Packages/manifest.json`.
-Add the following to the `scopedRegistries` section (if it doesn't exist you have to manually add the section):
+Add the following to the `scopedRegistries` section (if it does not exist, you have to manually add the section):
 ```json
 {
     "name": "Keijiro",
@@ -90,7 +96,7 @@ This component manages the connection between Unity and your webcam.
 
 ![](./Documentation/Images/WebCamInputInspector.png)
 
-You can select your webcam by pressing the `Select` button, which opens a drop-down list with all the plugged-in webcams that Unity can see. Below that you can select a desired resolution and Unity will use the closest available resolution that your webcam can provide. The default here is 1080p. You can also set a maximum frame rate limit if you run into a bug where your webcam freezes when the application is running at several hundred frames per second.
+You can select your webcam by pressing the `Select` button, which opens a drop-down list with all the plugged-in webcams that Unity can see. Below that, you can select a desired resolution, and Unity will use the closest available resolution that your webcam can provide. The default here is 1080p. You can also set a maximum frame rate limit if you run into a bug where your webcam freezes when the application runs at several hundred frames per second.
 
 Optional settings include a RawImage reference if you wish to have the webcam image drawn in your scene, a static input image for debugging purposes and a toggle box to mirror the image horizontally, depending on your webcam you may want to use this if you're looking at the top right corner but the webcam image is showing you looking to the top left. This mirroring is purely visual and does not influence the tracking.
 
@@ -99,7 +105,7 @@ This is a component from the preexisting [HolisticBarracuda](https://github.com/
 
 ![](./Documentation/Images/VisuallizerInspector.png)
 
-The main purpose of this component is to visualize all the tracking features of HolisticBarracuda, namely the face mesh, pose and hand tracking. We currently only utilize the face mesh for our eye tracking, but you might want to use more features from HolisticBarracuda in your project! This component is disabled by default as its main purpose is debugging and will degrade the frame rate when enabled. Most settings should be left standard, but you can play around with the `Holistic Inference Type` to check out the different tracking options.
+The main purpose of this component is to visualize all the tracking features of HolisticBarracuda, namely the face mesh, pose, and hand tracking. We currently only utilize the face mesh for our eye tracking, but you might want to use more features from HolisticBarracuda in your project! This component is disabled by default as its main purpose is debugging and will degrade the frame rate when enabled. Most settings should be left standard, but you can play around with the `Holistic Inference Type` to check out the different tracking options.
 
 #### Gaze:
 This is our main component that handles the entire eye-tracking pipeline.
@@ -108,12 +114,12 @@ This is our main component that handles the entire eye-tracking pipeline.
 
 The first setting is a reference to the [Web Cam Input](#web-cam-input) component you wish to use. After that you can select a texture to use as the gaze location dot, we include a simple cross-hair in our package. If you wish to use our [CSV Logger](#csv-logger), simply reference the CSV Logger component from the scene, our prefab already has one included. Below that you have 4 toggle boxes, these can be used to toggle the gaze location dot, show or hide the eye crops, toggle the visualization of our [Area Of Interest](#area-of-interest) system and show the button to toggle our runtime [Gaze UI](#gaze-ui).
 
-Moving on, you can select between our [Calibration](#calibration) types. We currently offer `None`, which only uses the raw neural network output of the underlying [EyeMU](https://github.com/FIGLAB/EyeMU) model, `Ridge Regression` which uses a weighted sum Ridge Regression to refine the gaze location and `ML Calibration` where we use our own machine learning multilayer perceptron that we train when calibrating. Currently, the ML calibration offers the highest accuracy and should be preferred. The current gaze location in x and y pixels coordinates (with zero at the top left corner) is displayed below the calibration type.
+Moving on, you can select between our [Calibration](#calibration) types. We currently offer `None`, which only uses the raw neural network output of the underlying [EyeMU](https://github.com/FIGLAB/EyeMU) model, `Ridge Regression`, which uses a weighted sum Ridge Regression to refine the gaze location and `ML Calibration` where we use our own machine learning multilayer perceptron that we train when calibrating. Currently, the ML calibration offers the highest accuracy and should be preferred. The current gaze location in x and y pixels coordinates (with zero at the top left corner) is displayed below the calibration type.
 
-The last setting is the filtering selection. We currently offer a [Kalman](https://en.wikipedia.org/wiki/Kalman_filter) filter, a simple Easing filter which is a weighted sum filter between the last and the current gaze location, combinations of those two and a [One Euro](https://gery.casiez.net/1euro/) filter. Depending on what filter is selected, you can also tinker with the relevant filter values to suit your needs. We recommend the One Euro filter as it offers the best smoothing performance while being quick when larger location changes happen, but you're welcome to try out the other options.
+The last setting is the filtering selection. We currently offer a [Kalman](https://en.wikipedia.org/wiki/Kalman_filter) filter, a simple Easing filter, which is a weighted sum filter between the last and the current gaze location, combinations of those two and a [One Euro](https://gery.casiez.net/1euro/) filter. Depending on the selected filter, you can also tinker with the relevant filter values to suit your needs. We recommend the One Euro filter as it offers the best smoothing performance while being quick when larger location changes happen, but you're welcome to try out the other options.
 
 #### CSV Logger:
-This is the last component in our prefab and handles our CSV logging. If you do not wish to use the CSV Logging, simply disable this component and nothing will be logged!
+This is the last component in our prefab and handles our CSV logging. If you do not wish to use the CSV Logging, simply disable this component, and nothing will be logged!
 
 ![](./Documentation/Images/CSVLoggerInspector.png)
 
@@ -142,9 +148,9 @@ We offer a built-in GUI overlay which gives you access to some settings at runti
 
 <img src="./Documentation/Images/GazeUI.png" width="500" height="495">
 
-This entire window is draggable with the bar at the top. You can go through all the webcams that are currently available in Unity with the `Webcam controls` section. Below that you can `Toggle UI Overlays` similar to the Inspector settings in the [Gaze](#gaze) component. 
+This entire window is draggable with the bar at the top. You can go through all the webcams that are currently available in Unity using the `Webcam controls` section. Below that, you can `Toggle UI Overlays` similar to the Inspector settings in the [Gaze](#gaze) component. 
 
-Moving on, you can calibrate our `Distance to camera` feature. This calibration is required when you first set up your webcam or change to a different webcam. To calibrate, simply sit such that your eyes are around 50cm away from the webcam and hit the `Calibrate Distance to Camera` button. The calibrated value in the background is saved in the PlayerPrefs of your Unity project/built app, so this calibration ideally only needs to be done once when changing webcams and persists through multiple runs.
+Moving on, you can calibrate our `Distance to camera` feature. This calibration is required when you first set up your webcam or change to a different webcam. To calibrate, simply sit so that your eyes are around 50cm away from the webcam and hit the `Calibrate Distance to Camera` button. The calibrated value in the background is saved in the PlayerPrefs of your Unity project/built app, so this calibration ideally only needs to be done once when changing webcams and persists through multiple runs.
 
 After that, you can calibrate our `Blinking and Drowsiness` system. To calibrate the blinking threshold, close your eyes to whatever degree you want us to detect as blinking and click on the `Calibrate Blinking Threshold` button. The same applies to the drowsiness calibration. Close your eyes to the degree that you want us to detect as being drowsy and click on the `Calibrate Drowsiness Baseline` button. We then sample the eye aspect ratio of your eyes over the next 60 frames and calculate an average baseline to compare to. When your eyes are below this baseline (meaning your eyes are more shut) for a while (several seconds), we detect you as being drowsy. Both these calibrations are saved in PlayerPrefs as well.
 
@@ -155,7 +161,7 @@ Lastly, you have the option to start our `Calibration` and `Evaluation` sequence
 ## Calibration
 Every room and computer setup needs calibration to ensure good tracking accuracy. You should also calibrate when your seating position changes drastically or when you notice a loss in accuracy (which can also be caused by a change in lighting). To do that you have two options:
 * Load a new scene similar to our `UnitEye/Scenes/GazeCalibration` scene and add the `UnitEye/Scripts/Runtime/GazeCalibration.cs` component to a `UnitEye` prefab
-* Do a runtime calibration through our [Gaze UI](#gaze-ui). When you do this, we load the GazeCalibration component dynamically with mostly default settings and the currently selected calibration type. You also have the option to cancel and return with right click. The calibration accuracy will be included in the .csv file if you're logging data.
+* Do a runtime calibration through our [Gaze UI](#gaze-ui). When you do this, we load the GazeCalibration component dynamically with mostly default settings and the currently selected calibration type. You also have the option to cancel and return with right click. The calibration accuracy will be included in the .csv file if you are logging data.
 
 When you load a new scene similar to `GazeCalibration` and add the component, you have access to the following settings in the inspector:
 
@@ -163,9 +169,9 @@ When you load a new scene similar to `GazeCalibration` and add the component, yo
 
 The Points drop-down will give you a list of all the point coordinates for the current calibration round. After that you can select a texture to use as the calibration dot, we include a default CalibrationDot with our package. The speed that the dot moves can also be changed, as well as the padding around the edges in pixels. The current Round shows the current round when calibrating.
 
-Max Rounds Per Preset sets the maximum rounds the calibration goes through based on how many pattern presets are included. Currently, the calibration runs through the corners clockwise, then a vertical zig-zag pattern, followed by a horizontal zig-zag pattern and a counterclockwise corner pattern. When Max Rounds is set to eg. 3, it will run through those four patterns sequentially and then repeat that 2 more times, for a total of 12 rounds. We recommend 2 Max Rounds Per Preset, but you're welcome to test and change the `_presets` in `UnitEye/Scripts/Runtime/GazeCalibration.cs`.
+Max Rounds Per Preset sets the maximum rounds the calibration goes through based on how many pattern presets are included. Currently, the calibration runs through the corners clockwise, then a vertical zig-zag pattern, followed by a horizontal zig-zag pattern and a counterclockwise corner pattern. When Max Rounds is set to eg. 3, it will run through those four patterns sequentially and then repeat that 2 more times, for a total of 12 rounds. We recommend 2 Max Rounds Per Preset, but you are welcome to test and change the `_presets` in `UnitEye/Scripts/Runtime/GazeCalibration.cs`.
 
-Rounding off, you can select the Calibration Type to calibrate against (in a runtime calibration this is the current calibration type on the Gaze component), choose whether or not to save a (and potentially overwrite an existing) calibration file, choose whether or not the calibration stops after every point (to allow your eyes to relax and you to blink if needed) and choose if you want to quit the application after the calibration is complete.
+Rounding off, you can select the Calibration Type to calibrate against (in a runtime calibration, this is the current calibration type on the Gaze component), choose whether or not to save a (and potentially overwrite an existing) calibration file, choose whether or not the calibration stops after every point (to allow your eyes to relax and you to blink if needed), and choose whether you want to quit the application after the calibration is complete.
 
 When you start a calibration sequence either through a new scene or at runtime through [Gaze UI](#gaze-ui), you will see the following screen:
 
@@ -180,7 +186,7 @@ Speaking of calibration files, we include default files for each of our calibrat
 ## Evaluation
 To test the accuracy of our eye tracker, we offer an evaluation sequence. The general procedure is similar to a [Calibration](#calibration), but instead of moving, the evaluation dot jumps between random points on the screen that are on a set grid. You once again have two options:
 * Load a new scene similar to our `UnitEye/Scenes/GazeEvaluation` scene and add the `UnitEye/Scripts/Runtime/GazeEvaluation.cs` component to a `UnitEye` prefab
-* Do a runtime evaluation through our [Gaze UI](#gaze-ui). When you do this, we load the GazeEvaluation component dynamically with mostly default settings and the currently selected calibration type. You also have the option to cancel and return with right click. The evaluation accuracy will be included in the .csv file if you're logging data.
+* Do a runtime evaluation through our [Gaze UI](#gaze-ui). When you do this, we load the GazeEvaluation component dynamically with mostly default settings and the currently selected calibration type. You also have the option to cancel and return with right click. The evaluation accuracy will be included in the .csv file if you log data.
 
 When you load a new scene similar to `GazeEvaluation` and add the component, you have access to the following settings in the inspector:
 
@@ -194,10 +200,10 @@ When you start an evaluation sequence either through a new scene or at runtime t
 
 ![](./Documentation/Images/EvaluationScreen.png)
 
-Once you left click with your mouse, the evaluation will start and your task is to look at the evaluation dot. When the duration left hits 0, the dot will appear at a new random location on the grid and you should once again look at it. This will repeat until we've gone through `rows * columns` locations or until you press the `S` key to stop early. Afterward, we calculate the RMSE of each calibration type of our eye tracker and display it on the screen as a centimeter error based on your screen size. This is also included in the .csv file when you do a runtime evaluation.
+Once you left-click with your mouse, the evaluation will start, and your task is to look at the evaluation dot. When the duration left hits 0, the dot will appear at a new random location on the grid and you should once again look at it. This will repeat until we've gone through `rows * columns` locations or until you press the `S` key to stop early. Afterward, we calculate the RMSE of each calibration type of our eye tracker and display it on the screen as a centimeter error based on your screen size. This is also included in the .csv file when you do a runtime evaluation.
 
 ## Area Of Interest
-Our custom Area Of Interest (AOI) system allows you to do interesting things with our eye tracker. The [AOIManager](UnitEye/Scripts/Runtime/AOI/AOIManager.cs) class handles all the AOIs we want to track through a List<AOI>, which contains all the currently tracked AOIs. The manager includes functions to add, remove and get AOIs from the list.  If you want to add an AOI, you have to add it to the AOIManager in the [Gaze](#gaze) component. To do so, you need to have a reference to that AOIManager, our [GazeGameAPI.cs](UnitEye/Scripts/Runtime/GazeGameAPI.cs) and [GazeGame.cs](UnitEye/Scripts/Runtime/GazeGame.cs) include several ways to do so, either through the [UnitEyeAPI](#uniteyeapi), via reference or inheritance.
+Our custom Area Of Interest (AOI) system allows you to do interesting things with our eye tracker. The [AOIManager](UnitEye/Scripts/Runtime/AOI/AOIManager.cs) class handles all the AOIs we want to track through a List<AOI>, which contains all the currently tracked AOIs. The manager includes functions to add, remove, and get AOIs from the list.  If you want to add an AOI, you have to add it to the AOIManager in the [Gaze](#gaze) component. To do so, you need to have a reference to that AOIManager, our [GazeGameAPI.cs](UnitEye/Scripts/Runtime/GazeGameAPI.cs) and [GazeGame.cs](UnitEye/Scripts/Runtime/GazeGame.cs) include several ways to do so, either through the [UnitEyeAPI](#uniteyeapi), via reference or inheritance.
 
 We currently offer 7 different shapes for you to use as you please which will be explained in detail in this chapter. [ExampleAOIs.cs](UnitEye/Scripts/Runtime/AOI/ExampleAOIs.cs) contains examples for all of the AOI shapes.
 
@@ -293,7 +299,7 @@ public class GazeableExample : MonoBehaviour
     {
         if (_gazeable.HasGazeFocus)
         {
-            // Object is beeing looked at 
+            // Object is being looked at 
         }
     }
 }
@@ -302,7 +308,7 @@ public class GazeableExample : MonoBehaviour
 ## Gaze Game
 This is a small demo contained in the `UnitEye/Scenes/GazeGame` scene where you can move GameObjects around by looking at them for more than 30 frames. After that, you control their location with your eyes and can "let go" of the GameObject by blinking. This is meant as a tutorial scene to show you the basics of how you can use our package.
 
-In this scene, we've added two components to our `UnitEye` prefab that accomplish the same thing through different methods. The [GazeGameAPI.cs](UnitEye/Scripts/Runtime/GazeGameAPI.cs) utilizes our [UnitEyeAPI](#uniteyeapi) to access the AOIManager from the [Gaze](#gaze) component, while the [GazeGame.cs](UnitEye/Scripts/Runtime/GazeGame.cs) uses a simple reference to the [Gaze](#gaze) component and includes comments if you want to use inheritance instead. If you were to use inheritance you have to disable the Gaze component in your scene as your new script would include all of the functionality. This does have the downside of not using our custom inspector editor, however.
+In this scene, we've added two components to our `UnitEye` prefab that accomplish the same thing through different methods. The [GazeGameAPI.cs](UnitEye/Scripts/Runtime/GazeGameAPI.cs) utilizes our [UnitEyeAPI](#uniteyeapi) to access the AOIManager from the [Gaze](#gaze) component, while the [GazeGame.cs](UnitEye/Scripts/Runtime/GazeGame.cs) uses a simple reference to the [Gaze](#gaze) component and includes comments if you want to use inheritance instead. If you were to use inheritance, you would have to disable the Gaze component in your scene, as your new script would include all of the functionality. This does have the downside of not using our custom inspector editor, however.
 
 ## License
 * HolisticBarracuda is licensed under the [Apache 2.0](https://github.com/creativeIKEP/HolisticBarracuda/blob/main/LICENSE.md) license
