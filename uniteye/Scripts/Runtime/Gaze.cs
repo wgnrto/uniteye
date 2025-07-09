@@ -1,20 +1,15 @@
-/// Code based on <see cref="Gaze"/>.
-/// Updated by Tobias Wagner 07/2023 to integrate <see cref="Mediapipe.Unity"/> package.
-
-using Mediapipe.Unity;
-using Mediapipe.Unity.FaceMesh;
+using MediaPipe.Holistic;
 using System.Collections.Generic;
 using UnitEye;
 using UnityEngine;
-using Screen = UnityEngine.Screen;
 
-public class HomulerGaze : MonoBehaviour
+public class Gaze : MonoBehaviour
 {
-
     const int IMG_SIZE = 128;
     const int CROSSHAIR_SIZE = 80;
 
     #region Private values
+
     private AOIManager _aoiManager = new AOIManager();
     private List<string> aoiNameList = new List<string>();
 
@@ -26,20 +21,20 @@ public class HomulerGaze : MonoBehaviour
 
     private GUIStyle style = new GUIStyle();
 
-    public HomulerEyeHelper _eyeHelper;
-    public WebCamSource _webcam;
+    private HolisticPipeline _holisticPipeline;
+    private EyeHelper _eyeHelper;
 
     private AOIBox _offscreenAOI;
 
     private RidgeRegression _xModel, _yModel;
     private MLP _mlp;
-    private HomulerEyeMURunner _modelRunner;
+    private EyeMURunner _modelRunner;
     private KalmanFilter kalmanFilter;
     private EaseSmoothing easeSmoothing;
     private OneEuroFilter<Vector2> oneEuroFilter;
 
-    [SerializeField] private HomulerGazeCalibration _calibrationScript;
-    private HomulerGazeEvaluation _evaluationScript;
+    private GazeCalibration _calibrationScript;
+    private GazeEvaluation _evaluationScript;
 
     private bool _drawDotBackup = true;
     private bool _showEyesBackup = true;
@@ -47,24 +42,28 @@ public class HomulerGaze : MonoBehaviour
     private bool _showGazeUIBackup = false;
     private Calibrations _calibrationBackup;
     private bool _backupped;
+
     #endregion
 
     #region Public accessors
-    public HomulerEyeMURunner ModelRunner { get => _modelRunner; }
-    public HomulerEyeHelper EyeHelper { get => _eyeHelper; }
+    public EyeMURunner ModelRunner { get => _modelRunner; }
+    public HolisticPipeline HolisticPipeline { get => _holisticPipeline; }
+    public EyeHelper EyeHelper { get => _eyeHelper; }
     public AOIManager AOIManager { get => _aoiManager; }
     public AOI OffscreenAOI { get => _offscreenAOI; }
-    public CSVLogger CSVLogger { get => _csvLogger; }
+    public CSVLogger CSVLogger { get => csvLogger; }
     public bool Drowsy { get => _drowsy; }
     public bool Blinking { get => _blinking; }
     public float Distance { get => _distance; }
     public bool PauseCSVLogging { get; set; }
     public long LastGazeLocationTimeUnix { get; private set; }
+
     #endregion
 
     #region Serialized values
-    [SerializeField] private GameObject _mediaPipeGO;
-    [SerializeField] private CSVLogger _csvLogger;
+
+    [SerializeField] WebCamInput webCamInput;
+    [SerializeField] CSVLogger csvLogger;
 
     public Vector2 gazeLocation = Vector2.zero;
 
@@ -85,8 +84,8 @@ public class HomulerGaze : MonoBehaviour
         set
         {
             //Append a note to csv entry if calibration changed
-            if (Application.isPlaying && _csvLogger != null && _csvLogger.isActiveAndEnabled && value != _calibrations)
-                _csvLogger.AppendNote($"Changed calibration type to {_calibrations}");
+            if (Application.isPlaying && csvLogger != null && csvLogger.isActiveAndEnabled && value != _calibrations)
+                csvLogger.AppendNote($"Changed calibration type to {_calibrations}");
 
             _calibrations = value;
             switch (_calibrations)
@@ -109,8 +108,8 @@ public class HomulerGaze : MonoBehaviour
         set
         {
             //Append a note to csv entry if filtering changed
-            if (Application.isPlaying && _csvLogger != null && _csvLogger.isActiveAndEnabled && value != _filtering)
-                _csvLogger.AppendNote($"Changed filtering type to {_filtering}");
+            if (Application.isPlaying && csvLogger != null && csvLogger.isActiveAndEnabled && value != _filtering)
+                csvLogger.AppendNote($"Changed filtering type to {_filtering}");
 
             _filtering = value;
         }
@@ -127,35 +126,18 @@ public class HomulerGaze : MonoBehaviour
     [SerializeField, Range(1e-10f, 1.0f)] public float mincutoff = 0.001f;
     [SerializeField, Range(1e-10f, 10.0f)] public float dcutoff = 1.0f;
 
-    [SerializeField, Range(30, 120)] private int _frameRate = 30;
-
-    private bool _isRendering;
-    public bool IsRendering {
-        get => _isRendering;
-        private set
-        {
-            _isRendering = value;
-            var solution = _mediaPipeGO.GetComponent<FaceMeshSolution>();
-            solution.Annotate = _isRendering;
-            solution.IsRendering = _isRendering;
-        }
-    }
-
     #endregion
 
     public virtual void Start()
     {
-        Application.targetFrameRate = _frameRate;
-
-        _webcam = _mediaPipeGO.GetComponent<WebCamSource>();
-        //FaceMeshSolution instance
-        FaceMeshSolution faceMesh = _mediaPipeGO.GetComponent<FaceMeshSolution>();
+        //Create new Holistic pipeline
+        _holisticPipeline = new HolisticPipeline();
 
         //Create new EyeHelper
-        _eyeHelper = new HomulerEyeHelper(faceMesh, _webcam.name);
+        _eyeHelper = new EyeHelper(_holisticPipeline, webCamInput.webCamName);
 
         //Create new EyeMURunner
-        _modelRunner = new HomulerEyeMURunner(faceMesh);
+        _modelRunner = new EyeMURunner(_holisticPipeline, 0.5f);
 
         //Load calibration files, suppress exceptions as they are handled internally
         switch (_calibrations)
@@ -163,7 +145,7 @@ public class HomulerGaze : MonoBehaviour
             case Calibrations.RidgeRegression:
                 try { _xModel = RidgeRegression.LoadX("Reg_X.json"); } catch { }
                 try { _yModel = RidgeRegression.LoadY("Reg_Y.json"); } catch { }
-                break;
+                    break;
             case Calibrations.MLCalibration:
                 try { _mlp = MLP.Load("MLP.json"); } catch { }
                 break;
@@ -224,9 +206,11 @@ public class HomulerGaze : MonoBehaviour
 
     public virtual void LateUpdate()
     {
+        //If no holistic pipeline abort
+        if (_holisticPipeline == null) return;
+
         //Peform neural network inference through entire eye tracking pipeline
-        if (!_modelRunner.PerformInference(_webcam)) 
-            return;
+        if (!_modelRunner.PerformInference(webCamInput)) return;
 
         //Get gaze location from network output
         gazeLocation.x = _modelRunner.NetworkOutput[0];
@@ -252,8 +236,8 @@ public class HomulerGaze : MonoBehaviour
         _distance = _eyeHelper.CalculateCamDistanceFocal();
 
         //CSV Logging
-        if (!PauseCSVLogging && _csvLogger != null && _csvLogger.isActiveAndEnabled)
-            _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _eyeHelper.EyeFeature(), _blinking, now, aoiNameList));
+        if (!PauseCSVLogging && csvLogger != null && csvLogger.isActiveAndEnabled)
+            csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _eyeHelper.EyeFeature(), _blinking, now, aoiNameList));
 
         //Drowsy calibration
         if (_eyeHelper.Calibrating)
@@ -263,8 +247,8 @@ public class HomulerGaze : MonoBehaviour
         if (_calibrationScript != null && _calibrationScript.Returned)
         {
             //Add one entry for the note because PauseCSVLogging is currently true
-            if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
-                _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _eyeHelper.EyeFeature(), _blinking, now, aoiNameList));
+            if (csvLogger != null && csvLogger.isActiveAndEnabled)
+                csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _eyeHelper.EyeFeature(), _blinking, now, aoiNameList));
             UnloadCalibration();
         }
 
@@ -282,10 +266,10 @@ public class HomulerGaze : MonoBehaviour
 
             GUI.DrawTexture(new Rect(10, 10, IMG_SIZE, IMG_SIZE), _modelRunner.RightEyeTexture);
         }
-
+        
         //Draw crosshair on the GUI if one is selected
         if (drawDot && dot != null)
-            GUI.DrawTexture(new Rect(gazeLocation.x - CROSSHAIR_SIZE / 2, gazeLocation.y - CROSSHAIR_SIZE / 2, CROSSHAIR_SIZE, CROSSHAIR_SIZE), dot);
+            GUI.DrawTexture(new Rect(gazeLocation.x - CROSSHAIR_SIZE/2, gazeLocation.y - CROSSHAIR_SIZE/2, CROSSHAIR_SIZE, CROSSHAIR_SIZE), dot);
 
         //Gaze UI
         if (showGazeUI && GUI.Button(new Rect(Screen.height * 0.05f, Screen.height - Screen.height * 0.1f, Screen.width * 0.1f, Screen.height * 0.05f), $"{(gazeUIActivated ? "Hide" : "Show")} Gaze UI"))
@@ -304,6 +288,9 @@ public class HomulerGaze : MonoBehaviour
         // Must call Dispose method when no longer in use.
         _modelRunner?.Dispose();
         _modelRunner = null;
+        _holisticPipeline?.Dispose();
+        _holisticPipeline = null;
+        webCamInput.Stop();
     }
 
     /// <summary>
@@ -313,7 +300,7 @@ public class HomulerGaze : MonoBehaviour
     /// <returns>The calibrated gaze location</returns>
     public Vector2 RefineGazeLocation(Vector2 rawGaze, Calibrations calibrations)
     {
-        var features = _modelRunner.Features.ToArray();
+        var features = _modelRunner.GetFeatures().ToArray();
         Vector2 refinedGaze = Vector2.zero;
 
         //Switch by calibration type
@@ -386,10 +373,10 @@ public class HomulerGaze : MonoBehaviour
     public void LoadCalibration(float speed = 9.0f, float padding = 20.0f, int rounds = 2)
     {
         //Return if we have no Calibration to calibrate for
-        if (_calibrations == Calibrations.None) 
-            return;
+        if (_calibrations == Calibrations.None) return;
 
-        IsRendering = false;
+        //Remove webcam from background
+        webCamInput.RemoveImage();
 
         //Backup settings
         BackupSettings();
@@ -402,14 +389,14 @@ public class HomulerGaze : MonoBehaviour
         gazeUIActivated = false;
 
         //Append a note to csv entry
-        if (_csvLogger != null && _csvLogger.isActiveAndEnabled && _calibrationScript == null)
-            _csvLogger.AppendNote("Started calibration");
+        if (csvLogger != null && csvLogger.isActiveAndEnabled && _calibrationScript == null)
+            csvLogger.AppendNote("Started calibration");
 
         //Unpause CSVLogging
         PauseCSVLogging = true;
 
         //Attach calibration to same gameObject
-        _calibrationScript.enabled = true;
+        _calibrationScript = gameObject.AddComponent<GazeCalibration>();
 
         //Set _calibrations to none for a bit of performance gain
         _calibrationScript.calibrationType = _calibrations;
@@ -435,15 +422,18 @@ public class HomulerGaze : MonoBehaviour
         PauseCSVLogging = false;
 
         //Append a note to csv entry
-        if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
-            _csvLogger.AppendNote(_calibrationScript.ReturnMessage);
+        if (csvLogger != null && csvLogger.isActiveAndEnabled)
+            csvLogger.AppendNote(_calibrationScript.ReturnMessage);
 
-        _calibrationScript.enabled = false;
+        //Destroy calibration script
+        Destroy(_calibrationScript);
+        _calibrationScript = null;
 
         //Reload calibration file
         Calibrations = _calibrations;
 
-        IsRendering = true;
+        //Restore webcam to background
+        webCamInput.RestoreImage();
     }
 
     /// <summary>
@@ -453,7 +443,8 @@ public class HomulerGaze : MonoBehaviour
     /// <param name="columns">Number of columns in the dot grid</param>
     public void LoadEvaluation(int rows = 5, int columns = 5)
     {
-        IsRendering = false;
+        //Remove webcam from background
+        webCamInput.RemoveImage();
 
         //Backup settings
         BackupSettings();
@@ -466,12 +457,11 @@ public class HomulerGaze : MonoBehaviour
         gazeUIActivated = false;
 
         //Append a note to csv entry
-        if (_csvLogger != null && _csvLogger.isActiveAndEnabled && _calibrationScript == null)
-            _csvLogger.AppendNote("Started evaluation");
+        if (csvLogger != null && csvLogger.isActiveAndEnabled && _calibrationScript == null)
+            csvLogger.AppendNote("Started evaluation");
 
         //Attach calibration to same gameObject
-        _evaluationScript = GetComponent<HomulerGazeEvaluation>();
-        _evaluationScript.enabled = true;
+        _evaluationScript = gameObject.AddComponent<GazeEvaluation>();
 
         //Evaluation settings
         _evaluationScript.quitAfterEvaluation = false;
@@ -489,13 +479,14 @@ public class HomulerGaze : MonoBehaviour
         RestoreSettings();
 
         //Append a note to csv entry
-        if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
-            _csvLogger.AppendNote(_evaluationScript.ReturnMessage);
+        if (csvLogger != null && csvLogger.isActiveAndEnabled)
+            csvLogger.AppendNote(_evaluationScript.ReturnMessage);
 
         //Destroy calibration script
-        _evaluationScript.enabled = false;
-
-        IsRendering = true;
+        Destroy(_evaluationScript);
+        _evaluationScript = null;
+        //Restore webcam to background
+        webCamInput.RestoreImage();
     }
 
     /// <summary>
@@ -558,24 +549,22 @@ public class HomulerGaze : MonoBehaviour
         GUI.DragWindow(new Rect(0, 0, width, height * 0.02f));
 
         //Webcam controls
-        // This might be broken (TW 07/2023)
-        // We may have to restart the new webcam if we change the source.
         GUI.BeginGroup(new Rect(width * 0.01f, height * 0.02f, width * 0.48f, height * 0.08f));
 
         GUI.Box(new Rect(0, 0, width * 0.48f, height * 0.08f), "Webcam controls", gazeUIStyleBox);
 
         if (GUI.Button(new Rect(width * 0.025f, height * 0.025f, width * 0.12f, height * 0.05f), $"Previous Webcam", gazeUIStyleButton))
         {
-            _webcam.SelectSource(_webcam.GetCameraIndex() + 1);
-            _eyeHelper.CameraChanged(_webcam.sourceName);
+            webCamInput.PreviousCamera((int)webCamInput.webCamResolution.x, (int)webCamInput.webCamResolution.y);
+            _eyeHelper.CameraChanged(webCamInput.webCamName);
         }
 
-        GUI.Label(new Rect(width * 0.18f, height * 0.025f, width * 0.12f, height * 0.05f), $"Current Webcam: {_webcam.sourceName}", gazeUIStyleLabel);
+        GUI.Label(new Rect(width * 0.18f, height * 0.025f, width * 0.12f, height * 0.05f), $"Current Webcam: {webCamInput.webCamName}", gazeUIStyleLabel);
 
         if (GUI.Button(new Rect(width * 0.335f, height * 0.025f, width * 0.12f, height * 0.05f), $"Next Webcam", gazeUIStyleButton))
         {
-            _webcam.SelectSource(_webcam.GetCameraIndex() - 1);
-            _eyeHelper.CameraChanged(_webcam.sourceName);
+            webCamInput.NextCamera((int)webCamInput.webCamResolution.x, (int)webCamInput.webCamResolution.y);
+            _eyeHelper.CameraChanged(webCamInput.webCamName);
         }
 
         GUI.EndGroup();

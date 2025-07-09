@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 1d7634804d98e7e4ab0d04c3b9649f24
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - globalConfigManagerPrefab: {fileID: 4394522812020757894, guid: 488fbb6a3005b66c2b657204bce83fcf,
+      type: 3}
+  - gpuManagerPrefab: {fileID: 7458244645391269047, guid: a84904e562ecaf887b2dba62111bb901,
+      type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
