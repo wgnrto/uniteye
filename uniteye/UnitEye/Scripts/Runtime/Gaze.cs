@@ -42,6 +42,7 @@ public class Gaze : MonoBehaviour
     private bool _showGazeUIBackup = false;
     private Calibrations _calibrationBackup;
     private bool _backupped;
+    private bool _reactivateWebcamOnEnable;
 
     #endregion
 
@@ -281,6 +282,29 @@ public class Gaze : MonoBehaviour
         //Draw text
         if (visualizeAOI && aoiNameList != null && aoiNameList.Count > 0)
             GUI.Label(new Rect(200, 100, 500, 50), string.Join(", ", aoiNameList), style);
+    }
+
+    protected virtual void OnDisable()
+    {
+        if (webCamInput != null && webCamInput.isActiveAndEnabled)
+        {
+            _reactivateWebcamOnEnable = true;
+            webCamInput.enabled = false;
+        }
+        else
+        {
+            _reactivateWebcamOnEnable = false;
+        }
+    }
+
+    protected virtual void OnEnable()
+    {
+        if (webCamInput != null && _reactivateWebcamOnEnable && !webCamInput.enabled)
+        {
+            webCamInput.enabled = true;
+        }
+
+        _reactivateWebcamOnEnable = false;
     }
 
     public virtual void OnDestroy()
