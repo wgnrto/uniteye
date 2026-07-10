@@ -28,6 +28,15 @@ public class HomulerGaze : MonoBehaviour
 
     private GUIStyle style = new GUIStyle();
 
+    // Cached debug-UI styles + enum arrays, rebuilt only when the resolution changes. This replaces
+    // (a) mutating the SHARED GUI.skin styles in place every frame — which permanently leaked
+    // bold/white/scaled text into every other IMGUI in the host game — and (b) allocating a GUIStyle
+    // and two Enum.GetValues arrays on every OnGUI pass.
+    private static readonly Calibrations[] _calibrationValues = (Calibrations[])System.Enum.GetValues(typeof(Calibrations));
+    private static readonly Filtering[] _filteringValues = (Filtering[])System.Enum.GetValues(typeof(Filtering));
+    private GUIStyle _uiStyleBox, _uiStyleButton, _uiStyleLabel, _uiStyleHSThumb, _toggleStyle;
+    private int _uiStyleW = -1, _uiStyleH = -1;
+
     private AOIBox _offscreenAOI;
 
     private RidgeRegression _xModel, _yModel;
@@ -340,8 +349,8 @@ public class HomulerGaze : MonoBehaviour
         //Gaze UI. The toggle button used Unity's default built-in font, which is tiny at high DPI.
         if (showGazeUI)
         {
-            var toggleStyle = new GUIStyle(GUI.skin.button) { fontSize = Mathf.RoundToInt(14f * uiScale) };
-            if (GUI.Button(new Rect(Screen.height * 0.05f, Screen.height - Screen.height * 0.1f, Screen.width * 0.1f, Screen.height * 0.05f), $"{(gazeUIActivated ? "Hide" : "Show")} Gaze UI", toggleStyle))
+            EnsureGazeUIStyles(Screen.width, Screen.height);
+            if (GUI.Button(new Rect(Screen.height * 0.05f, Screen.height - Screen.height * 0.1f, Screen.width * 0.1f, Screen.height * 0.05f), $"{(gazeUIActivated ? "Hide" : "Show")} Gaze UI", _toggleStyle))
                 gazeUIActivated = !gazeUIActivated;
         }
 
@@ -439,7 +448,8 @@ public class HomulerGaze : MonoBehaviour
                 smoothedGaze = easeSmoothing.Update(kalmanFilter.Update(unfilteredGaze));
                 break;
             case Filtering.OneEuro:
-                smoothedGaze = oneEuroFilter.Filter(unfilteredGaze, Time.realtimeSinceStartup);
+                //FilterVector2: allocation-free equivalent of Filter<Vector2> (no per-frame boxing)
+                smoothedGaze = oneEuroFilter.FilterVector2(unfilteredGaze, Time.realtimeSinceStartup);
                 break;
             default:
                 smoothedGaze = unfilteredGaze;
@@ -609,6 +619,34 @@ public class HomulerGaze : MonoBehaviour
     /// Creates the draggable Gaze UI overlay.
     /// </summary>
     /// <param name="windowID"></param>
+    /// <summary>
+    /// Builds the cached debug-UI GUIStyles once per resolution (rebuilt when the screen size changes so
+    /// text stays legible on high-DPI displays). Must be called from OnGUI: GUI.skin is only valid there.
+    /// Replaces the old per-pass in-place mutation of the shared GUI.skin styles.
+    /// </summary>
+    void EnsureGazeUIStyles(int width, int height)
+    {
+        if (_uiStyleBox != null && _uiStyleW == width && _uiStyleH == height)
+            return;
+        _uiStyleW = width;
+        _uiStyleH = height;
+
+        //Font scale relative to a 1080p baseline (== 1.0 at 1920x1080)
+        float resolutionScale = Mathf.Sqrt((0.001f * width * height) / 2073.6f);
+        int fontSize = (int)(14f * resolutionScale);
+
+        _uiStyleBox = new GUIStyle(GUI.skin.box) { wordWrap = true, fontStyle = FontStyle.Bold, fontSize = fontSize };
+        _uiStyleBox.normal.textColor = Color.white;
+        _uiStyleButton = new GUIStyle(GUI.skin.button) { wordWrap = true, fontStyle = FontStyle.Bold, fontSize = fontSize };
+        _uiStyleButton.normal.textColor = Color.white;
+        _uiStyleLabel = new GUIStyle(GUI.skin.label) { wordWrap = true, fontStyle = FontStyle.Bold, fontSize = fontSize };
+        _uiStyleLabel.normal.textColor = Color.white;
+        _uiStyleHSThumb = new GUIStyle(GUI.skin.horizontalSliderThumb) { fontSize = fontSize };
+
+        //The "Show/Hide Gaze UI" toggle button never shrinks below the baseline (matches the old uiScale)
+        _toggleStyle = new GUIStyle(GUI.skin.button) { fontSize = Mathf.RoundToInt(14f * Mathf.Max(1f, resolutionScale)) };
+    }
+
     void GazeUI(int windowID)
     {
         //This method of GUI drawing is not very efficient but it works for now
@@ -627,23 +665,15 @@ public class HomulerGaze : MonoBehaviour
         GUI.DrawTexture(new Rect(0f, 0f, gazeUI.width, gazeUI.height), Texture2D.whiteTexture);
         GUI.color = prevGuiColor;
 
-        //Set GUIStyles
-        var gazeUIStyleBox = GUI.skin.box;
-        var gazeUIStyleButton = GUI.skin.button;
-        var gazeUIStyleLabel = GUI.skin.label;
-        var gazeUIStyleHSThumb = GUI.skin.horizontalSliderThumb;
-        gazeUIStyleButton.wordWrap = gazeUIStyleLabel.wordWrap = true;
-        //High-contrast text on the dark panel (default skin text is grey and hard to read). Bold too:
-        //the editor Game View renders at game resolution and upscales on high-DPI displays, so the text
-        //is inherently a little soft there, and bold white reads much more clearly than thin grey.
-        gazeUIStyleLabel.normal.textColor = Color.white;
-        gazeUIStyleBox.normal.textColor = Color.white;
-        gazeUIStyleButton.normal.textColor = Color.white;
-        gazeUIStyleLabel.fontStyle = gazeUIStyleBox.fontStyle = gazeUIStyleButton.fontStyle = FontStyle.Bold;
-
-        //Scale font based on Resolution comparison to 1080p
-        var resolutionScale = Mathf.Sqrt((0.001f * (float)width * (float)height) / 2073.6f);
-        gazeUIStyleHSThumb.fontSize = gazeUIStyleBox.fontSize = gazeUIStyleButton.fontSize = gazeUIStyleLabel.fontSize = (int)(14f * resolutionScale);
+        //Use the cached styles (built once per resolution) instead of mutating the shared GUI.skin
+        //styles in place every pass. High-contrast bold white text on the dark panel: the default skin
+        //text is grey and, on high-DPI editor Game Views (which render at game resolution then upscale),
+        //a little soft — bold white reads far more clearly.
+        EnsureGazeUIStyles(width, height);
+        var gazeUIStyleBox = _uiStyleBox;
+        var gazeUIStyleButton = _uiStyleButton;
+        var gazeUIStyleLabel = _uiStyleLabel;
+        var gazeUIStyleHSThumb = _uiStyleHSThumb;
 
         //Make header draggable
         GUI.DragWindow(new Rect(0, 0, width, height * 0.02f));
@@ -735,21 +765,21 @@ public class HomulerGaze : MonoBehaviour
         //Calibration types
         GUI.Label(new Rect(width * 0.025f, height * 0.03f, width * 0.08f, height * 0.06f), $"Calibration type\n(current: {_calibrations})", gazeUIStyleLabel);
 
-        var calibrationsEnumArray = System.Enum.GetValues(typeof(Calibrations));
-        for (int i = 0; i < calibrationsEnumArray.Length; i++)
+        for (int i = 0; i < _calibrationValues.Length; i++)
         {
-            if (GUI.Button(new Rect(i * width * 0.06f + width * 0.11f, height * 0.025f, width * 0.05f, height * 0.05f), $"{(Calibrations)i}", gazeUIStyleButton))
-                Calibrations = (Calibrations)i;
+            var cal = _calibrationValues[i];
+            if (GUI.Button(new Rect(i * width * 0.06f + width * 0.11f, height * 0.025f, width * 0.05f, height * 0.05f), $"{cal}", gazeUIStyleButton))
+                Calibrations = cal;
         }
 
         //Filtering types
         GUI.Label(new Rect(width * 0.025f, height * 0.09f, width * 0.08f, height * 0.06f), $"Filtering type\n(current: {Filtering})", gazeUIStyleLabel);
 
-        var filteringEnumArray = System.Enum.GetValues(typeof(Filtering));
-        for (int i = 0; i < filteringEnumArray.Length; i++)
+        for (int i = 0; i < _filteringValues.Length; i++)
         {
-            if (GUI.Button(new Rect(i * width * 0.06f + width * 0.11f, height * 0.080f, width * 0.05f, height * 0.05f), $"{(Filtering)i}", gazeUIStyleButton))
-                Filtering = (Filtering)i;
+            var filt = _filteringValues[i];
+            if (GUI.Button(new Rect(i * width * 0.06f + width * 0.11f, height * 0.080f, width * 0.05f, height * 0.05f), $"{filt}", gazeUIStyleButton))
+                Filtering = filt;
         }
 
         //Filtering sliders

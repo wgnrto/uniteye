@@ -306,7 +306,9 @@ public class HomulerGazeCalibration : MonoBehaviour
 
     private void CaptureNetworkOutput()
     {
-        _xData.Add(_gaze.Provider.GetFeatures());
+        //Clone: GetFeatures() returns the provider's reused per-frame buffer, so the retained training
+        //sample must be an owned copy (otherwise every captured sample would alias the latest frame).
+        _xData.Add((float[])_gaze.Provider.GetFeatures().Clone());
         _yXData.Add(_crossHairPos.x / Screen.width);
         _yYData.Add(_crossHairPos.y / Screen.height);
         _yData.Add(new Vector2(_crossHairPos.x /*/ Screen.width*/, _crossHairPos.y /*/ Screen.height*/));

@@ -160,14 +160,14 @@ namespace UnitEye
                     //Write _Header row if first write to file
                     if (!exists) csvWriter.WriteLine(_Header);
 
-                    //Write each CSVData in the _queue and then remove it
-                    foreach (var csvdata in _queue.ToArray())
-                    {
-                        //Debug.Log(csvdata.SerializeCSVData());
+                    //Write each CSVData in the _queue. Iterate directly and Clear() once after a
+                    //successful flush instead of per-item List.Remove over a ToArray copy, which was
+                    //O(n^2) and could stall the quit-time flush of a large queue. On an IOException the
+                    //queue is retained (not cleared) so buffered rows are not lost.
+                    foreach (var csvdata in _queue)
                         csvWriter.WriteLine(csvdata.SerializeCSVData());
-                        _queue.Remove(csvdata);
-                    }
                 }
+                _queue.Clear();
             } catch (IOException e)
             {
                 Debug.Log("Could not access file, a different program might be locking it!");

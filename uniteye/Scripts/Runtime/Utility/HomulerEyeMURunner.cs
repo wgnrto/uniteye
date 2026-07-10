@@ -47,19 +47,29 @@ public class HomulerEyeMURunner
     public float[] HeadGeom => _faceMesh.HeadGeom;
     #endregion
 
-    public List<float> Features
+    //Reused 12-feature buffer so the per-frame Features access allocates nothing (was a fresh
+    //List<float> + AddRange growth every frame). Layout: embedding(4), gaze(2), head geom(4),
+    //screen w/h — identical order to the shipped default calibration files. The returned array is
+    //valid only until the next frame's access; callers that retain it (calibration capture) must copy.
+    private readonly float[] _features = new float[12];
+    public float[] Features
     {
         get
         {
-            var features = new List<float>();
-            features.AddRange(Embedding2Output);
-            features.AddRange(NetworkOutput);
+            _features[0] = Embedding2Output[0];
+            _features[1] = Embedding2Output[1];
+            _features[2] = Embedding2Output[2];
+            _features[3] = Embedding2Output[3];
+            _features[4] = NetworkOutput[0];
+            _features[5] = NetworkOutput[1];
             //Head pose re-enabled -> 12-feature vector, matching the shipped default calibration files
-            features.AddRange(HeadGeom);
-            features.Add(Screen.width);
-            features.Add(Screen.height);
-
-            return features;
+            _features[6] = _faceMesh.HeadYaw;
+            _features[7] = _faceMesh.HeadPitch;
+            _features[8] = _faceMesh.HeadRoll;
+            _features[9] = _faceMesh.HeadArea;
+            _features[10] = Screen.width;
+            _features[11] = Screen.height;
+            return _features;
         }
     }
 
@@ -67,9 +77,12 @@ public class HomulerEyeMURunner
     public RenderTexture LeftEyeTexture { get; private set; } = new RenderTexture(IMG_SIZE, IMG_SIZE, 0, RenderTextureFormat.ARGB32);
     public RenderTexture RightEyeTexture { get; private set; } = new RenderTexture(IMG_SIZE, IMG_SIZE, 0, RenderTextureFormat.ARGB32);
 
-    //Tensor textures
-    private RenderTexture _leftEyeTextureTensor = new RenderTexture(IMG_SIZE, IMG_SIZE, 24, RenderTextureFormat.ARGBHalf);
-    private RenderTexture _rightEyeTextureTensor = new RenderTexture(IMG_SIZE, IMG_SIZE, 24, RenderTextureFormat.ARGBHalf);
+    //Tensor textures (depth 0: these are random-write compute targets and never used as a depth buffer)
+    private RenderTexture _leftEyeTextureTensor = new RenderTexture(IMG_SIZE, IMG_SIZE, 0, RenderTextureFormat.ARGBHalf);
+    private RenderTexture _rightEyeTextureTensor = new RenderTexture(IMG_SIZE, IMG_SIZE, 0, RenderTextureFormat.ARGBHalf);
+
+    //Reused pose input buffer (was a fresh float[4] every inference)
+    private readonly float[] _poseBuffer = new float[4];
 
     //Textures to handle GetEyeTexture()
     private Texture _leftEyeTexture;
@@ -106,10 +119,14 @@ public class HomulerEyeMURunner
         if (!ComputeEyes(webcamTexture))
             return false;
 
-        //Eye corners (8) and head pose (4) input tensors
+        //Eye corners (8) and head pose (4) input tensors. The tensor constructor copies the data, so
+        //the reused _poseBuffer is safe (each frame's tensor is consumed + disposed before the next).
         var corners = new Tensor<float>(new TensorShape(1, 8), _faceMesh.EyeCorners);
-        var pose = new Tensor<float>(new TensorShape(1, 4),
-            new float[] { _faceMesh.HeadYaw, _faceMesh.HeadPitch, _faceMesh.HeadRoll, _faceMesh.HeadArea });
+        _poseBuffer[0] = _faceMesh.HeadYaw;
+        _poseBuffer[1] = _faceMesh.HeadPitch;
+        _poseBuffer[2] = _faceMesh.HeadRoll;
+        _poseBuffer[3] = _faceMesh.HeadArea;
+        var pose = new Tensor<float>(new TensorShape(1, 4), _poseBuffer);
 
         //Preprocess eye crops into tensor-format RenderTextures, then convert to NHWC input tensors
         //(shape 1x128x128x3) to match the model's declared image-input layout.

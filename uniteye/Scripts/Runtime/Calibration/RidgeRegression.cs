@@ -244,32 +244,30 @@ public class RidgeRegression
     /// <param name="x">Input features</param>
     public float Predict(float[] x)
     {
-        List<float> xs = new List<float>();
-        // append one extra entry to for the bias
-        if (Affine)
-        {
-            xs.Add(1.0f);
-        }
-
-        // apply the stored standardization, models from older versions have none
-        if (FeatureMean != null && FeatureStd != null && FeatureMean.Count == x.Length && FeatureStd.Count == x.Length)
-        {
-            for (int i = 0; i < x.Length; i++)
-                xs.Add((x[i] - FeatureMean[i]) / FeatureStd[i]);
-        }
-        else
-        {
-            xs.AddRange(x);
-        }
+        //Hot path (called for X and Y every frame under the default RidgeRegression calibration).
+        //Compute W·[bias?, standardized-x...] directly instead of building a List, a ToArray and a
+        //DenseVector each call — same arithmetic and summation order, zero per-frame allocation.
 
         //Never throw on a model/feature dimensionality mismatch (e.g. a provider that supplies no
         //feature vector, or a calibration trained for a different feature set) — return NaN so the
         //caller's NaN handling / raw-gaze fallback applies instead of a per-frame exception.
-        if (W == null || xs.Count != W.Count)
+        int bias = Affine ? 1 : 0;
+        if (W == null || bias + x.Length != W.Count)
             return float.NaN;
 
-        var input = Vector<float>.Build.Dense(xs.ToArray());
-        var y = W * input;
+        // apply the stored standardization, models from older versions have none
+        bool standardize = FeatureMean != null && FeatureStd != null &&
+                           FeatureMean.Count == x.Length && FeatureStd.Count == x.Length;
+
+        float y = 0f;
+        // bias term first (W[0] * 1.0), matching the old [1, x...] ordering
+        if (Affine)
+            y = W[0];
+        for (int i = 0; i < x.Length; i++)
+        {
+            float xi = standardize ? (x[i] - FeatureMean[i]) / FeatureStd[i] : x[i];
+            y += W[bias + i] * xi;
+        }
 
         return y;
     }

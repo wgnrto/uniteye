@@ -301,6 +301,10 @@ public class SimpleMLP
         return xs;
     }
 
+    //Reusable Predict scratch buffers so the per-frame ML calibration path allocates nothing.
+    //Predict is not re-entrant (called sequentially on the gaze thread), so one set per instance is safe.
+    [JsonIgnore] private float[] _predXs, _predZ1, _predA1, _predZ2, _predA2, _predYHat;
+
     /// <summary>
     /// Predicts the gaze location in pixels. Returns NaN on a feature/model mismatch so callers'
     /// raw-gaze fallback applies (same contract as RidgeRegression.Predict).
@@ -310,15 +314,23 @@ public class SimpleMLP
         if (W1 == null || features == null || features.Length != InputCount)
             return new Vector2(float.NaN, float.NaN);
 
-        var xs = StandardizeInput(features);
-        var z1 = new float[HIDDEN1]; var a1 = new float[HIDDEN1];
-        var z2 = new float[HIDDEN2]; var a2 = new float[HIDDEN2];
-        var yHat = new float[OUTPUTS];
-        Forward(xs, z1, a1, z2, a2, yHat);
+        if (_predXs == null || _predXs.Length != InputCount)
+        {
+            _predXs = new float[InputCount];
+            _predZ1 = new float[HIDDEN1]; _predA1 = new float[HIDDEN1];
+            _predZ2 = new float[HIDDEN2]; _predA2 = new float[HIDDEN2];
+            _predYHat = new float[OUTPUTS];
+        }
+
+        //Standardize into the reused buffer (identical to StandardizeInput, without the allocation)
+        for (int i = 0; i < InputCount; i++)
+            _predXs[i] = (features[i] - FeatureMean[i]) / FeatureStd[i];
+
+        Forward(_predXs, _predZ1, _predA1, _predZ2, _predA2, _predYHat);
 
         return new Vector2(
-            yHat[0] * TargetStd[0] + TargetMean[0],
-            yHat[1] * TargetStd[1] + TargetMean[1]);
+            _predYHat[0] * TargetStd[0] + TargetMean[0],
+            _predYHat[1] * TargetStd[1] + TargetMean[1]);
     }
 
     /// <summary>Saves to StreamingAssets/Calibration Files/MLP/ (same location as the old implementation).</summary>

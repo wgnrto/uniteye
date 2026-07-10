@@ -46,7 +46,9 @@ namespace UnitEye
         }
 
         public Vector2 RawGaze => _rawGaze;
-        public float[] GetFeatures() => _runner.Features.ToArray();
+        //Returns the runner's reused feature buffer (no per-frame copy). Valid only until the next
+        //Tick; the calibration capture, which retains samples, clones it (see HomulerGazeCalibration).
+        public float[] GetFeatures() => _runner.Features;
         public bool IsFacePresent => _faceMesh != null && _faceMesh.FaceLandmarks != null;
         public bool IsBlinking => _isBlinking;
         public bool IsDrowsy => _isDrowsy;
