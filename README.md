@@ -81,12 +81,10 @@ You can select your webcam by pressing the `Select` button, which opens a drop-d
 
 Optional settings include a RawImage reference if you wish to have the webcam image drawn in your scene, a static input image for debugging purposes and a toggle box to mirror the image horizontally, depending on your webcam you may want to use this if you're looking at the top right corner but the webcam image is showing you looking to the top left. This mirroring is purely visual and does not influence the tracking.
 
-#### Visualizer:
-This is a component from the preexisting [HolisticBarracuda](https://github.com/creativeIKEP/HolisticBarracuda) package. We use a custom version of this package, so you shouldn't download it separately!
+#### Face-mesh visualization (debug):
+The old `Visualizer` component came from [HolisticBarracuda](https://github.com/creativeIKEP/HolisticBarracuda) and visualized its face/pose/hand tracking. It was **removed** during the Barracuda&nbsp;→&nbsp;Inference Engine migration together with the rest of the Holistic path — the pipeline no longer tracks pose or hands, only the face mesh used for the eye crops.
 
-![](./uniteye/Documentation~/Images/VisuallizerInspector.png)
-
-The main purpose of this component is to visualize all the tracking features of HolisticBarracuda, namely the face mesh, pose, and hand tracking. We currently only utilize the face mesh for our eye tracking, but you might want to use more features from HolisticBarracuda in your project! This component is disabled by default as its main purpose is debugging and will degrade the frame rate when enabled. Most settings should be left standard, but you can play around with the `Holistic Inference Type` to check out the different tracking options.
+Face-mesh debugging is now provided by the native [MediaPipe Unity Plugin](https://github.com/homuler/MediaPipeUnityPlugin) itself: the `Mediapipe` GameObject's `FaceMeshSolution` renders the 468 landmarks + iris annotation, which the `Gaze` component toggles through its rendering flag (see `HomulerGaze.IsRendering`). Like the old visualizer, this is a debug aid and will cost some frame rate while enabled. If you only need a single landmark's world position, [`LandmarkVisualizer.cs`](uniteye/Scripts/Runtime/LandmarkVisualizer.cs) is a minimal example.
 
 #### Gaze:
 This is our main component that handles the entire eye-tracking pipeline.
