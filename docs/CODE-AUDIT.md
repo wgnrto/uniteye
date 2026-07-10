@@ -47,29 +47,37 @@ is lost.
 - `AOITagList` xray raycast reused `RaycastHit[]`+`List` buffers; dead `hit.Equals(null)` branch removed;
   `CheckValidWebCam` returns on first match.
 
+**Wave 5 — GPU eye crop** (needs a webcam to fully validate the sampling orientation)
+- Replaced the per-frame CPU eye-crop path (`GetPixels` readback + `Texture2D` churn + a second
+  `GetPixels32` round-trip to flip the left eye) with a direct `Graphics.Blit` crop from the webcam
+  texture into the eye RenderTextures. Removed `GetEyeTexture`/`FlipTexture` (now dead). `GetEyeCropRect`
+  (the smoke-pinned geometry) is unchanged. Blocking `DownloadToArray` on the outputs left as-is.
+
+**Wave 6 — namespace unification**
+- Wrapped all ~33 global-namespace first-party runtime types in `namespace UnitEye`. Editor tooling
+  invoked by `-executeMethod` kept its global names; `EyeMUAssetRebinder` gained `using UnitEye;`.
+
+**Wave 7 — god-class split (part 1)**
+- Extracted `CalibrationModelStore` (model fields + `Load` + `Refine`) out of `HomulerGaze`.
+
 Also (earlier this session): removed the orphaned `HolisticBarracuda/` package + dead Visualizer
 shaders/README; added [HOMULER-UPGRADE.md](HOMULER-UPGRADE.md).
 
 ## Deferred (with rationale)
 
-### Needs a webcam / GPU / the editor to validate — do interactively
-- **Move eye cropping fully onto the GPU + `AsyncGPUReadback`** (`HomulerFunctions.GetEyeTexture`
-  `GetPixels` readback + the two blocking `DownloadToArray` in `HomulerEyeMURunner.PerformInference`).
-  This is the largest remaining *throughput* win (the pipeline runs synchronously and caps frame rate),
-  but it changes the verified eye-crop geometry / pixel path and can only be confirmed against live gaze.
-  The per-frame **leak** part of this finding is already fixed (buffer reuse); what remains is the
-  GPU/async rewrite.
-- **Split the `HomulerGaze` (676 lines) and `HomulerEyeHelper` (703 lines) god-classes** into a
-  `GazeDebugOverlay` (the ~450-line IMGUI), a `CalibrationSessionController`, and a `CalibrationModelStore`.
-  Deferred because moving `[SerializeField]` fields to new MonoBehaviours rewires the shipped prefab/scene,
-  which must be validated with the editor open (the headless smoke can't catch broken component wiring).
+### Needs a webcam to confirm (change applied; verify behaviour)
+- **Wave 5's GPU eye crop** — verify the `Show Eyecrops` thumbnails look identical to before and that
+  gaze accuracy is unchanged. If the crop is mirrored/upside-down, the fix is the `flipX`/y-scale in
+  `HomulerEyeMURunner.BlitEyeCrop`. Optionally follow up with `AsyncGPUReadback` for the two
+  `DownloadToArray` output readbacks (adds one frame of latency; removes two GPU→CPU stalls).
 
-### Large mechanical sweep — recommended, best done in one dedicated editor pass
-- **Namespace unification** ([AOIManager.cs](../uniteye/Scripts/Runtime/AOI/AOIManager.cs) et al.): ~35
-  first-party types sit in the global namespace while the rest are in `UnitEye`, polluting a consumer's
-  global namespace. Serialization-safe (no `[SerializeReference]`; scenes reference scripts by GUID), so
-  it is purely a wrap-in-`namespace UnitEye`. Deferred only because it is a 35-file cosmetic change with
-  no functional benefit, best done in one pass with the editor available to re-verify scenes.
+### Deferred with rationale
+- **Extract the ~450-line debug IMGUI out of `HomulerGaze`** (the remaining god-class item; the model
+  store landed in Wave 7). Evaluated and left in place: `GazeUI`/`OnGUI` bind sliders directly to
+  `HomulerGaze`'s private filter/provider state (`kalmanFilter.Q = Q = GUI.HorizontalSlider(...)`), so a
+  separate overlay component would have to expose those internals — little real decoupling for
+  non-trivial regression risk in a GUI that has a documented history of subtle high-DPI / hit-testing /
+  every-frame-revert bugs. Best done alongside a broader UI rework, with the editor open.
 - **Route the remaining ~56 `Debug.*` calls through `UnitEyeLog`** so a host game can fully silence the
   package. The façade exists and the high-value sites (calibration load failures) are converted.
 
