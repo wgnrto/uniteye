@@ -90,6 +90,10 @@ namespace UnitEye
         //(no per-frame point draw). Toggleable from the Gaze UI; honoured across calibration restores.
         public bool showFaceMesh = true;
 
+        //Which gaze model the native provider runs (EyeMU by default; GazeEstimation needs an added ONNX
+        //+ hand-test, see docs/GAZE-BACKBONES.md). Read at Start; change it before entering play mode.
+        [SerializeField] private GazeBackbone _gazeBackbone = GazeBackbone.EyeMU;
+
         [System.NonSerialized]
         public bool gazeUIActivated;
 
@@ -172,7 +176,7 @@ namespace UnitEye
     #if UNITY_WEBGL && !UNITY_EDITOR
             _provider = new WebGLGazeProvider();
     #else
-            _provider = new NativeGazeProvider(_mediaPipeGO);
+            _provider = new NativeGazeProvider(_mediaPipeGO, _gazeBackbone);
     #endif
 
             //Apply the initial face-mesh overlay preference

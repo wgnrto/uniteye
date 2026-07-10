@@ -27,11 +27,13 @@ namespace UnitEye
         SerializedProperty dcutoff;
 
         SerializedProperty frameRate;
+        SerializedProperty gazeBackbone;
 
 
         void OnEnable()
         {
             mediaPipeGO = serializedObject.FindProperty("_mediaPipeGO");
+            gazeBackbone = serializedObject.FindProperty("_gazeBackbone");
             calibration = serializedObject.FindProperty("_calibrationScript");
             dot = serializedObject.FindProperty("dot");
             csvLogger = serializedObject.FindProperty("_csvLogger");
@@ -59,6 +61,7 @@ namespace UnitEye
 
             EditorGUILayout.PropertyField(mediaPipeGO);
             EditorGUILayout.PropertyField(calibration);
+            EditorGUILayout.PropertyField(gazeBackbone, new GUIContent("Gaze Backbone (model)"));
             EditorGUILayout.Separator();
 
             EditorGUILayout.PropertyField(dot, new GUIContent("Gaze Location Dot:"));

@@ -17,7 +17,7 @@ namespace UnitEye
     /// using landmarks from the native homuler MediaPipe FaceMeshSolution.
     /// This is the Barracuda-free replacement for the old EyeMURunner + HolisticBarracuda path.
     /// </summary>
-    public class HomulerEyeMURunner
+    public class HomulerEyeMURunner : IGazeBackbone
     {
         const int IMG_SIZE = 128;
 
@@ -40,6 +40,9 @@ namespace UnitEye
 
         public float[] Embedding2Output { get; private set; } = new float[4];
         public float[] NetworkOutput { get; private set; } = new float[2];
+
+        //IGazeBackbone: the raw (pre-calibration) gaze in pixels. NetworkOutput already holds pixel coords.
+        public Vector2 RawGaze => new Vector2(NetworkOutput[0], NetworkOutput[1]);
 
         #region Head pose (re-enabled so the feature vector and UnitEyeAPI.GetHeadPose match the former Holistic path)
         public float HeadYaw => _faceMesh.HeadYaw;

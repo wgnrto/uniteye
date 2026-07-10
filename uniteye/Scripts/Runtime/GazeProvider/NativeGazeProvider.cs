@@ -17,7 +17,7 @@ namespace UnitEye
     {
         private readonly FaceMeshSolution _faceMesh;
         private readonly WebCamSource _webcam;
-        private readonly HomulerEyeMURunner _runner;
+        private readonly IGazeBackbone _backbone;
         private readonly HomulerEyeHelper _eyeHelper;
 
         private Vector2 _rawGaze;
@@ -28,20 +28,24 @@ namespace UnitEye
         //and the CSV EyeFeature accessor instead of recomputing it 3x per frame.
         private float _eyeFeature = float.NaN;
 
-        public NativeGazeProvider(GameObject mediaPipeGO)
+        public NativeGazeProvider(GameObject mediaPipeGO, GazeBackbone backbone = GazeBackbone.EyeMU)
         {
             _webcam = mediaPipeGO.GetComponent<WebCamSource>();
             _faceMesh = mediaPipeGO.GetComponent<FaceMeshSolution>();
             _eyeHelper = new HomulerEyeHelper(_faceMesh, _webcam.name);
-            _runner = new HomulerEyeMURunner(_faceMesh);
+
+            //Pick the gaze model behind the shared face-mesh/blink/distance stack.
+            _backbone = backbone == GazeBackbone.GazeEstimation
+                ? (IGazeBackbone)new GazeEstimationRunner(_faceMesh)
+                : new HomulerEyeMURunner(_faceMesh);
         }
 
         public bool Tick()
         {
-            if (!_runner.PerformInference(_webcam))
+            if (!_backbone.PerformInference(_webcam))
                 return false;
 
-            _rawGaze = new Vector2(_runner.NetworkOutput[0], _runner.NetworkOutput[1]);
+            _rawGaze = _backbone.RawGaze;
             //Compute EyeFeature once, then derive blink/drowsy from it (was recomputed inside each call).
             _eyeFeature = _eyeHelper.EyeFeature();
             _isDrowsy = _eyeHelper.IsDrowsyFromFeature(_eyeFeature);
@@ -51,17 +55,18 @@ namespace UnitEye
         }
 
         public Vector2 RawGaze => _rawGaze;
-        //Returns the runner's reused feature buffer (no per-frame copy). Valid only until the next
+        //Returns the backbone's reused feature buffer (no per-frame copy). Valid only until the next
         //Tick; the calibration capture, which retains samples, clones it (see HomulerGazeCalibration).
-        public float[] GetFeatures() => _runner.Features;
+        public float[] GetFeatures() => _backbone.Features;
         public bool IsFacePresent => _faceMesh != null && _faceMesh.FaceLandmarks != null;
         public bool IsBlinking => _isBlinking;
         public bool IsDrowsy => _isDrowsy;
         public float DistanceMm => _distanceMm;
         public float EyeFeature => _eyeFeature;
-        public Vector3 HeadPoseEuler => new Vector3(_runner.HeadPitch, _runner.HeadYaw, _runner.HeadRoll);
-        public RenderTexture LeftEyeTexture => _runner.LeftEyeTexture;
-        public RenderTexture RightEyeTexture => _runner.RightEyeTexture;
+        //Head pose comes from the shared FaceMesh, so it's the same regardless of gaze backbone.
+        public Vector3 HeadPoseEuler => new Vector3(_faceMesh.HeadPitch, _faceMesh.HeadYaw, _faceMesh.HeadRoll);
+        public RenderTexture LeftEyeTexture => _backbone.LeftEyeTexture;
+        public RenderTexture RightEyeTexture => _backbone.RightEyeTexture;
 
         public bool AnnotateFaceMesh
         {
@@ -91,7 +96,7 @@ namespace UnitEye
             _eyeHelper.CameraChanged(_webcam.sourceName);
         }
 
-        public void Dispose() => _runner?.Dispose();
+        public void Dispose() => _backbone?.Dispose();
     }
 }
 #endif
