@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnitEye;
 using UnityEngine;
+using UnityEngine.InputSystem;
 namespace UnitEye
 {
 
@@ -96,17 +97,17 @@ namespace UnitEye
 
         void Update()
         {
-            //If finished and leftclick, signal Returned
-            if (Input.GetKeyDown(KeyCode.Mouse0) && returnAfter && _finished)
+            //If finished and leftclick, signal Returned (new Input System, matching HomulerGazeCalibration)
+            if (Mouse.current.leftButton.wasPressedThisFrame && returnAfter && _finished)
                 Returned = true;
             //If rightclick, signal Returned
-            if (Input.GetKeyDown(KeyCode.Mouse1) && returnAfter)
+            if (Mouse.current.rightButton.wasPressedThisFrame && returnAfter)
                 Returned = true;
             //If finished don't run through evaluation anymore
             if (_finished) return;
 
             //Start on leftclick
-            if (Input.GetKeyDown(KeyCode.Mouse0) && !_started)
+            if (Mouse.current.leftButton.wasPressedThisFrame && !_started)
             {
                 _started = true;
                 _showMessage = false;
@@ -114,8 +115,8 @@ namespace UnitEye
                 _timeRemaining = duration;
             }
 
-            //Stop evaluation early when clicking S
-            if (Input.GetKeyDown(KeyCode.S) && _started)
+            //Stop evaluation early when pressing S
+            if (Keyboard.current[Key.S].wasPressedThisFrame && _started)
             {
                 _earlyStop = true;
             }
