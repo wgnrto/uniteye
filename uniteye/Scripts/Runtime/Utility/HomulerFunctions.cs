@@ -112,26 +112,8 @@ namespace UnitEye
             return new RectInt(leftPx, yBot, cropSize, cropSize);
         }
 
-        /// <summary>
-        /// Converts pixels to mm using Unity Screen.dpi
-        /// </summary>
-        /// <param name="pixels"></param>
-        /// <returns>mm in float</returns>
-        public static float PixelsToMm(float pixels)
-        {
-            return PixelsToMm(pixels, Screen.dpi);
-        }
-        /// <summary>
-        /// Converts pixels to mm using custom dpi
-        /// </summary>
-        /// <param name="pixels"></param>
-        /// <param name="dpi"></param>
-        /// <returns>mm in float</returns>
-        public static float PixelsToMm(float pixels, float dpi)
-        {
-            return pixels * 25.4f / dpi;
-        }
-
+        //Note: PixelsToMm and Quit were dead duplicates of the versions in Functions (which callers use)
+        //and were removed. This class keeps only the MediaPipe/inference-specific helpers.
 
         /// <summary>
         /// Preprocess Image using a shader to provide the correct image format for the model
@@ -149,20 +131,6 @@ namespace UnitEye
             preprocessCS.Dispatch(0, imageSize, imageSize, 1);
 
             return destination;
-        }
-
-        /// <summary>
-        /// Quits the application. If in Editor it just stops playing
-        /// </summary>
-        public static void Quit()
-        {
-            //If in editor stop the editor
-#if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-#else
-        //If in build just quit the Application
-        Application.Quit();
-#endif
         }
     }
 }

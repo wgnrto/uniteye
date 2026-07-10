@@ -100,18 +100,7 @@ public class HomulerGaze : MonoBehaviour
                 _csvLogger.AppendNote($"Changed calibration type to {_calibrations}");
 
             _calibrations = value;
-            //Load calibration files, suppress exceptions as they are handled internally
-            switch (_calibrations)
-            {
-                case Calibrations.RidgeRegression:
-                    try { _xModel = RidgeRegression.LoadX("Reg_X.json"); } catch { }
-                    try { _yModel = RidgeRegression.LoadY("Reg_Y.json"); } catch { }
-                    break;
-                case Calibrations.MLCalibration:
-                    //Fix: the loaded model was previously discarded (never assigned to _mlp)
-                    try { _mlp = SimpleMLP.Load("MLP.json"); } catch { }
-                    break;
-            }
+            LoadCalibrationModels();
         }
     }
     [SerializeField]
@@ -179,17 +168,7 @@ public class HomulerGaze : MonoBehaviour
         _provider = new NativeGazeProvider(_mediaPipeGO);
 #endif
 
-        //Load calibration files, suppress exceptions as they are handled internally
-        switch (_calibrations)
-        {
-            case Calibrations.RidgeRegression:
-                try { _xModel = RidgeRegression.LoadX("Reg_X.json"); } catch { }
-                try { _yModel = RidgeRegression.LoadY("Reg_Y.json"); } catch { }
-                break;
-            case Calibrations.MLCalibration:
-                try { _mlp = SimpleMLP.Load("MLP.json"); } catch { }
-                break;
-        }
+        LoadCalibrationModels();
 
         //Create filters
         kalmanFilter = new KalmanFilter(Q, R);
@@ -370,6 +349,36 @@ public class HomulerGaze : MonoBehaviour
         // Must call Dispose method when no longer in use.
         _provider?.Dispose();
         _provider = null;
+    }
+
+    /// <summary>
+    /// Loads the calibration model(s) for the current calibration type. Shared by Start and the
+    /// Calibrations setter (was duplicated in both).
+    /// RidgeRegression.Load / SimpleMLP.Load already handle the expected "no calibration file yet" case
+    /// internally (they return null and the pipeline falls back to raw gaze). Only genuinely unexpected
+    /// failures — a corrupt/incompatible JSON, an IO error — reach the catch here; surface those instead
+    /// of the old empty catch blocks, so a calibration that silently stopped loading is diagnosable.
+    /// </summary>
+    private void LoadCalibrationModels()
+    {
+        try
+        {
+            switch (_calibrations)
+            {
+                case Calibrations.RidgeRegression:
+                    _xModel = RidgeRegression.LoadX("Reg_X.json");
+                    _yModel = RidgeRegression.LoadY("Reg_Y.json");
+                    break;
+                case Calibrations.MLCalibration:
+                    _mlp = SimpleMLP.Load("MLP.json");
+                    break;
+            }
+        }
+        catch (System.Exception e)
+        {
+            UnitEye.UnitEyeLog.Error($"Failed to load the {_calibrations} calibration model; falling back to raw gaze.");
+            UnitEye.UnitEyeLog.Exception(e);
+        }
     }
 
     /// <summary>

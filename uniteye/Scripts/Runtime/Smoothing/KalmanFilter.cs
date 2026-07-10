@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class KalmanFilter : Smoothing
 {
+    //Frame rate the Q/R sliders were tuned at (HomulerGaze sets Application.targetFrameRate = 30).
+    private const float ReferenceRate = 30f;
+
     public float Q { get; set; }
 
     public float R { get; set; }
@@ -29,8 +32,11 @@ public class KalmanFilter : Smoothing
     public override Vector2 Update(Vector2 measurement)
     {
         // prediction
-        // no state transition, just update the covariance
-        _p = _p + Q;
+        // no state transition, just grow the covariance by the process noise. Scale it by elapsed
+        // time (normalized to the 30 fps reference, so this equals the old Q at 30 fps) so the filter's
+        // responsiveness does not change with frame rate.
+        float dt = Time.unscaledDeltaTime;
+        _p = _p + Q * (dt * ReferenceRate);
 
         // measurement update
         _k = _p / (_p + R);

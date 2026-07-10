@@ -24,6 +24,9 @@ namespace UnitEye
         private bool _isBlinking;
         private bool _isDrowsy;
         private float _distanceMm = -1000f;
+        //EyeFeature() is 8 distance calcs + trig; compute it once per Tick and reuse for blink, drowsy
+        //and the CSV EyeFeature accessor instead of recomputing it 3x per frame.
+        private float _eyeFeature = float.NaN;
 
         public NativeGazeProvider(GameObject mediaPipeGO)
         {
@@ -39,8 +42,10 @@ namespace UnitEye
                 return false;
 
             _rawGaze = new Vector2(_runner.NetworkOutput[0], _runner.NetworkOutput[1]);
-            _isDrowsy = _eyeHelper.IsDrowsy();
-            _isBlinking = _eyeHelper.IsBlinking();
+            //Compute EyeFeature once, then derive blink/drowsy from it (was recomputed inside each call).
+            _eyeFeature = _eyeHelper.EyeFeature();
+            _isDrowsy = _eyeHelper.IsDrowsyFromFeature(_eyeFeature);
+            _isBlinking = _eyeHelper.IsBlinkingFromFeature(_eyeFeature);
             _distanceMm = _eyeHelper.CalculateCamDistanceFocal();
             return true;
         }
@@ -53,7 +58,7 @@ namespace UnitEye
         public bool IsBlinking => _isBlinking;
         public bool IsDrowsy => _isDrowsy;
         public float DistanceMm => _distanceMm;
-        public float EyeFeature => _eyeHelper.EyeFeature();
+        public float EyeFeature => _eyeFeature;
         public Vector3 HeadPoseEuler => new Vector3(_runner.HeadPitch, _runner.HeadYaw, _runner.HeadRoll);
         public RenderTexture LeftEyeTexture => _runner.LeftEyeTexture;
         public RenderTexture RightEyeTexture => _runner.RightEyeTexture;
