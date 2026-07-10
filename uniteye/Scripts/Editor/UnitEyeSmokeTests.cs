@@ -33,6 +33,7 @@ public static class UnitEyeSmokeTests
             TestRidgeOldFormatCompatibility();
             TestShippedDefaultCalibrationFiles();
             TestTrainerOnSyntheticData();
+            TestSimpleMLP();
             TestGazeGridQuantizer();
             TestOneEuroFilter();
             TestScenesAndPrefabsHaveNoMissingScripts();
@@ -217,6 +218,63 @@ public static class UnitEyeSmokeTests
     }
 
     private static float[][] ToArray(List<float[]> list) => list.ToArray();
+
+    private static void TestSimpleMLP()
+    {
+        //Nonlinear synthetic data (something ridge cannot fit) with pixel-scale targets,
+        //mimicking the calibration setup
+        var rng = new System.Random(99);
+        int n = 800;
+        var x = new float[n][];
+        var y = new Vector2[n];
+        for (int i = 0; i < n; i++)
+        {
+            float a = (float)rng.NextDouble() * 2f - 1f;
+            float b = (float)rng.NextDouble() * 2f - 1f;
+            x[i] = new float[] { a, b, a * b, 1920f };  //includes a constant feature
+            y[i] = new Vector2(
+                960f + 400f * a + 250f * (float)Math.Sin(2.5 * b),
+                540f + 300f * b + 200f * a * b);
+        }
+
+        var mlp = new SimpleMLP(seed: 42);
+        var message = mlp.Train(x, y);
+        Check(message.Contains("MLP Training done"), "SimpleMLP.Train should return the accuracy message");
+
+        //Holdout accuracy: target std is ~470px/380px, an MLP that learned should be far below that
+        double sx = 0, sy = 0;
+        var probeRng = new System.Random(7);
+        int probes = 200;
+        for (int i = 0; i < probes; i++)
+        {
+            float a = (float)probeRng.NextDouble() * 2f - 1f;
+            float b = (float)probeRng.NextDouble() * 2f - 1f;
+            var truth = new Vector2(960f + 400f * a + 250f * (float)Math.Sin(2.5 * b), 540f + 300f * b + 200f * a * b);
+            var p = mlp.Predict(new float[] { a, b, a * b, 1920f });
+            sx += (p.x - truth.x) * (p.x - truth.x);
+            sy += (p.y - truth.y) * (p.y - truth.y);
+        }
+        var rmseX = (float)Math.Sqrt(sx / probes);
+        var rmseY = (float)Math.Sqrt(sy / probes);
+        Check(rmseX < 100f && rmseY < 100f, $"SimpleMLP should fit nonlinear data (probe RMSE {rmseX:F1},{rmseY:F1}px)");
+
+        //Round-trip via the same JSON path Save/Load use
+        var json = JsonConvert.SerializeObject(mlp);
+        var loaded = JsonConvert.DeserializeObject<SimpleMLP>(json);
+        var probe = new float[] { 0.3f, -0.4f, -0.12f, 1920f };
+        var p1 = mlp.Predict(probe); var p2 = loaded.Predict(probe);
+        Check(Mathf.Abs(p1.x - p2.x) < 1e-3f && Mathf.Abs(p1.y - p2.y) < 1e-3f, "SimpleMLP prediction should survive the serialization round trip");
+
+        //Determinism with a seed
+        var mlp2 = new SimpleMLP(seed: 42);
+        mlp2.Train(x, y);
+        var q1 = mlp.Predict(probe); var q2 = mlp2.Predict(probe);
+        Check(q1 == q2, "SimpleMLP training should be deterministic for a fixed seed");
+
+        //Feature/model mismatch returns NaN (raw-gaze fallback contract)
+        var mismatch = mlp.Predict(new float[] { 1f, 2f });
+        Check(float.IsNaN(mismatch.x), "SimpleMLP.Predict should return NaN on a dimensionality mismatch");
+    }
 
     #endregion
 

@@ -291,7 +291,7 @@ public class HomulerGazeCalibration : MonoBehaviour
         Debug.Log("Starting MLP training");
         Debug.Log($"Total Count: {_xData.Count}");
 
-        var mlp = new MLP();
+        var mlp = new SimpleMLP();
         string MLPstring = mlp.Train(_xData.ToArray(), _yData.ToArray());
 
         if (save)

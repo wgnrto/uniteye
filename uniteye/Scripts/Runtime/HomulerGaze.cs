@@ -31,7 +31,7 @@ public class HomulerGaze : MonoBehaviour
     private AOIBox _offscreenAOI;
 
     private RidgeRegression _xModel, _yModel;
-    private MLP _mlp;
+    private SimpleMLP _mlp;
     //Platform seam: native MediaPipe+Inference Engine on desktop, or a browser-JS provider on WebGL.
     private IGazeProvider _provider;
     private KalmanFilter kalmanFilter;
@@ -100,7 +100,7 @@ public class HomulerGaze : MonoBehaviour
                     break;
                 case Calibrations.MLCalibration:
                     //Fix: the loaded model was previously discarded (never assigned to _mlp)
-                    try { _mlp = MLP.Load("MLP.json"); } catch { }
+                    try { _mlp = SimpleMLP.Load("MLP.json"); } catch { }
                     break;
             }
         }
@@ -178,7 +178,7 @@ public class HomulerGaze : MonoBehaviour
                 try { _yModel = RidgeRegression.LoadY("Reg_Y.json"); } catch { }
                 break;
             case Calibrations.MLCalibration:
-                try { _mlp = MLP.Load("MLP.json"); } catch { }
+                try { _mlp = SimpleMLP.Load("MLP.json"); } catch { }
                 break;
         }
 
