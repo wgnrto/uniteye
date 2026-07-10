@@ -1,0 +1,6 @@
+# Unity WebGL build outputs copied into the served test folder
+webgl/build*/
+
+# OS noise
+Thumbs.db
+.DS_Store
