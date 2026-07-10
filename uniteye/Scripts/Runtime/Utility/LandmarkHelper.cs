@@ -1,4 +1,7 @@
-﻿using Mediapipe;
+// Excluded from WebGL player builds: depends on the native MediaPipe plugin (Mediapipe.Runtime
+// has no wasm library, so IL2CPP linking fails). Kept for the Editor regardless of build target.
+#if !UNITY_WEBGL || UNITY_EDITOR
+using Mediapipe;
 using System.Collections.Generic;
 
 public static class LandmarkHelper
@@ -14,3 +17,4 @@ public static class LandmarkHelper
                              rightLowerCorner.X, rightLowerCorner.Y, rightUpperCorner.X, rightUpperCorner.Y };
     }
 }
+#endif

@@ -1,14 +1,14 @@
 {
-    "name": "UniUlm.UnitEye.Runtime",
+    "name": "UniUlm.UnitEye.MediapipeVendored",
     "rootNamespace": "",
     "references": [
-        "GUID:d8b63aba1907145bea998dd612889d6b",
-        "GUID:04c4d86a70aa56c55a78c61f1ab1a56d",
-        "Unity.InferenceEngine",
-        "UniUlm.UnitEye.MediapipeVendored"
+        "Mediapipe.Runtime",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
-    "excludePlatforms": [],
+    "excludePlatforms": [
+        "WebGL"
+    ],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],

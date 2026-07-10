@@ -1,3 +1,6 @@
+// Excluded from WebGL player builds: depends on the native MediaPipe plugin (Mediapipe.Runtime
+// has no wasm library, so IL2CPP linking fails). Kept for the Editor regardless of build target.
+#if !UNITY_WEBGL || UNITY_EDITOR
 using Mediapipe.Unity;
 using Mediapipe.Unity.FaceMesh;
 using UnityEngine;
@@ -41,3 +44,4 @@ public class LandmarkVisualizer : MonoBehaviour
         Debug.Log(_pointGO.transform.position);
     }
 }
+#endif

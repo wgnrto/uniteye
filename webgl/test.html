@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>UnitEye web core — self test</title>
+  <style>
+    body { font-family: monospace; padding: 16px; background:#111; color:#ddd; }
+    .pass { color:#4caf50; } .fail { color:#ff5252; font-weight:bold; }
+    #summary { font-size:1.3em; margin:12px 0; padding:8px; border:1px solid #444; }
+    li { margin:2px 0; }
+  </style>
+</head>
+<body>
+  <h2>UnitEye web core — self test</h2>
+  <div id="summary">running…</div>
+  <ul id="results"></ul>
+
+  <!-- classic script so this page runs directly from file:// with no server -->
+  <script src="uniteye-core.js"></script>
+  <script>
+    var C = globalThis.UnitEyeCore;
+    var results = document.getElementById("results");
+    var passed = 0, failed = 0;
+
+    function check(name, cond, detail) {
+      var li = document.createElement("li");
+      li.className = cond ? "pass" : "fail";
+      li.textContent = (cond ? "PASS  " : "FAIL  ") + name + (detail ? "  — " + detail : "");
+      results.appendChild(li);
+      if (cond) passed++; else failed++;
+    }
+    function close(a, b, tol) { return Math.abs(a - b) <= (tol || 1e-5); }
+
+    try {
+      // 1. Ridge predict, affine, no standardization: W=[1,2,3] · [1,10,20] = 1 + 20 + 60 = 81
+      var m1 = new C.RidgeModel([1, 2, 3], true, null, null);
+      var y1 = m1.predict([10, 20]);
+      check("RidgeModel.predict affine dot product", close(y1, 81), "got " + y1 + " expected 81");
+
+      // 2. Ridge predict with standardization: mean=[5,10] std=[2,4], feats [7,18] -> [1,2]; W=[0,1,1] -> 0+1+2=3
+      var m2 = new C.RidgeModel([0, 1, 1], true, [5, 10], [2, 4]);
+      var y2 = m2.predict([7, 18]);
+      check("RidgeModel.predict with standardization", close(y2, 3), "got " + y2 + " expected 3");
+
+      // 3. trainRidge recovers a known linear map target = 0.3*f0 + 0.1*f1 + 0.05
+      var feats = [], targs = [];
+      var rng = 12345; function rnd() { rng = (rng * 1103515245 + 12345) & 0x7fffffff; return rng / 0x7fffffff; }
+      for (var i = 0; i < 200; i++) { var f0 = rnd(), f1 = rnd() * 1000; feats.push([f0, f1]); targs.push(0.3 * f0 + 0.0001 * f1 + 0.05); }
+      var trained = C.trainRidge(feats, targs, 0.01);
+      var predT = trained.predict([0.5, 500]);
+      var expT = 0.3 * 0.5 + 0.0001 * 500 + 0.05;
+      check("trainRidge recovers a linear map", close(predT, expT, 0.02), "got " + predT.toFixed(4) + " expected " + expT.toFixed(4));
+
+      // 4. Real shipped Reg_X.json weights predict a finite value on the 12-feature vector
+      var regX_W = [0.104463741, 0.010691735, -0.00440568523, 0.00266113342, -0.0188193135, -4.1600335E-05, 0.000105519161, -0.194871455, -0.8815033, -3.26503229, -2.26206422, 5.49777869E-05, 0.000420249];
+      var mReal = new C.RidgeModel(regX_W, true, null, null);
+      var feat12 = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1920, 1080];
+      var yReal = mReal.predict(feat12);
+      check("shipped Reg_X weights predict finite", isFinite(yReal), "got " + yReal);
+
+      // 5. One-Euro converges to a constant and attenuates jitter
+      var f = new C.OneEuro2D(60, 1.0, 0.0, 1.0), r;
+      for (var i = 0; i < 100; i++) r = f.filter(5, 5, i / 60);
+      check("OneEuro converges to constant input", close(r.x, 5, 0.01), "got " + r.x);
+      var maxDev = 0;
+      for (var i = 100; i < 200; i++) { var raw = 5 + ((i % 2 === 0) ? 1 : -1); var out = f.filter(raw, raw, i / 60); maxDev = Math.max(maxDev, Math.abs(out.x - 5)); }
+      check("OneEuro attenuates alternating jitter", maxDev < 0.5, "max deviation " + maxDev.toFixed(3));
+
+      // 6. AOI box hit-tests (normalized)
+      check("pointInBox inside", C.pointInBox(0.5, 0.5, 0.2, 0.2, 0.8, 0.8, false) === true);
+      check("pointInBox outside", C.pointInBox(0.1, 0.1, 0.2, 0.2, 0.8, 0.8, false) === false);
+      check("pointInBox inverted", C.pointInBox(0.1, 0.1, 0.2, 0.2, 0.8, 0.8, true) === true);
+      check("pointInCircle inside", C.pointInCircle(0.5, 0.5, 0.5, 0.5, 0.1, 1, false) === true);
+      check("pointInCircle outside", C.pointInCircle(0.9, 0.5, 0.5, 0.5, 0.1, 1, false) === false);
+
+      // 7. Eye-crop geometry produces a sane square crop
+      var lm = []; for (var i = 0; i < 500; i++) lm.push({ x: 0.5, y: 0.5 });
+      lm[33] = { x: 0.40, y: 0.42 }; lm[133] = { x: 0.46, y: 0.42 }; // right eye corners
+      var rect = C.eyeCropRect(lm, 33, 133, 640, 480);
+      check("eyeCropRect returns a positive square", rect && rect.size > 0, rect ? JSON.stringify(rect) : "null");
+
+      // 8. Preprocess normalization RGB -> [-0.5, 0.5]
+      var img = { width: 1, height: 1, data: new Uint8ClampedArray([255, 128, 0, 255]) };
+      var t = C.eyeCropToTensor(img, new Float32Array(3));
+      check("eyeCropToTensor R=255 -> +0.5", close(t[0], 0.5, 0.01), "got " + t[0]);
+      check("eyeCropToTensor B=0 -> -0.5", close(t[2], -0.5, 0.01), "got " + t[2]);
+    } catch (e) {
+      check("EXCEPTION", false, e && e.message);
+    }
+
+    var s = document.getElementById("summary");
+    s.textContent = (failed === 0 ? "ALL PASS" : (failed + " FAILED")) + "  (" + passed + " passed, " + failed + " failed)";
+    s.className = failed === 0 ? "pass" : "fail";
+    // expose for headless checks
+    globalThis.__UNITEYE_TEST__ = { passed: passed, failed: failed };
+    document.title = (failed === 0 ? "PASS" : "FAIL") + " — UnitEye core test";
+  </script>
+</body>
+</html>
