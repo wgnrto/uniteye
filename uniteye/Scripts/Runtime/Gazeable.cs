@@ -8,7 +8,10 @@ public class Gazeable : MonoBehaviour
     /// <summary>
     /// Checks whether or not this game object is currently looked at.
     /// </summary>
-    public bool HasGazeFocus => _tagList.focused && this.enabled && checkAllObjectsWithMatchingTag ? true : _tagList.hitRaycast.collider?.gameObject == gameObject;
+    // Parenthesized so `&&` no longer binds tighter than `?:`: without the parentheses this read as
+    // `(focused && enabled && checkAll) ? true : (hitRaycast==this)`, which bypassed the focused/enabled
+    // guard entirely whenever checkAllObjectsWithMatchingTag was false (the default). Mirrors AOITagList.
+    public bool HasGazeFocus => _tagList.focused && this.enabled && (checkAllObjectsWithMatchingTag || _tagList.hitRaycast.collider?.gameObject == gameObject);
 
     [Tooltip("If enabled, all objects with matching tags will influence HasGazeFocus boolean even if they don't have a Gazeable component.")]
     public bool checkAllObjectsWithMatchingTag = false;

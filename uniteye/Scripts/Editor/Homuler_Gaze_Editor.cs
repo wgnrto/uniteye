@@ -11,13 +11,9 @@ namespace UnitEye
         SerializedProperty dot;
         SerializedProperty csvLogger;
         SerializedProperty drawDot;
-        bool drawDotBool = true;
         SerializedProperty showEyes;
-        bool showEyesBool = true;
         SerializedProperty visualizeAOI;
-        bool visualizeAOIBool = false;
         SerializedProperty showGazeUI;
-        bool showGazeUIBool = false;
 
         SerializedProperty calibrations;
         SerializedProperty gazeLocation;
@@ -40,13 +36,9 @@ namespace UnitEye
             dot = serializedObject.FindProperty("dot");
             csvLogger = serializedObject.FindProperty("_csvLogger");
             drawDot = serializedObject.FindProperty("drawDot");
-            drawDotBool = drawDot.boolValue;
             showEyes = serializedObject.FindProperty("showEyes");
-            showEyesBool = showEyes.boolValue;
             visualizeAOI = serializedObject.FindProperty("visualizeAOI");
-            visualizeAOIBool = visualizeAOI.boolValue;
             showGazeUI = serializedObject.FindProperty("showGazeUI");
-            showGazeUIBool = showGazeUI.boolValue;
             calibrations = serializedObject.FindProperty("_calibrations");
             gazeLocation = serializedObject.FindProperty("gazeLocation");
             filtering = serializedObject.FindProperty("_filtering");
@@ -75,17 +67,12 @@ namespace UnitEye
             EditorGUILayout.PropertyField(csvLogger, new GUIContent("CSV Logger:"));
             EditorGUILayout.Separator();
 
-            drawDotBool = EditorGUILayout.Toggle("Draw Dot?", drawDotBool);
-            drawDot.boolValue = drawDotBool;
-
-            showEyesBool = EditorGUILayout.Toggle("Show Eyecrops?", showEyesBool);
-            showEyes.boolValue = showEyesBool;
-
-            visualizeAOIBool = EditorGUILayout.Toggle("Visualize AOIs?", visualizeAOIBool);
-            visualizeAOI.boolValue = visualizeAOIBool;
-
-            showGazeUIBool = EditorGUILayout.Toggle("Show Gaze UI button?", showGazeUIBool);
-            showGazeUI.boolValue = showGazeUIBool;
+            //Bind the SerializedProperty directly (was mirrored through cached bools, which broke
+            //Undo/Reset and multi-object editing and ignored external changes to the value).
+            EditorGUILayout.PropertyField(drawDot, new GUIContent("Draw Dot?"));
+            EditorGUILayout.PropertyField(showEyes, new GUIContent("Show Eyecrops?"));
+            EditorGUILayout.PropertyField(visualizeAOI, new GUIContent("Visualize AOIs?"));
+            EditorGUILayout.PropertyField(showGazeUI, new GUIContent("Show Gaze UI button?"));
             EditorGUILayout.Separator();
 
             EditorGUILayout.PropertyField(calibrations, new GUIContent("Calibration Type"));

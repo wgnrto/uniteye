@@ -15,7 +15,6 @@ namespace UnitEye
         SerializedProperty staticInput;
         SerializedProperty targetFramerate;
         SerializedProperty mirrorImage;
-        bool mirrorImageBool = false;
 
         void OnEnable()
         {
@@ -25,7 +24,6 @@ namespace UnitEye
             staticInput = serializedObject.FindProperty("staticInput");
             rawImage = serializedObject.FindProperty("rawImage");
             mirrorImage = serializedObject.FindProperty("mirrorImage");
-            mirrorImageBool = mirrorImage.boolValue;
         }
 
         void ShowDeviceSelector(Rect rect)
@@ -74,8 +72,8 @@ namespace UnitEye
             EditorGUILayout.PropertyField(rawImage, new GUIContent("Image to draw webcam on"));
             EditorGUILayout.PropertyField(staticInput, new GUIContent("Static Input"));
 
-            mirrorImageBool = EditorGUILayout.Toggle("Mirror image horizontally", mirrorImageBool);
-            mirrorImage.boolValue = mirrorImageBool;
+            //Bind directly (was mirrored through a cached bool, breaking Undo/multi-object editing).
+            EditorGUILayout.PropertyField(mirrorImage, new GUIContent("Mirror image horizontally"));
 
             serializedObject.ApplyModifiedProperties();
         }

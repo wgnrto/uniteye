@@ -88,8 +88,11 @@ public class OneEuroFilter
 	{
 		prevValue = currValue;
 
-		// update the sampling frequency based on timestamps
-		if (lasttime != -1.0f && timestamp != -1.0f)
+		// update the sampling frequency based on timestamps.
+		// Guard against dt <= 0 (two Filter calls in the same frame / non-monotonic timestamp): a zero
+		// delta gave freq = 1/0 = Infinity -> alpha = 0 -> the output froze and LogError spammed.
+		// Keep the previous frequency in that case.
+		if (lasttime != -1.0f && timestamp != -1.0f && timestamp > lasttime)
 			freq = 1.0f / (timestamp - lasttime);
 		lasttime = timestamp;
 		// estimate the current variation per second 

@@ -121,7 +121,7 @@ namespace Mediapipe.Unity
         _faceRectsFromLandmarksStream = new OutputStream<NormalizedRectVectorPacket, List<NormalizedRect>>(
             calculatorGraph, _FaceRectsFromLandmarksStreamName, config.AddPacketPresenceCalculator(_FaceRectsFromLandmarksStreamName), timeoutMicrosec);
         _faceRectsFromDetectionsStream = new OutputStream<NormalizedRectVectorPacket, List<NormalizedRect>>(
-            calculatorGraph, _FaceRectsFromDetectionsStreamName, config.AddPacketPresenceCalculator(_FaceDetectionsStreamName), timeoutMicrosec);
+            calculatorGraph, _FaceRectsFromDetectionsStreamName, config.AddPacketPresenceCalculator(_FaceRectsFromDetectionsStreamName), timeoutMicrosec);
       }
       else
       {

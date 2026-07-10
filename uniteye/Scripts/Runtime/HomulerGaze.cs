@@ -657,14 +657,14 @@ public class HomulerGaze : MonoBehaviour
 
         if (GUI.Button(new Rect(width * 0.025f, height * 0.025f, width * 0.12f, height * 0.05f), $"Previous Webcam", gazeUIStyleButton))
         {
-            _provider.NextCamera();
+            _provider.PreviousCamera();
         }
 
         GUI.Label(new Rect(width * 0.18f, height * 0.025f, width * 0.12f, height * 0.05f), $"Current Webcam: {_provider.CurrentCameraName}", gazeUIStyleLabel);
 
         if (GUI.Button(new Rect(width * 0.335f, height * 0.025f, width * 0.12f, height * 0.05f), $"Next Webcam", gazeUIStyleButton))
         {
-            _provider.PreviousCamera();
+            _provider.NextCamera();
         }
 
         GUI.EndGroup();

@@ -46,10 +46,8 @@ namespace UnitEye
         /// <param name="aoi"></param>
         public void RemoveAOI(string uID)
         {
-            foreach (AOI aoi in _aoiList)
-            {
-                if (aoi.uID == uID) _aoiList.Remove(aoi);
-            }
+            //RemoveAll instead of foreach+Remove, which throws InvalidOperationException on a match.
+            _aoiList.RemoveAll(aoi => aoi.uID == uID);
         }
 
         /// <summary>

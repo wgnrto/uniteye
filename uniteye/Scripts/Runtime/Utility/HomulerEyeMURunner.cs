@@ -176,12 +176,26 @@ public class HomulerEyeMURunner
     }
 
     /// <summary>
-    /// Dispose of the Inference Engine worker.
+    /// Dispose of the Inference Engine worker and release the GPU RenderTextures.
+    /// RenderTextures are native resources that the GC does not reclaim; without this, every provider
+    /// rebuild (scene reload / Editor domain reload) leaks four GPU surfaces.
     /// </summary>
     public void Dispose()
     {
         _worker?.Dispose();
         _worker = null;
+
+        ReleaseRT(LeftEyeTexture);
+        ReleaseRT(RightEyeTexture);
+        ReleaseRT(_leftEyeTextureTensor);
+        ReleaseRT(_rightEyeTextureTensor);
+    }
+
+    private static void ReleaseRT(RenderTexture rt)
+    {
+        if (rt == null) return;
+        rt.Release();
+        Object.Destroy(rt);
     }
 }
 #endif

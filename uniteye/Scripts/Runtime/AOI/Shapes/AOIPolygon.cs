@@ -53,10 +53,8 @@ namespace UnitEye
         /// <param name="point"></param>
         public void RemoveAllPoints(Vector2 point)
         {
-            foreach (Vector2 pointList in points)
-            {
-                if (pointList.x == point.x && pointList.y == point.y) points.Remove(point);
-            }
+            //RemoveAll instead of foreach+Remove, which throws InvalidOperationException on a match.
+            points.RemoveAll(p => p.x == point.x && p.y == point.y);
         }
 
         /// <summary>

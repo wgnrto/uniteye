@@ -66,14 +66,16 @@ public class WebCamInput : MonoBehaviour
         {
             webCamTexture = new WebCamTexture(webCamName, (int)webCamResolution.x, (int)webCamResolution.y);
             webCamTexture.Play();
+            //Size the RT from the requested resolution: right after Play() webCamTexture.width often
+            //still reports the 16x16 placeholder, which would give a tiny inputRT. Only the webcam path
+            //needs an inputRT (inputImageTexture returns staticInput directly on the static path).
+            inputRT = new RenderTexture((int)webCamResolution.x, (int)webCamResolution.y, 0);
         }
-        //Else use staticInput
+        //Else use staticInput (no webcam, no inputRT — previously this NRE'd dereferencing webCamTexture)
         else
         {
-            rawImage.texture = staticInput;
+            if (rawImage != null) rawImage.texture = staticInput;
         }
-
-        inputRT = new RenderTexture(webCamTexture.width, webCamTexture.height, 0);
     }
 
     void Update()
@@ -133,6 +135,25 @@ public class WebCamInput : MonoBehaviour
     {
         if (webCamTexture != null)
             webCamTexture.Stop();
+    }
+
+    /// <summary>
+    /// Stops and destroys the current WebCamTexture and inputRT so a camera switch does not leak them.
+    /// </summary>
+    private void ReleaseCurrentCamera()
+    {
+        if (webCamTexture != null)
+        {
+            webCamTexture.Stop();
+            Destroy(webCamTexture);
+            webCamTexture = null;
+        }
+        if (inputRT != null)
+        {
+            inputRT.Release();
+            Destroy(inputRT);
+            inputRT = null;
+        }
     }
 
     void OnDestroy()
@@ -200,7 +221,9 @@ public class WebCamInput : MonoBehaviour
         {
             if (webCamDevices[i].isFrontFacing == frontFacing)
             {
-                webCamTexture.Stop();
+                //Release the previous webcam + RT before replacing them, otherwise every camera
+                //switch leaks the old WebCamTexture and RenderTexture (both native resources).
+                ReleaseCurrentCamera();
 
                 //If both values are not -1 use them, otherwise use WebCamTexture default
                 if (requestedWidth > 0 && requestedHeight > 0)
@@ -210,7 +233,7 @@ public class WebCamInput : MonoBehaviour
                 webCamTexture.Play();
                 inputRT = new RenderTexture(webCamTexture.width, webCamTexture.height, 0);
 
-                rawImage.texture = webCamTexture;
+                if (rawImage != null) rawImage.texture = webCamTexture;
                 webCamName = webCamDevices[i].name;
                 _webcamIndex = i;
                 found = true;
@@ -236,7 +259,9 @@ public class WebCamInput : MonoBehaviour
 
         if (index >= 0 && webCamDevices.Length > index)
         {
-            webCamTexture.Stop();
+            //Release the previous webcam + RT before replacing them, otherwise every camera
+            //switch leaks the old WebCamTexture and RenderTexture (both native resources).
+            ReleaseCurrentCamera();
 
             //If both values are not -1 use them, otherwise use WebCamTexture default
             if (requestedWidth > 0 && requestedHeight > 0)
@@ -247,7 +272,7 @@ public class WebCamInput : MonoBehaviour
             inputRT = new RenderTexture(webCamTexture.width, webCamTexture.height, 0);
 
             webCamName = webCamDevices[index].name;
-            rawImage.texture = webCamTexture;
+            if (rawImage != null) rawImage.texture = webCamTexture;
             _webcamIndex = index;
             found = true;
         }

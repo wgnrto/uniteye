@@ -11,21 +11,24 @@ namespace UnitEye
 {
     public static class HomulerFunctions
     { 
+        //Reusable buffer for FlipTexture. This runs every frame on the left eye crop; the old code
+        //allocated a `new Texture2D` per call and never Destroy()'d it, leaking native GPU memory every
+        //frame. It is a *separate* buffer from _getEyeTextureBuffer so a flip does not clobber the
+        //right-eye crop that GetEyeTexture leaves in that shared buffer.
+        private static Texture2D _flipTextureBuffer = new Texture2D(256, 256);
         /// <summary>
         /// Horizontally flips a Texture that can be converted into a Texture2D (not a RenderTexture)
         /// </summary>
         /// <param name="source">Texture to be flipped </param>
-        /// <returns>Flipped Texture</returns>
+        /// <returns>Flipped Texture (a shared reused buffer; do not cache the reference across frames)</returns>
         public static Texture FlipTexture(Texture source)
         {
-            var buffer = new Texture2D(1, 1);
-
-            //If source is size 0 return 1x1 pixel dummy texture
+            //If source is size 0 return the reused buffer as a dummy texture
             if (source.width == 0 || source.height == 0)
-                return buffer;
+                return _flipTextureBuffer;
 
-            //Reinitialize buffer Texture2D with new size, does not duplicate to avoid memory leak
-            buffer.Reinitialize(source.width, source.height);
+            //Reinitialize buffer Texture2D with new size, reusing the same native texture (no per-frame leak)
+            _flipTextureBuffer.Reinitialize(source.width, source.height);
 
             //Write pixels to Color32[] array
             var pixelArray = ((Texture2D)source).GetPixels32();
@@ -35,9 +38,9 @@ namespace UnitEye
                 Array.Reverse(pixelArray, i * source.width, source.width);
 
             //Return a flipped Texture
-            buffer.SetPixels32(pixelArray);
-            buffer.Apply();
-            return buffer;
+            _flipTextureBuffer.SetPixels32(pixelArray);
+            _flipTextureBuffer.Apply();
+            return _flipTextureBuffer;
         }
 
         //Buffer Texture2D to avoid memory leak

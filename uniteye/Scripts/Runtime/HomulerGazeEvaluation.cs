@@ -195,22 +195,38 @@ public class HomulerGazeEvaluation : MonoBehaviour
         return message;
     }
 
+    /// <summary>
+    /// Root-mean-square gaze error in pixels, per axis.
+    /// Metric note: a hit that lands within the calibration dot's radius counts as zero error (you
+    /// cannot be more accurate than the dot itself), but that sample IS still counted in the average.
+    /// So this is "mean error treating within-dot hits as perfect", NOT a plain RMSE — it reads lower
+    /// than a plain RMSE by design. Change the denominator to the above-threshold count if you instead
+    /// want the RMSE over only the misses.
+    /// Uses the passed-in lists (not the _targetData field) so pred/target lengths stay in lockstep.
+    /// </summary>
     private (float x, float y) CalculateRMSE(List<Vector2> predData, List<Vector2> targetData)
     {
-        float errorX = 0.0f, errorY = 0.0f;
-        for (int i = 0; i < _targetData.Count; i++)
-        {
-            var errX = Mathf.Pow(predData[i].x - targetData[i].x, 2);
-            var errY = Mathf.Pow(predData[i].y - targetData[i].y, 2);
+        int count = Mathf.Min(predData.Count, targetData.Count);
+        if (count == 0)
+            return (0f, 0f);
 
-            // Since the dot is a circle check its radius
-            if (errX > Mathf.Pow(dotSize * 0.5f, 2))
+        float errorX = 0.0f, errorY = 0.0f;
+        float radiusSq = (dotSize * 0.5f) * (dotSize * 0.5f);
+        for (int i = 0; i < count; i++)
+        {
+            float dx = predData[i].x - targetData[i].x;
+            float dy = predData[i].y - targetData[i].y;
+            float errX = dx * dx;
+            float errY = dy * dy;
+
+            // Since the dot is a circle, only count the error beyond its radius
+            if (errX > radiusSq)
                 errorX += errX;
-            if (errY > Mathf.Pow(dotSize * 0.5f, 2))
+            if (errY > radiusSq)
                 errorY += errY;
         }
 
-        return (Mathf.Sqrt(errorX / _targetData.Count), Mathf.Sqrt(errorY / _targetData.Count));
+        return (Mathf.Sqrt(errorX / count), Mathf.Sqrt(errorY / count));
     }
 
     void OnGUI()
