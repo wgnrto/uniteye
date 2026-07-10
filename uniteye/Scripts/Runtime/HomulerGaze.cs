@@ -41,8 +41,8 @@ namespace UnitEye
 
         private AOIBox _offscreenAOI;
 
-        private RidgeRegression _xModel, _yModel;
-        private SimpleMLP _mlp;
+        //Owns the calibration models + raw->calibrated refinement (extracted out of this class).
+        private readonly CalibrationModelStore _modelStore = new CalibrationModelStore();
         //Platform seam: native MediaPipe+Inference Engine on desktop, or a browser-JS provider on WebGL.
         private IGazeProvider _provider;
         private KalmanFilter kalmanFilter;
@@ -102,7 +102,7 @@ namespace UnitEye
                     _csvLogger.AppendNote($"Changed calibration type to {_calibrations}");
 
                 _calibrations = value;
-                LoadCalibrationModels();
+                _modelStore.Load(_calibrations);
             }
         }
         [SerializeField]
@@ -170,7 +170,7 @@ namespace UnitEye
             _provider = new NativeGazeProvider(_mediaPipeGO);
     #endif
 
-            LoadCalibrationModels();
+            _modelStore.Load(_calibrations);
 
             //Create filters
             kalmanFilter = new KalmanFilter(Q, R);
@@ -354,84 +354,13 @@ namespace UnitEye
         }
 
         /// <summary>
-        /// Loads the calibration model(s) for the current calibration type. Shared by Start and the
-        /// Calibrations setter (was duplicated in both).
-        /// RidgeRegression.Load / SimpleMLP.Load already handle the expected "no calibration file yet" case
-        /// internally (they return null and the pipeline falls back to raw gaze). Only genuinely unexpected
-        /// failures — a corrupt/incompatible JSON, an IO error — reach the catch here; surface those instead
-        /// of the old empty catch blocks, so a calibration that silently stopped loading is diagnosable.
-        /// </summary>
-        private void LoadCalibrationModels()
-        {
-            try
-            {
-                switch (_calibrations)
-                {
-                    case Calibrations.RidgeRegression:
-                        _xModel = RidgeRegression.LoadX("Reg_X.json");
-                        _yModel = RidgeRegression.LoadY("Reg_Y.json");
-                        break;
-                    case Calibrations.MLCalibration:
-                        _mlp = SimpleMLP.Load("MLP.json");
-                        break;
-                }
-            }
-            catch (System.Exception e)
-            {
-                UnitEye.UnitEyeLog.Error($"Failed to load the {_calibrations} calibration model; falling back to raw gaze.");
-                UnitEye.UnitEyeLog.Exception(e);
-            }
-        }
-
-        /// <summary>
-        /// Refines the EyeMU gaze location by applying a calibrated model
+        /// Refines the EyeMU gaze location by applying the calibrated model (delegates to the model store).
         /// </summary>
         /// <param name="calibrations">The calibrated model type to use</param>
         /// <returns>The calibrated gaze location</returns>
         public Vector2 RefineGazeLocation(Vector2 rawGaze, Calibrations calibrations)
         {
-            var features = _provider.GetFeatures();
-            Vector2 refinedGaze = Vector2.zero;
-
-            //No feature vector (e.g. a browser provider streaming only raw gaze) -> calibration cannot
-            //apply, use the raw gaze location directly
-            if (features == null || features.Length == 0)
-                return rawGaze;
-
-            //Switch by calibration type
-            switch (calibrations)
-            {
-                case Calibrations.None:
-                    refinedGaze = rawGaze;
-                    break;
-                case Calibrations.RidgeRegression:
-                    //Fall back to the raw gaze location if no calibration model is loaded
-                    if (_xModel == null || _yModel == null)
-                    {
-                        refinedGaze = rawGaze;
-                        break;
-                    }
-                    refinedGaze.x = _xModel.Predict(features);
-                    refinedGaze.y = _yModel.Predict(features);
-
-                    refinedGaze.x *= Screen.width;
-                    refinedGaze.y *= Screen.height;
-                    break;
-                case Calibrations.MLCalibration:
-                    //Fall back to the raw gaze location if no calibration model is loaded
-                    if (_mlp == null)
-                    {
-                        refinedGaze = rawGaze;
-                        break;
-                    }
-                    refinedGaze = _mlp.Predict(features);
-                    break;
-            }
-            //If calibration produced no usable value (NaN, e.g. model/feature mismatch), fall back to raw gaze
-            if (float.IsNaN(refinedGaze.x) || float.IsNaN(refinedGaze.y))
-                return rawGaze;
-
-            return refinedGaze;
+            return _modelStore.Refine(rawGaze, calibrations, _provider.GetFeatures(), Screen.width, Screen.height);
         }
 
         /// <summary>
