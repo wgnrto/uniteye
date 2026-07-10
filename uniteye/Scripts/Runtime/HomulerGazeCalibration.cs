@@ -56,6 +56,10 @@ public class HomulerGazeCalibration : MonoBehaviour
     [NonSerialized]
     public bool returnAfter;
     public bool Returned { get; private set; }
+    //Cleared by the owner (HomulerGaze) once it has handled the return. Without this, Returned stays
+    //true forever and HomulerGaze.LateUpdate re-runs UnloadCalibration every frame, whose RestoreSettings
+    //stomps the UI toggles ~30x/second (they appear to flip back instantly when clicked).
+    public void ClearReturned() => Returned = false;
     //Default return message for cancellation
     public string ReturnMessage { get; private set; } = "Cancelled calibration";
 
@@ -82,6 +86,28 @@ public class HomulerGazeCalibration : MonoBehaviour
     public LineRenderer path;
 
     #endregion
+
+    private void OnEnable()
+    {
+        //Reset per-session state so a repeat calibration (e.g. switching calibration type and running
+        //again in the same play session) starts fresh instead of inheriting the previous run's
+        //finished/returned flags (which would make it abort immediately). On the very first enable this
+        //runs before Start(), when _presets is still null, so the point reset is guarded and Start()
+        //performs the initial point setup.
+        _started = false;
+        _finished = false;
+        _finishedRound = false;
+        _earlyStop = false;
+        _showMessage = true;
+        Returned = false;
+        currentRound = 0;
+        _guiMessage = "Follow the dot with your eyes!\nClick to start calibration";
+        if (_presets != null)
+        {
+            _currentPreset = 0;
+            ResetPoints(0);
+        }
+    }
 
     void Start()
     {

@@ -511,6 +511,8 @@ public class HomulerGaze : MonoBehaviour
             _csvLogger.AppendNote(_calibrationScript.ReturnMessage);
 
         _calibrationScript.enabled = false;
+        //Consume the return so LateUpdate does not call UnloadCalibration again next frame
+        _calibrationScript.ClearReturned();
 
         //Reload calibration file
         Calibrations = _calibrations;
@@ -566,6 +568,8 @@ public class HomulerGaze : MonoBehaviour
 
         //Destroy calibration script
         _evaluationScript.enabled = false;
+        //Consume the return so LateUpdate does not call UnloadEvaluation again next frame
+        _evaluationScript.ClearReturned();
 
         IsRendering = true;
     }

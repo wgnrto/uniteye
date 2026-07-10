@@ -43,6 +43,9 @@ public class HomulerGazeEvaluation : MonoBehaviour
     [NonSerialized]
     public bool returnAfter;
     public bool Returned { get; private set; }
+    //Cleared by the owner (HomulerGaze) once it has handled the return, so LateUpdate does not re-run
+    //UnloadEvaluation every frame (which would stomp the UI toggles via RestoreSettings).
+    public void ClearReturned() => Returned = false;
     //Default return message for cancellation
     public string ReturnMessage { get; private set; } = "Cancelled evaluation";
 
