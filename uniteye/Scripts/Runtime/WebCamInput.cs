@@ -11,6 +11,7 @@ public class WebCamInput : MonoBehaviour
     private Texture _rawImageBackup;
     private Texture _textureBackup;
     private bool _backupped;
+    private bool _resumePlaybackOnEnable;
 
     //Default to 1080p, can be changed if neccessary
     public static Vector2 DefaultResolution = new Vector2(1920, 1080);
@@ -96,6 +97,36 @@ public class WebCamInput : MonoBehaviour
         if (rawImage != null && !_backupped) rawImage.texture = inputRT;
         //Mirror rawImage if desired
         if (rawImage != null && !_backupped) rawImage.transform.localScale = new Vector3((mirrorImage ? -1f : 1f), 1f, 1f);
+    }
+
+    void OnDisable()
+    {
+        if (staticInput != null) return;
+
+        if (webCamTexture != null)
+        {
+            _resumePlaybackOnEnable = webCamTexture.isPlaying;
+            if (webCamTexture.isPlaying)
+            {
+                webCamTexture.Stop();
+            }
+        }
+        else
+        {
+            _resumePlaybackOnEnable = false;
+        }
+    }
+
+    void OnEnable()
+    {
+        if (staticInput != null) return;
+
+        if (_resumePlaybackOnEnable && webCamTexture != null && !webCamTexture.isPlaying)
+        {
+            webCamTexture.Play();
+        }
+
+        _resumePlaybackOnEnable = false;
     }
 
     public void Stop()
