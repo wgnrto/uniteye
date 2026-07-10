@@ -38,6 +38,12 @@ namespace Mediapipe.Unity
     private static readonly GlobalInstanceTable<int, GraphRunner> _InstanceTable = new GlobalInstanceTable<int, GraphRunner>(5);
     private static readonly Dictionary<IntPtr, int> _NameTable = new Dictionary<IntPtr, int>();
 
+    // Unity identity APIs churned across 6.3->6.5 (GetInstanceID hard-deprecated, EntityId losing its
+    // int conversion), and these tables only need a process-unique key per instance. Use a local
+    // counter instead (same pattern TextureFrame uses with its own Guid _instanceId).
+    private static int _NextInstanceId;
+    private int _instanceId;
+
     protected RunningMode runningMode { get; private set; } = RunningMode.Async;
     private bool _isRunning = false;
 
@@ -96,7 +102,8 @@ namespace Mediapipe.Unity
 
     protected virtual void Start()
     {
-      _InstanceTable.Add(GetInstanceID(), this);
+      _instanceId = ++_NextInstanceId;
+      _InstanceTable.Add(_instanceId, this);
     }
 
     protected virtual void OnDestroy()
@@ -220,7 +227,7 @@ namespace Mediapipe.Unity
     protected Status InitializeCalculatorGraph()
     {
       calculatorGraph = new CalculatorGraph();
-      _NameTable.Add(calculatorGraph.mpPtr, GetInstanceID());
+      _NameTable.Add(calculatorGraph.mpPtr, _instanceId);
 
       // NOTE: There's a simpler way to initialize CalculatorGraph.
       //
