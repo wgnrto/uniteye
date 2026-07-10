@@ -35,9 +35,18 @@ namespace UnitEye
             _eyeHelper = new HomulerEyeHelper(_faceMesh, _webcam.name);
 
             //Pick the gaze model behind the shared face-mesh/blink/distance stack.
-            _backbone = backbone == GazeBackbone.GazeEstimation
-                ? (IGazeBackbone)new GazeEstimationRunner(_faceMesh)
-                : new HomulerEyeMURunner(_faceMesh);
+            switch (backbone)
+            {
+                case GazeBackbone.GazeMobileOne:
+                    _backbone = new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobileone_s0_gaze");
+                    break;
+                case GazeBackbone.GazeMobileNetV2:
+                    _backbone = new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobilenetv2_gaze");
+                    break;
+                default:
+                    _backbone = new HomulerEyeMURunner(_faceMesh);
+                    break;
+            }
         }
 
         public bool Tick()

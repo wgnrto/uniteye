@@ -39,6 +39,8 @@ public static class UnitEyeSmokeTests
             TestEyeCropRect();
             TestScenesAndPrefabsHaveNoMissingScripts();
             TestEyeMUModelLoadsAndRuns();
+            TestGazeEstimationDecode();
+            TestGazeModelsLoadAndRun();
         }
         catch (Exception e)
         {
@@ -494,6 +496,70 @@ public static class UnitEyeSmokeTests
             t4?.Dispose();
             t5?.Dispose();
             worker?.Dispose();
+        }
+    }
+
+    private static float[] GazeBinSpike(int index)
+    {
+        var b = new float[90];
+        b[index] = 100f;   // softmax -> ~one-hot at index
+        return b;
+    }
+
+    private static void TestGazeEstimationDecode()
+    {
+        //L2CS decode: softmax + expectation over 90 bins, index*4deg - 180deg -> radians. Pure math.
+        //Center bin (45) -> 45*4-180 = 0 deg; bin 0 -> -180 deg = -pi; bin 89 -> 176 deg.
+        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(45)), 0f, 0.02f, "Gaze decode: center bin ~ 0 rad");
+        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(0)), -Mathf.PI, 0.02f, "Gaze decode: bin 0 ~ -pi rad");
+        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(89)), (89f * 4f - 180f) * Mathf.Deg2Rad, 0.02f, "Gaze decode: bin 89");
+    }
+
+    private static void TestGazeModelsLoadAndRun()
+    {
+        //Verifies both yakhyo/gaze-estimation ONNX models import and expose the I/O GazeEstimationRunner
+        //codes against: one input (1,3,448,448) named "input", two outputs "yaw"+"pitch" of 90 bins each.
+        //Runs once with a blank CPU input so it works under -nographics. Does NOT prove gaze accuracy.
+        foreach (var path in new[] { "ONNX/GazeEstimation/mobileone_s0_gaze", "ONNX/GazeEstimation/mobilenetv2_gaze" })
+        {
+            var asset = Resources.Load<ModelAsset>(path);
+            Check(asset != null, $"Gaze model should load from Resources: {path}");
+            if (asset == null) continue;
+
+            var model = ModelLoader.Load(asset);
+            Check(model.inputs.Count == 1, $"{path}: should have 1 input");
+            Check(model.outputs.Count == 2, $"{path}: should have 2 outputs");
+
+            bool hasYaw = false, hasPitch = false;
+            foreach (var o in model.outputs)
+            {
+                if (o.name == "yaw") hasYaw = true;
+                if (o.name == "pitch") hasPitch = true;
+            }
+            Check(hasYaw && hasPitch, $"{path}: outputs should be named yaw + pitch");
+
+            Worker worker = null;
+            Tensor<float> input = null;
+            try
+            {
+                worker = new Worker(model, BackendType.CPU);
+                input = new Tensor<float>(new TensorShape(1, 3, 448, 448), new float[3 * 448 * 448]);
+                worker.SetInput("input", input);
+                worker.Schedule();
+
+                var yaw = worker.PeekOutput("yaw") as Tensor<float>;
+                Check(yaw != null, $"{path}: 'yaw' output should exist");
+                if (yaw != null)
+                {
+                    var bins = yaw.DownloadToArray();
+                    Check(bins.Length == 90, $"{path}: yaw should have 90 bins (got {bins.Length})");
+                }
+            }
+            finally
+            {
+                input?.Dispose();
+                worker?.Dispose();
+            }
         }
     }
 

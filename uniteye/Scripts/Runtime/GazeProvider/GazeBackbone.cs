@@ -9,8 +9,12 @@ namespace UnitEye
         /// verified default; ships with the package.</summary>
         EyeMU,
 
-        /// <summary>A direction-based model (e.g. yakhyo/gaze-estimation): a face crop -> gaze pitch/yaw,
-        /// mapped to the screen. Requires you to add the ONNX model and hand-test — see the doc.</summary>
-        GazeEstimation,
+        /// <summary>yakhyo/gaze-estimation MobileOne-s0: a face crop -> gaze pitch/yaw (fast), mapped to
+        /// the screen. Uses Resources/ONNX/GazeEstimation/mobileone_s0_gaze.onnx.</summary>
+        GazeMobileOne,
+
+        /// <summary>yakhyo/gaze-estimation MobileNetV2: a face crop -> gaze pitch/yaw, mapped to the
+        /// screen. Uses Resources/ONNX/GazeEstimation/mobilenetv2_gaze.onnx.</summary>
+        GazeMobileNetV2,
     }
 }
