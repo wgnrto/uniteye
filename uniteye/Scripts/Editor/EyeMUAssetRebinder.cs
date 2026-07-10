@@ -1,6 +1,7 @@
 using Unity.InferenceEngine;
 using UnityEditor;
 using UnityEngine;
+using UnitEye;
 
 /// <summary>
 /// Rebinds the EyeMU ScriptableObject's model reference after the Barracuda->Inference Engine migration.

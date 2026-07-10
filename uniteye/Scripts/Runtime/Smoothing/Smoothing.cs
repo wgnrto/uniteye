@@ -1,15 +1,18 @@
 using UnityEngine;
-
-public class Smoothing
+namespace UnitEye
 {
-    public virtual Vector2 Update(Vector2 measurment)
+
+    public class Smoothing
     {
-        return measurment;
+        public virtual Vector2 Update(Vector2 measurment)
+        {
+            return measurment;
+        }
     }
-}
 
-//Filter options
-public enum Filtering
-{
-    None, Kalman, Easing, KalmanEasing, EasingKalman, OneEuro
+    //Filter options
+    public enum Filtering
+    {
+        None, Kalman, Easing, KalmanEasing, EasingKalman, OneEuro
+    }
 }

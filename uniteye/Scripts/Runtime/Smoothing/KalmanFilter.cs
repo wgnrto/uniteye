@@ -1,48 +1,51 @@
 using UnityEngine;
-
-public class KalmanFilter : Smoothing
+namespace UnitEye
 {
-    //Frame rate the Q/R sliders were tuned at (HomulerGaze sets Application.targetFrameRate = 30).
-    private const float ReferenceRate = 30f;
 
-    public float Q { get; set; }
-
-    public float R { get; set; }
-
-    private float _k;
-
-    private Vector2 _x;
-
-    private float _p;
-
-    public KalmanFilter(float q = 1e-5f, float r = 1e-4f)
+    public class KalmanFilter : Smoothing
     {
-        Q = q;
-        R = r;
-        Reset();
-    }
+        //Frame rate the Q/R sliders were tuned at (HomulerGaze sets Application.targetFrameRate = 30).
+        private const float ReferenceRate = 30f;
 
-    public void Reset()
-    {
-        _k = 0;
-        _x = Vector2.zero;
-        _p = 1.0f;
-    }
+        public float Q { get; set; }
 
-    public override Vector2 Update(Vector2 measurement)
-    {
-        // prediction
-        // no state transition, just grow the covariance by the process noise. Scale it by elapsed
-        // time (normalized to the 30 fps reference, so this equals the old Q at 30 fps) so the filter's
-        // responsiveness does not change with frame rate.
-        float dt = Time.unscaledDeltaTime;
-        _p = _p + Q * (dt * ReferenceRate);
+        public float R { get; set; }
 
-        // measurement update
-        _k = _p / (_p + R);
-        _x = _x + _k * (measurement - _x);
-        _p = (1.0f - _k) * _p;
+        private float _k;
 
-        return _x;
+        private Vector2 _x;
+
+        private float _p;
+
+        public KalmanFilter(float q = 1e-5f, float r = 1e-4f)
+        {
+            Q = q;
+            R = r;
+            Reset();
+        }
+
+        public void Reset()
+        {
+            _k = 0;
+            _x = Vector2.zero;
+            _p = 1.0f;
+        }
+
+        public override Vector2 Update(Vector2 measurement)
+        {
+            // prediction
+            // no state transition, just grow the covariance by the process noise. Scale it by elapsed
+            // time (normalized to the 30 fps reference, so this equals the old Q at 30 fps) so the filter's
+            // responsiveness does not change with frame rate.
+            float dt = Time.unscaledDeltaTime;
+            _p = _p + Q * (dt * ReferenceRate);
+
+            // measurement update
+            _k = _p / (_p + R);
+            _x = _x + _k * (measurement - _x);
+            _p = (1.0f - _k) * _p;
+
+            return _x;
+        }
     }
 }
