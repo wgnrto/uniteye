@@ -11,8 +11,8 @@ namespace UnitEye
     /// <summary>
     /// Gaze backbone driven by a direction-based model from https://github.com/yakhyo/gaze-estimation
     /// (MobileOne-s0 or MobileNetV2). Unlike EyeMU (which regresses a screen point), these take a FACE crop
-    /// and output a gaze DIRECTION. This runner crops the face from the MediaPipe FaceMesh rect (no extra
-    /// detector), runs the ONNX, decodes the angles, and turns them into a rough on-screen point; the
+    /// and output a gaze DIRECTION. This runner crops the face from the MediaPipe FaceMesh landmark
+    /// bounding box (no extra detector), runs the ONNX, decodes the angles, and maps to a rough point; the
     /// per-user calibration (RidgeRegression / SimpleMLP) then does the real angle->screen mapping from the
     /// feature vector, exactly as it refines EyeMU's raw output.
     ///
@@ -36,6 +36,8 @@ namespace UnitEye
         const string OUTPUT_PITCH = "pitch";
         // Pre-calibration RawGaze gain only (calibration maps the real screen point from Features).
         const float ANGLE_TO_SCREEN_GAIN = 1.2f;
+        // Square face crop side = max(landmark-bbox width, height) * this, for context around the face.
+        const float FACE_CROP_SCALE = 1.4f;
 
         private readonly FaceMeshSolution _faceMesh;
         private readonly ComputeShader _preprocess;
@@ -91,18 +93,40 @@ namespace UnitEye
             if (!webcam.isPrepared || tex == null)
                 return false;
 
-            var rects = _faceMesh.FaceRects;
-            if (rects == null || rects.Count == 0)
+            // Crop from the FaceMesh LANDMARK bounding box, NOT FaceRects: in the (NonBlocking)Sync
+            // running mode this project uses, FaceMeshSolution only populates FaceLandmarks (via
+            // WaitForNextValue) and leaves FaceRects null (it's only set on the async event path), so
+            // relying on FaceRects made PerformInference return false every frame (stuck crosshair, no crop).
+            var landmarks = _faceMesh.FaceLandmarks;
+            if (landmarks == null || landmarks.Count == 0)
                 return false;
 
-            // GPU-crop the face from the MediaPipe face rect (normalized, y-down) into the square input.
-            // Bottom-left UV like the eye-crop path; rotation is ignored.
-            var r = rects[0];
-            float w = Mathf.Clamp01(r.Width);
-            float h = Mathf.Clamp01(r.Height);
-            float cx = Mathf.Clamp01(r.XCenter);
-            float cyUp = 1f - Mathf.Clamp01(r.YCenter);
-            Graphics.Blit(tex, _faceCrop, new Vector2(w, h), new Vector2(cx - w * 0.5f, cyUp - h * 0.5f));
+            int srcW = tex.width, srcH = tex.height;
+            if (srcW <= 0 || srcH <= 0)
+                return false;
+
+            // Face landmark bounding box (normalized, y-down).
+            float minX = 1f, minY = 1f, maxX = 0f, maxY = 0f;
+            for (int i = 0; i < landmarks.Count; i++)
+            {
+                var l = landmarks[i];
+                if (l.X < minX) minX = l.X;
+                if (l.X > maxX) maxX = l.X;
+                if (l.Y < minY) minY = l.Y;
+                if (l.Y > maxY) maxY = l.Y;
+            }
+
+            // Square crop in PIXELS (so the 448x448 input isn't stretched), centred on the face with
+            // FACE_CROP_SCALE padding for context, expressed as a bottom-left-UV Graphics.Blit.
+            float cxPx = (minX + maxX) * 0.5f * srcW;
+            float cyPx = (minY + maxY) * 0.5f * srcH;                   // y-down
+            float sidePx = Mathf.Max((maxX - minX) * srcW, (maxY - minY) * srcH) * FACE_CROP_SCALE;
+            if (sidePx <= 1f)
+                return false;
+            float cyUpPx = srcH - cyPx;                                 // to y-up
+            var scale = new Vector2(sidePx / srcW, sidePx / srcH);
+            var offset = new Vector2((cxPx - sidePx * 0.5f) / srcW, (cyUpPx - sidePx * 0.5f) / srcH);
+            Graphics.Blit(tex, _faceCrop, scale, offset);
 
             // ImageNet-normalize into the tensor texture, then convert to the (1,3,448,448) NCHW tensor.
             _preprocess.SetTexture(0, "_Texture", _faceCrop);
