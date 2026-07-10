@@ -629,10 +629,13 @@ public class HomulerGaze : MonoBehaviour
         var gazeUIStyleLabel = GUI.skin.label;
         var gazeUIStyleHSThumb = GUI.skin.horizontalSliderThumb;
         gazeUIStyleButton.wordWrap = gazeUIStyleLabel.wordWrap = true;
-        //High-contrast text on the dark panel (default skin text is grey and hard to read)
+        //High-contrast text on the dark panel (default skin text is grey and hard to read). Bold too:
+        //the editor Game View renders at game resolution and upscales on high-DPI displays, so the text
+        //is inherently a little soft there, and bold white reads much more clearly than thin grey.
         gazeUIStyleLabel.normal.textColor = Color.white;
         gazeUIStyleBox.normal.textColor = Color.white;
         gazeUIStyleButton.normal.textColor = Color.white;
+        gazeUIStyleLabel.fontStyle = gazeUIStyleBox.fontStyle = gazeUIStyleButton.fontStyle = FontStyle.Bold;
 
         //Scale font based on Resolution comparison to 1080p
         var resolutionScale = Mathf.Sqrt((0.001f * (float)width * (float)height) / 2073.6f);
