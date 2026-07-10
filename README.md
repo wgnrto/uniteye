@@ -141,6 +141,8 @@ The next section controls the used `Calibration type` and `Filtering type`. You 
 
 Lastly, you have the option to start our `Calibration` and `Evaluation` sequence at runtime. These buttons will start a [Calibration](#calibration) or [Evaluation](#evaluation) without loading a new scene. When you start a sequence through the Gaze UI, you can cancel and return from it at any point by clicking the right mouse button.
 
+> **Blurry Gaze UI text in the editor on a high-DPI display?** The overlay is drawn with Unity's on-screen IMGUI, which renders at the Game view's resolution and is then scaled to fit — so on a high-DPI screen (e.g. a 3200×2000 laptop) the text can look soft while the editor's own UI stays sharp. In the Game view, set the aspect to **Free Aspect** and enable **"Low Resolution Aspect Ratios"** (in the Game view's aspect/scale dropdown); this restored crisp text on such a display. A standalone build renders the overlay crisp regardless. The buttons themselves are unaffected by this — if a toggle appears not to respond in the editor, make sure you are running a build from this branch (an earlier bug made the toggles revert every frame after a calibration had run; it is fixed here).
+
 ## Calibration
 Every room and computer setup needs calibration to ensure good tracking accuracy. You should also calibrate when your seating position changes drastically or when you notice a loss in accuracy (which can also be caused by a change in lighting). To do that you have two options:
 * Load a new scene similar to our `UnitEye/Scenes/HomulerGazeCalibration` scene and add the `HomulerGazeCalibration` component (uniteye/Scripts/Runtime/HomulerGazeCalibration.cs) next to the `HomulerGaze` component
