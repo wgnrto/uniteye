@@ -615,12 +615,24 @@ public class HomulerGaze : MonoBehaviour
         var height = Screen.height;
         gazeUI.height = height * 0.82f;
 
+        //Opaque backdrop: Unity's IMGUI window is semi-transparent by default, so the live webcam feed
+        //behind it shows through and washes out the text (unreadable regardless of font size). Paint a
+        //solid dark panel over the whole window before drawing any content.
+        var prevGuiColor = GUI.color;
+        GUI.color = new Color(0.12f, 0.12f, 0.13f, 1f);
+        GUI.DrawTexture(new Rect(0f, 0f, gazeUI.width, gazeUI.height), Texture2D.whiteTexture);
+        GUI.color = prevGuiColor;
+
         //Set GUIStyles
         var gazeUIStyleBox = GUI.skin.box;
         var gazeUIStyleButton = GUI.skin.button;
         var gazeUIStyleLabel = GUI.skin.label;
         var gazeUIStyleHSThumb = GUI.skin.horizontalSliderThumb;
         gazeUIStyleButton.wordWrap = gazeUIStyleLabel.wordWrap = true;
+        //High-contrast text on the dark panel (default skin text is grey and hard to read)
+        gazeUIStyleLabel.normal.textColor = Color.white;
+        gazeUIStyleBox.normal.textColor = Color.white;
+        gazeUIStyleButton.normal.textColor = Color.white;
 
         //Scale font based on Resolution comparison to 1080p
         var resolutionScale = Mathf.Sqrt((0.001f * (float)width * (float)height) / 2073.6f);
