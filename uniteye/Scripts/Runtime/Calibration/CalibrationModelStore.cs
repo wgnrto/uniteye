@@ -14,29 +14,44 @@ namespace UnitEye
         private SimpleMLP _mlp;
 
         /// <summary>
-        /// (Re)loads the model(s) for the given calibration type. RidgeRegression.Load / SimpleMLP.Load
-        /// already handle the expected "no calibration file yet" case (they return null and the pipeline
-        /// falls back to raw gaze); only genuinely unexpected failures — a corrupt/incompatible JSON, an
-        /// IO error — are surfaced here instead of being silently swallowed.
+        /// Per-backbone calibration filename, e.g. ("Reg_X.json", EyeMU) -> "Reg_X_EyeMU.json". Each gaze
+        /// backbone produces a DIFFERENT feature vector (EyeMU's 12-value vector vs the direction models'
+        /// pitch/yaw+head-pose), so its calibration is saved and loaded under a backbone-specific name and
+        /// never overwrites another backbone's calibration. Save (HomulerGazeCalibration) and Load below
+        /// use this same helper so they always agree.
         /// </summary>
-        public void Load(Calibrations calibrations)
+        public static string FileName(string baseName, GazeBackbone backbone)
+        {
+            int dot = baseName.LastIndexOf('.');
+            string stem = dot >= 0 ? baseName.Substring(0, dot) : baseName;
+            string ext = dot >= 0 ? baseName.Substring(dot) : "";
+            return $"{stem}_{backbone}{ext}";
+        }
+
+        /// <summary>
+        /// (Re)loads the model(s) for the given calibration type and gaze backbone. RidgeRegression.Load /
+        /// SimpleMLP.Load already handle the expected "no calibration file yet" case (they return null and
+        /// the pipeline falls back to raw gaze); only genuinely unexpected failures — a corrupt/incompatible
+        /// JSON, an IO error — are surfaced here instead of being silently swallowed.
+        /// </summary>
+        public void Load(Calibrations calibrations, GazeBackbone backbone)
         {
             try
             {
                 switch (calibrations)
                 {
                     case Calibrations.RidgeRegression:
-                        _xModel = RidgeRegression.LoadX("Reg_X.json");
-                        _yModel = RidgeRegression.LoadY("Reg_Y.json");
+                        _xModel = RidgeRegression.LoadX(FileName("Reg_X.json", backbone));
+                        _yModel = RidgeRegression.LoadY(FileName("Reg_Y.json", backbone));
                         break;
                     case Calibrations.MLCalibration:
-                        _mlp = SimpleMLP.Load("MLP.json");
+                        _mlp = SimpleMLP.Load(FileName("MLP.json", backbone));
                         break;
                 }
             }
             catch (System.Exception e)
             {
-                UnitEyeLog.Error($"Failed to load the {calibrations} calibration model; falling back to raw gaze.");
+                UnitEyeLog.Error($"Failed to load the {calibrations} calibration model ({backbone}); falling back to raw gaze.");
                 UnitEyeLog.Exception(e);
             }
         }

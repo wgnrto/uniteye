@@ -108,6 +108,9 @@ namespace UnitEye
         {
             _gazeBackbone = backbone;
             _provider?.SetBackbone(backbone);
+            //Load this backbone's own calibration (per-backbone files). If it hasn't been calibrated yet,
+            //the models load as null and RefineGazeLocation falls back to raw gaze until you calibrate.
+            _modelStore.Load(_calibrations, _gazeBackbone);
         }
 
         [System.NonSerialized]
@@ -125,7 +128,7 @@ namespace UnitEye
                     _csvLogger.AppendNote($"Changed calibration type to {_calibrations}");
 
                 _calibrations = value;
-                _modelStore.Load(_calibrations);
+                _modelStore.Load(_calibrations, _gazeBackbone);
             }
         }
         [SerializeField]
@@ -198,7 +201,7 @@ namespace UnitEye
             //Apply the initial face-mesh overlay preference
             _provider.AnnotateFaceMesh = showFaceMesh;
 
-            _modelStore.Load(_calibrations);
+            _modelStore.Load(_calibrations, _gazeBackbone);
 
             //Create filters
             kalmanFilter = new KalmanFilter(Q, R);

@@ -328,7 +328,8 @@ namespace UnitEye
 
             if (save)
             {
-                mlp.Save("MLP.json");
+                //Save under the active backbone's name so each gaze model keeps its own calibration.
+                mlp.Save(CalibrationModelStore.FileName("MLP.json", _gaze.GazeBackbone));
             }
 
             return MLPstring;
@@ -349,8 +350,9 @@ namespace UnitEye
             if (save)
             {
                 Debug.Log("Saving best models");
-                result.XModel.Save("Reg_X.json");
-                result.YModel.Save("Reg_Y.json");
+                //Save under the active backbone's name so each gaze model keeps its own calibration.
+                result.XModel.Save(CalibrationModelStore.FileName("Reg_X.json", _gaze.GazeBackbone));
+                result.YModel.Save(CalibrationModelStore.FileName("Reg_Y.json", _gaze.GazeBackbone));
             }
 
             return $"RidgeRegression Training done. Best RMSE X: {result.XRmse}cm | Best RMSE Y: {result.YRmse}cm.";

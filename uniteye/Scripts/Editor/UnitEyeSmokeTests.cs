@@ -41,6 +41,7 @@ public static class UnitEyeSmokeTests
             TestEyeMUModelLoadsAndRuns();
             TestGazeEstimationDecode();
             TestGazeModelsLoadAndRun();
+            TestCalibrationFileNames();
         }
         catch (Exception e)
         {
@@ -504,6 +505,20 @@ public static class UnitEyeSmokeTests
         var b = new float[90];
         b[index] = 100f;   // softmax -> ~one-hot at index
         return b;
+    }
+
+    private static void TestCalibrationFileNames()
+    {
+        //Per-backbone calibration files: each backbone gets a distinct name so a calibration for one
+        //model never overwrites another's (their feature vectors differ). Save and Load share this helper.
+        Check(CalibrationModelStore.FileName("Reg_X.json", GazeBackbone.EyeMU) == "Reg_X_EyeMU.json",
+            "Ridge X calibration file name for EyeMU");
+        Check(CalibrationModelStore.FileName("MLP.json", GazeBackbone.GazeMobileOne) == "MLP_GazeMobileOne.json",
+            "MLP calibration file name for MobileOne");
+        var a = CalibrationModelStore.FileName("Reg_Y.json", GazeBackbone.EyeMU);
+        var b = CalibrationModelStore.FileName("Reg_Y.json", GazeBackbone.GazeMobileOne);
+        var c = CalibrationModelStore.FileName("Reg_Y.json", GazeBackbone.GazeMobileNetV2);
+        Check(a != b && b != c && a != c, "Calibration file names are distinct per backbone");
     }
 
     private static void TestGazeEstimationDecode()
