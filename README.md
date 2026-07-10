@@ -265,6 +265,6 @@ If you get no gaze at all:
 * Unity Inference Engine (`com.unity.ai.inference`) — [Unity Companion License](https://unity.com/legal/licenses/unity-companion-license)
 * MediaPipe Unity Plugin (homuler) — [MIT](https://github.com/homuler/MediaPipeUnityPlugin/blob/master/LICENSE); bundled MediaPipe models are Apache 2.0
 * [EyeMU](https://github.com/FIGLAB/EyeMU/blob/master/LICENSE) — GPL 2.0
-* [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation) — see its repository for licensing
+* [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation) — [MIT](https://github.com/yakhyo/gaze-estimation?tab=MIT-1-ov-file)
 
 UnitEye itself is therefore also GPL-licensed; we use version [3.0](/LICENSE).
