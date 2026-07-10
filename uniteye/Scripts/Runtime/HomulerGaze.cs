@@ -319,14 +319,18 @@ public class HomulerGaze : MonoBehaviour
             GUI.DrawTexture(new Rect(10, 10, IMG_SIZE, IMG_SIZE), _provider.RightEyeTexture);
         }
 
-        //Draw crosshair on the GUI if one is selected. Clamped to the screen edges: an uncalibrated
-        //or badly calibrated gaze location can be far outside the window, and an invisible crosshair
-        //is indistinguishable from a broken pipeline.
+        //Draw crosshair on the GUI if one is selected. The size scales with screen height (a fixed
+        //80px dot is a speck on a high-DPI display like 3200x2000), and the position is clamped so the
+        //WHOLE crosshair stays on-screen: an uncalibrated or badly calibrated gaze location can be far
+        //outside the window, and an invisible crosshair is indistinguishable from a broken pipeline.
         if (drawDot && dot != null && !float.IsNaN(gazeLocation.x) && !float.IsNaN(gazeLocation.y))
         {
-            var dotX = Mathf.Clamp(gazeLocation.x, 0f, Screen.width);
-            var dotY = Mathf.Clamp(gazeLocation.y, 0f, Screen.height);
-            GUI.DrawTexture(new Rect(dotX - CROSSHAIR_SIZE / 2, dotY - CROSSHAIR_SIZE / 2, CROSSHAIR_SIZE, CROSSHAIR_SIZE), dot);
+            //Scale relative to a 1080p baseline where 80px looked right; never shrink below the baseline
+            float crosshairSize = Mathf.Max(CROSSHAIR_SIZE, CROSSHAIR_SIZE * Screen.height / 1080f);
+            float half = crosshairSize / 2f;
+            float dotX = Mathf.Clamp(gazeLocation.x, half, Screen.width - half);
+            float dotY = Mathf.Clamp(gazeLocation.y, half, Screen.height - half);
+            GUI.DrawTexture(new Rect(dotX - half, dotY - half, crosshairSize, crosshairSize), dot);
         }
 
         //Gaze UI
