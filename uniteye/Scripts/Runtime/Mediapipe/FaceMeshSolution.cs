@@ -36,6 +36,30 @@ namespace Mediapipe.Unity.FaceMesh
         [SerializeField] private bool _flipHorizontally = false;
         [SerializeField] private bool _flipVertically = true;
 
+        [Header("Debug preview (IMGUI)")]
+        // The old Solution API showed the webcam on a Canvas "Screen" RawImage with the facemesh drawn on
+        // top; the Task-API migration deleted that display stack (and the now-dead white RawImage was
+        // disabled in MediapipeAnnotation.prefab). We redraw an equivalent preview here in IMGUI, where we
+        // already hold the webcam texture and the 478 landmarks — no Canvas / annotation-controller /
+        // coordinate-marshaling dependencies. Camera + dots share one flip/mirror transform so they stay
+        // aligned; the knobs are serialized because correct orientation is a per-webcam hand-test.
+        [Tooltip("Draw the live webcam + facemesh landmark overlay in IMGUI. Turn off to see the scene behind it.")]
+        [SerializeField] private bool _drawPreview = true;
+        [Tooltip("Flip the whole preview (camera + dots) vertically. Toggle if the view is upside-down.")]
+        [SerializeField] private bool _previewFlipVertically = false;
+        [Tooltip("Mirror the whole preview (camera + dots) horizontally, e.g. a selfie view.")]
+        [SerializeField] private bool _previewMirror = false;
+        [Tooltip("Flip ONLY the landmark dots vertically (not the camera). Use if dots sit upside-down on the image.")]
+        [SerializeField] private bool _overlayFlipVertically = false;
+        // Bare Color/Rect/ScaleMode here would bind to the protobuf Mediapipe.* types (the enclosing
+        // namespace shadows both the UnityEngine using and any file-scope alias), so qualify them.
+        [Tooltip("Facemesh landmark dot color.")]
+        [SerializeField] private UnityEngine.Color _overlayColor = new UnityEngine.Color(0f, 1f, 0f, 0.85f);
+        [Tooltip("Landmark dot size in pixels at 1080p (scales up on high-DPI).")]
+        [SerializeField] private float _overlayDotSize = 3f;
+        [Tooltip("IMGUI draw order; higher = drawn behind the eye-crop/crosshair/Gaze-UI overlays.")]
+        [SerializeField] private int _previewGuiDepth = 5;
+
         private FaceLandmarker _faceLandmarker;
         private TextureFramePool _textureFramePool;
         private FaceLandmarkerResult _result;
@@ -210,6 +234,49 @@ namespace Mediapipe.Unity.FaceMesh
                 d.X = s.x;
                 d.Y = s.y;
                 d.Z = s.z;
+            }
+        }
+
+        // Debug preview: full-screen webcam + facemesh landmark dots. The camera shows whenever IsRendering
+        // (so it hides during calibration, like the old Screen did); the dots additionally require Annotate
+        // (the Gaze UI "Show/Hide FaceMesh" toggle). Camera and dots use the same flip/mirror transform so
+        // they stay registered on each other.
+        private void OnGUI()
+        {
+            if (!_drawPreview || !IsRendering) return;
+            var tex = _webCamSource != null ? _webCamSource.GetCurrentTexture() : null;
+            if (tex == null) return;
+
+            // Draw behind HomulerGaze's eye-crop thumbnails / crosshair / Gaze UI (lower GUI.depth = on top).
+            GUI.depth = _previewGuiDepth;
+
+            float w = Screen.width, h = Screen.height;
+
+            // Full-screen camera. Negative width/height flips the texture (same trick as the mirrored eye
+            // thumbnail in HomulerGaze.OnGUI).
+            var camRect = new UnityEngine.Rect(
+                _previewMirror ? w : 0f,
+                _previewFlipVertically ? h : 0f,
+                _previewMirror ? -w : w,
+                _previewFlipVertically ? -h : h);
+            GUI.DrawTexture(camRect, tex, UnityEngine.ScaleMode.StretchToFill, false);
+
+            // Facemesh landmark overlay (dots), gated by the Show/Hide FaceMesh toggle.
+            var pts = FaceLandmarks;
+            if (_annotate && pts != null && pts.Count > 0)
+            {
+                bool flipY = _previewFlipVertically ^ _overlayFlipVertically;
+                float size = Mathf.Max(_overlayDotSize, _overlayDotSize * h / 1080f);
+                float half = size * 0.5f;
+                var prevColor = GUI.color;
+                GUI.color = _overlayColor;
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    float nx = _previewMirror ? 1f - pts[i].X : pts[i].X;
+                    float ny = flipY ? 1f - pts[i].Y : pts[i].Y;
+                    GUI.DrawTexture(new UnityEngine.Rect(nx * w - half, ny * h - half, size, size), Texture2D.whiteTexture);
+                }
+                GUI.color = prevColor;
             }
         }
 
