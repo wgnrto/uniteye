@@ -354,14 +354,11 @@ public static class UnitEyeSmokeTests
 
     private static void TestScenesAndPrefabsHaveNoMissingScripts()
     {
-        //The experimental HomulerGazeCalibration scene references five scripts whose GUIDs
-        //were never part of the repository (they only ever existed in the original author's
-        //working copy), so it has been broken from any clean checkout since it was committed.
-        //Pin the known count so an improvement or a regression both surface here.
-        var knownMissingScripts = new Dictionary<string, int>
-        {
-            { "Packages/de.uniulm.uniteye/Scenes/HomulerGazeCalibration.unity", 5 },
-        };
+        //All scenes/prefabs are now expected to have zero missing scripts. (The HomulerGazeCalibration
+        //scene previously had five dangling landmark-annotation references; the MediaPipe 0.16.3 Task-API
+        //migration's cleanup pass (MigrationCleanup) stripped them along with the deleted Solution-era
+        //components.)
+        var knownMissingScripts = new Dictionary<string, int>();
 
         //Validates that all scenes and prefabs shipped with the package still resolve their
         //script and asset references, which guards against GUID breakage from restructuring

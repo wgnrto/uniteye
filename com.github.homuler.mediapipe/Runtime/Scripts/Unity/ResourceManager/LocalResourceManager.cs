@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Mediapipe.Unity
 {
-  public class LocalResourceManager : ResourceManager
+  public class LocalResourceManager : IResourceManager
   {
     private static readonly string _TAG = nameof(LocalResourceManager);
 
@@ -20,25 +20,21 @@ namespace Mediapipe.Unity
     private static readonly string _AssetPathRoot = "Packages/com.github.homuler.mediapipe/PackageResources/MediaPipe";
     private static string _CachePathRoot;
 
-    public LocalResourceManager(string path) : base(PathToResourceAsFile, GetResourceContents)
+    public LocalResourceManager(string path)
     {
-      // It's safe to update static members because at most one RsourceManager can be initialized.
+      ResourceUtil.EnableCustomResolver();
       _RelativePath = path;
       _CachePathRoot = Path.Combine(Application.persistentDataPath, _RelativePath);
     }
 
     public LocalResourceManager() : this("") { }
 
-    public override bool IsPrepared(string assetName)
-    {
-      return File.Exists(GetCachePathFor(assetName));
-    }
-
-    public override IEnumerator PrepareAssetAsync(string name, string uniqueKey, bool overwrite = true)
+    IEnumerator IResourceManager.PrepareAssetAsync(string name, string uniqueKey, bool overwriteDestination)
     {
       var destFilePath = GetCachePathFor(uniqueKey);
+      ResourceUtil.SetAssetPath(name, destFilePath);
 
-      if (File.Exists(destFilePath) && !overwrite)
+      if (File.Exists(destFilePath) && !overwriteDestination)
       {
         Logger.LogInfo(_TAG, $"{name} will not be copied to {destFilePath} because it already exists");
         yield break;
@@ -59,21 +55,6 @@ namespace Mediapipe.Unity
       }
       File.WriteAllBytes(destFilePath, asset.bytes);
       Logger.LogVerbose(_TAG, $"{name} is saved to {destFilePath} (length={asset.bytes.Length})");
-    }
-
-    protected static string PathToResourceAsFile(string assetPath)
-    {
-      var assetName = GetAssetNameFromPath(assetPath);
-      return GetCachePathFor(assetName);
-    }
-
-    protected static byte[] GetResourceContents(string path)
-    {
-      // TODO: try AsyncReadManager
-      Logger.LogDebug($"{path} is requested");
-
-      var cachePath = PathToResourceAsFile(path);
-      return File.ReadAllBytes(cachePath);
     }
 
     private static string GetAssetPathFor(string assetName)

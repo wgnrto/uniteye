@@ -274,7 +274,7 @@ namespace Mediapipe {
     /// If use_local_timestamp is true, the output packet's timestamp is based on
     /// the last sample of the packet and it's inferred from the latest input
     /// packet's timestamp.  If false, the output packet's timestamp is based on
-    /// the cumulative timestamping, which is inferred from the intial input
+    /// the cumulative timestamping, which is inferred from the initial input
     /// timestamp and the cumulative number of samples.
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]

@@ -26,23 +26,24 @@ namespace Mediapipe {
           string.Concat(
             "Cj5tZWRpYXBpcGUvY2FsY3VsYXRvcnMvdGVuc29yL3RlbnNvcl9jb252ZXJ0",
             "ZXJfY2FsY3VsYXRvci5wcm90bxIJbWVkaWFwaXBlGiRtZWRpYXBpcGUvZnJh",
-            "bWV3b3JrL2NhbGN1bGF0b3IucHJvdG8ihQQKIFRlbnNvckNvbnZlcnRlckNh",
-            "bGN1bGF0b3JPcHRpb25zEhkKC3plcm9fY2VudGVyGAEgASgIOgR0cnVlEicK",
-            "GHVzZV9jdXN0b21fbm9ybWFsaXphdGlvbhgGIAEoCDoFZmFsc2USFgoKY3Vz",
-            "dG9tX2RpdhgHIAEoAjoCLTESFgoKY3VzdG9tX3N1YhgIIAEoAjoCLTESHgoP",
-            "ZmxpcF92ZXJ0aWNhbGx5GAIgASgIOgVmYWxzZRIbChBtYXhfbnVtX2NoYW5u",
-            "ZWxzGAMgASgFOgEzEh8KEHJvd19tYWpvcl9tYXRyaXgYBCABKAg6BWZhbHNl",
-            "EiQKFXVzZV9xdWFudGl6ZWRfdGVuc29ycxgFIAEoCDoFZmFsc2USXwoZb3V0",
-            "cHV0X3RlbnNvcl9mbG9hdF9yYW5nZRgJIAEoCzI8Lm1lZGlhcGlwZS5UZW5z",
-            "b3JDb252ZXJ0ZXJDYWxjdWxhdG9yT3B0aW9ucy5UZW5zb3JGbG9hdFJhbmdl",
-            "GiwKEFRlbnNvckZsb2F0UmFuZ2USCwoDbWluGAEgASgCEgsKA21heBgCIAEo",
-            "AjJaCgNleHQSHC5tZWRpYXBpcGUuQ2FsY3VsYXRvck9wdGlvbnMYrY2MoAEg",
-            "ASgLMisubWVkaWFwaXBlLlRlbnNvckNvbnZlcnRlckNhbGN1bGF0b3JPcHRp",
-            "b25z"));
+            "bWV3b3JrL2NhbGN1bGF0b3IucHJvdG8aHm1lZGlhcGlwZS9ncHUvZ3B1X29y",
+            "aWdpbi5wcm90byK0BAogVGVuc29yQ29udmVydGVyQ2FsY3VsYXRvck9wdGlv",
+            "bnMSGQoLemVyb19jZW50ZXIYASABKAg6BHRydWUSJwoYdXNlX2N1c3RvbV9u",
+            "b3JtYWxpemF0aW9uGAYgASgIOgVmYWxzZRIWCgpjdXN0b21fZGl2GAcgASgC",
+            "OgItMRIWCgpjdXN0b21fc3ViGAggASgCOgItMRIeCg9mbGlwX3ZlcnRpY2Fs",
+            "bHkYAiABKAg6BWZhbHNlEi0KCmdwdV9vcmlnaW4YCiABKA4yGS5tZWRpYXBp",
+            "cGUuR3B1T3JpZ2luLk1vZGUSGwoQbWF4X251bV9jaGFubmVscxgDIAEoBToB",
+            "MxIfChByb3dfbWFqb3JfbWF0cml4GAQgASgIOgVmYWxzZRIkChV1c2VfcXVh",
+            "bnRpemVkX3RlbnNvcnMYBSABKAg6BWZhbHNlEl8KGW91dHB1dF90ZW5zb3Jf",
+            "ZmxvYXRfcmFuZ2UYCSABKAsyPC5tZWRpYXBpcGUuVGVuc29yQ29udmVydGVy",
+            "Q2FsY3VsYXRvck9wdGlvbnMuVGVuc29yRmxvYXRSYW5nZRosChBUZW5zb3JG",
+            "bG9hdFJhbmdlEgsKA21pbhgBIAEoAhILCgNtYXgYAiABKAIyWgoDZXh0Ehwu",
+            "bWVkaWFwaXBlLkNhbGN1bGF0b3JPcHRpb25zGK2NjKABIAEoCzIrLm1lZGlh",
+            "cGlwZS5UZW5zb3JDb252ZXJ0ZXJDYWxjdWxhdG9yT3B0aW9ucw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
-          new pbr::FileDescriptor[] { global::Mediapipe.CalculatorReflection.Descriptor, },
+          new pbr::FileDescriptor[] { global::Mediapipe.CalculatorReflection.Descriptor, global::Mediapipe.GpuOriginReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TensorConverterCalculatorOptions), global::Mediapipe.TensorConverterCalculatorOptions.Parser, new[]{ "ZeroCenter", "UseCustomNormalization", "CustomDiv", "CustomSub", "FlipVertically", "MaxNumChannels", "RowMajorMatrix", "UseQuantizedTensors", "OutputTensorFloatRange" }, null, null, new pb::Extension[] { global::Mediapipe.TensorConverterCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TensorConverterCalculatorOptions.Types.TensorFloatRange), global::Mediapipe.TensorConverterCalculatorOptions.Types.TensorFloatRange.Parser, new[]{ "Min", "Max" }, null, null, null, null)})
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TensorConverterCalculatorOptions), global::Mediapipe.TensorConverterCalculatorOptions.Parser, new[]{ "ZeroCenter", "UseCustomNormalization", "CustomDiv", "CustomSub", "FlipVertically", "GpuOrigin", "MaxNumChannels", "RowMajorMatrix", "UseQuantizedTensors", "OutputTensorFloatRange" }, null, null, new pb::Extension[] { global::Mediapipe.TensorConverterCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TensorConverterCalculatorOptions.Types.TensorFloatRange), global::Mediapipe.TensorConverterCalculatorOptions.Types.TensorFloatRange.Parser, new[]{ "Min", "Max" }, null, null, null, null)})
           }));
     }
     #endregion
@@ -104,6 +105,7 @@ namespace Mediapipe {
       customDiv_ = other.customDiv_;
       customSub_ = other.customSub_;
       flipVertically_ = other.flipVertically_;
+      gpuOrigin_ = other.gpuOrigin_;
       maxNumChannels_ = other.maxNumChannels_;
       rowMajorMatrix_ = other.rowMajorMatrix_;
       useQuantizedTensors_ = other.useQuantizedTensors_;
@@ -159,7 +161,7 @@ namespace Mediapipe {
     /// Custom settings to override the internal scaling factors `div` and `sub`.
     /// Both values must be set to non-negative values. Will only take effect on
     /// CPU AND when |use_custom_normalization| is set to true. When these custom
-    /// values take effect, the |zero_center| setting above will be overriden, and
+    /// values take effect, the |zero_center| setting above will be overridden, and
     /// the normalized_value will be calculated as:
     /// normalized_value = input / custom_div - custom_sub.
     /// </summary>
@@ -250,6 +252,7 @@ namespace Mediapipe {
     /// with a coordinate system where the origin is at the bottom-left corner
     /// (e.g., in OpenGL) whereas the ML model expects an image with a top-left
     /// origin.
+    /// Prefer gpu_origin over this field when using GPU input images.
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -271,6 +274,40 @@ namespace Mediapipe {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public void ClearFlipVertically() {
       _hasBits0 &= ~2;
+    }
+
+    /// <summary>Field number for the "gpu_origin" field.</summary>
+    public const int GpuOriginFieldNumber = 10;
+    private readonly static global::Mediapipe.GpuOrigin.Types.Mode GpuOriginDefaultValue = global::Mediapipe.GpuOrigin.Types.Mode.Default;
+
+    private global::Mediapipe.GpuOrigin.Types.Mode gpuOrigin_;
+    /// <summary>
+    /// Determines when the input GPU image should be flipped vertically.
+    /// See GpuOrigin.Mode for more information.
+    /// Affects only IMAGE_GPU inputs.
+    /// If unset, falls back to flip_vertically for backwards compatibility.
+    /// Cannot set both gpu_origin and flip_vertically.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Mediapipe.GpuOrigin.Types.Mode GpuOrigin {
+      get { if ((_hasBits0 & 256) != 0) { return gpuOrigin_; } else { return GpuOriginDefaultValue; } }
+      set {
+        _hasBits0 |= 256;
+        gpuOrigin_ = value;
+      }
+    }
+    /// <summary>Gets whether the "gpu_origin" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasGpuOrigin {
+      get { return (_hasBits0 & 256) != 0; }
+    }
+    /// <summary>Clears the value of the "gpu_origin" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearGpuOrigin() {
+      _hasBits0 &= ~256;
     }
 
     /// <summary>Field number for the "max_num_channels" field.</summary>
@@ -403,6 +440,7 @@ namespace Mediapipe {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(CustomDiv, other.CustomDiv)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(CustomSub, other.CustomSub)) return false;
       if (FlipVertically != other.FlipVertically) return false;
+      if (GpuOrigin != other.GpuOrigin) return false;
       if (MaxNumChannels != other.MaxNumChannels) return false;
       if (RowMajorMatrix != other.RowMajorMatrix) return false;
       if (UseQuantizedTensors != other.UseQuantizedTensors) return false;
@@ -419,6 +457,7 @@ namespace Mediapipe {
       if (HasCustomDiv) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(CustomDiv);
       if (HasCustomSub) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(CustomSub);
       if (HasFlipVertically) hash ^= FlipVertically.GetHashCode();
+      if (HasGpuOrigin) hash ^= GpuOrigin.GetHashCode();
       if (HasMaxNumChannels) hash ^= MaxNumChannels.GetHashCode();
       if (HasRowMajorMatrix) hash ^= RowMajorMatrix.GetHashCode();
       if (HasUseQuantizedTensors) hash ^= UseQuantizedTensors.GetHashCode();
@@ -477,6 +516,10 @@ namespace Mediapipe {
         output.WriteRawTag(74);
         output.WriteMessage(OutputTensorFloatRange);
       }
+      if (HasGpuOrigin) {
+        output.WriteRawTag(80);
+        output.WriteEnum((int) GpuOrigin);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -523,6 +566,10 @@ namespace Mediapipe {
         output.WriteRawTag(74);
         output.WriteMessage(OutputTensorFloatRange);
       }
+      if (HasGpuOrigin) {
+        output.WriteRawTag(80);
+        output.WriteEnum((int) GpuOrigin);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -547,6 +594,9 @@ namespace Mediapipe {
       }
       if (HasFlipVertically) {
         size += 1 + 1;
+      }
+      if (HasGpuOrigin) {
+        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) GpuOrigin);
       }
       if (HasMaxNumChannels) {
         size += 1 + pb::CodedOutputStream.ComputeInt32Size(MaxNumChannels);
@@ -586,6 +636,9 @@ namespace Mediapipe {
       }
       if (other.HasFlipVertically) {
         FlipVertically = other.FlipVertically;
+      }
+      if (other.HasGpuOrigin) {
+        GpuOrigin = other.GpuOrigin;
       }
       if (other.HasMaxNumChannels) {
         MaxNumChannels = other.MaxNumChannels;
@@ -656,6 +709,10 @@ namespace Mediapipe {
             input.ReadMessage(OutputTensorFloatRange);
             break;
           }
+          case 80: {
+            GpuOrigin = (global::Mediapipe.GpuOrigin.Types.Mode) input.ReadEnum();
+            break;
+          }
         }
       }
     #endif
@@ -708,6 +765,10 @@ namespace Mediapipe {
               OutputTensorFloatRange = new global::Mediapipe.TensorConverterCalculatorOptions.Types.TensorFloatRange();
             }
             input.ReadMessage(OutputTensorFloatRange);
+            break;
+          }
+          case 80: {
+            GpuOrigin = (global::Mediapipe.GpuOrigin.Types.Mode) input.ReadEnum();
             break;
           }
         }

@@ -7,6 +7,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+using mptcc = Mediapipe.Tasks.Components.Containers;
+
 namespace Mediapipe.Unity
 {
   public sealed class DetectionListAnnotation : ListAnnotation<DetectionAnnotation>
@@ -42,7 +44,33 @@ namespace Mediapipe.Unity
     ///   This will affect the rectangle's color. For example, if the score is below the threshold, the rectangle will be transparent.
     ///   The default value is 0.
     /// </param>
-    public void Draw(IList<Detection> targets, float threshold = 0.0f)
+    public void Draw(IReadOnlyList<mptcc.Detection> targets, Vector2Int imageSize, float threshold = 0.0f)
+    {
+      if (ActivateFor(targets))
+      {
+        CallActionForAll(targets, (annotation, target) =>
+        {
+          if (annotation != null) { annotation.Draw(target, imageSize, threshold); }
+        });
+      }
+    }
+
+    /// <param name="threshold">
+    ///   Score threshold. This value must be between 0 and 1.
+    ///   This will affect the rectangle's color. For example, if the score is below the threshold, the rectangle will be transparent.
+    ///   The default value is 0.
+    /// </param>
+    public void Draw(mptcc.DetectionResult target, Vector2Int imageSize, float threshold = 0.0f)
+    {
+      Draw(target.detections, imageSize, threshold);
+    }
+
+    /// <param name="threshold">
+    ///   Score threshold. This value must be between 0 and 1.
+    ///   This will affect the rectangle's color. For example, if the score is below the threshold, the rectangle will be transparent.
+    ///   The default value is 0.
+    /// </param>
+    public void Draw(IReadOnlyList<Detection> targets, float threshold = 0.0f)
     {
       if (ActivateFor(targets))
       {

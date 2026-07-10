@@ -16,7 +16,7 @@ namespace Mediapipe.Tests
     {
       using (var status = Status.Ok())
       {
-        Assert.AreEqual(Status.StatusCode.Ok, status.Code());
+        Assert.AreEqual(StatusCode.Ok, status.Code());
       }
     }
 
@@ -25,7 +25,7 @@ namespace Mediapipe.Tests
     {
       using (var status = Status.FailedPrecondition())
       {
-        Assert.AreEqual(Status.StatusCode.FailedPrecondition, status.Code());
+        Assert.AreEqual(StatusCode.FailedPrecondition, status.Code());
       }
     }
     #endregion
@@ -105,9 +105,8 @@ namespace Mediapipe.Tests
     {
       using (var status = Status.FailedPrecondition())
       {
-#pragma warning disable IDE0058
-        Assert.Throws<MediaPipeException>(() => { status.AssertOk(); });
-#pragma warning restore IDE0058
+        var exception = Assert.Throws<BadStatusException>(() => { status.AssertOk(); });
+        Assert.AreEqual(StatusCode.FailedPrecondition, exception.statusCode);
       }
     }
     #endregion

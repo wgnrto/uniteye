@@ -110,7 +110,7 @@ namespace Mediapipe {
     private int width_;
     /// <summary>
     /// Output texture buffer dimensions. The values defined in the options will be
-    /// overriden by the WIDTH and HEIGHT input streams if they exist.
+    /// overridden by the WIDTH and HEIGHT input streams if they exist.
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]

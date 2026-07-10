@@ -26,7 +26,7 @@ namespace Mediapipe {
           string.Concat(
             "CjxtZWRpYXBpcGUvY2FsY3VsYXRvcnMvY29yZS9wYWNrZXRfcmVzYW1wbGVy",
             "X2NhbGN1bGF0b3IucHJvdG8SCW1lZGlhcGlwZRokbWVkaWFwaXBlL2ZyYW1l",
-            "d29yay9jYWxjdWxhdG9yLnByb3RvIokECiBQYWNrZXRSZXNhbXBsZXJDYWxj",
+            "d29yay9jYWxjdWxhdG9yLnByb3RvIsoECiBQYWNrZXRSZXNhbXBsZXJDYWxj",
             "dWxhdG9yT3B0aW9ucxIWCgpmcmFtZV9yYXRlGAEgASgBOgItMRJVCg1vdXRw",
             "dXRfaGVhZGVyGAIgASgOMjgubWVkaWFwaXBlLlBhY2tldFJlc2FtcGxlckNh",
             "bGN1bGF0b3JPcHRpb25zLk91dHB1dEhlYWRlcjoETk9ORRIfChFmbHVzaF9s",
@@ -34,15 +34,16 @@ namespace Mediapipe {
             "dGVyX3dpdGhfcmVmbGVjdGlvbhgJIAEoCDoFZmFsc2USJAoVcmVwcm9kdWNp",
             "YmxlX3NhbXBsaW5nGAogASgIOgVmYWxzZRIWCg5iYXNlX3RpbWVzdGFtcBgF",
             "IAEoAxISCgpzdGFydF90aW1lGAYgASgDEhAKCGVuZF90aW1lGAcgASgDEhsK",
-            "DHJvdW5kX2xpbWl0cxgIIAEoCDoFZmFsc2UiQgoMT3V0cHV0SGVhZGVyEggK",
-            "BE5PTkUQABIPCgtQQVNTX0hFQURFUhABEhcKE1VQREFURV9WSURFT19IRUFE",
-            "RVIQAjJZCgNleHQSHC5tZWRpYXBpcGUuQ2FsY3VsYXRvck9wdGlvbnMY5N7T",
-            "LSABKAsyKy5tZWRpYXBpcGUuUGFja2V0UmVzYW1wbGVyQ2FsY3VsYXRvck9w",
-            "dGlvbnM="));
+            "DHJvdW5kX2xpbWl0cxgIIAEoCDoFZmFsc2USIwoUdXNlX2lucHV0X2ZyYW1l",
+            "X3JhdGUYCyABKAg6BWZhbHNlEhoKDm1heF9mcmFtZV9yYXRlGAwgASgBOgIt",
+            "MSJCCgxPdXRwdXRIZWFkZXISCAoETk9ORRAAEg8KC1BBU1NfSEVBREVSEAES",
+            "FwoTVVBEQVRFX1ZJREVPX0hFQURFUhACMlkKA2V4dBIcLm1lZGlhcGlwZS5D",
+            "YWxjdWxhdG9yT3B0aW9ucxjk3tMtIAEoCzIrLm1lZGlhcGlwZS5QYWNrZXRS",
+            "ZXNhbXBsZXJDYWxjdWxhdG9yT3B0aW9ucw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Mediapipe.CalculatorReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.PacketResamplerCalculatorOptions), global::Mediapipe.PacketResamplerCalculatorOptions.Parser, new[]{ "FrameRate", "OutputHeader", "FlushLastPacket", "Jitter", "JitterWithReflection", "ReproducibleSampling", "BaseTimestamp", "StartTime", "EndTime", "RoundLimits" }, null, new[]{ typeof(global::Mediapipe.PacketResamplerCalculatorOptions.Types.OutputHeader) }, new pb::Extension[] { global::Mediapipe.PacketResamplerCalculatorOptions.Extensions.Ext }, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.PacketResamplerCalculatorOptions), global::Mediapipe.PacketResamplerCalculatorOptions.Parser, new[]{ "FrameRate", "OutputHeader", "FlushLastPacket", "Jitter", "JitterWithReflection", "ReproducibleSampling", "BaseTimestamp", "StartTime", "EndTime", "RoundLimits", "UseInputFrameRate", "MaxFrameRate" }, null, new[]{ typeof(global::Mediapipe.PacketResamplerCalculatorOptions.Types.OutputHeader) }, new pb::Extension[] { global::Mediapipe.PacketResamplerCalculatorOptions.Extensions.Ext }, null)
           }));
     }
     #endregion
@@ -95,6 +96,8 @@ namespace Mediapipe {
       startTime_ = other.startTime_;
       endTime_ = other.endTime_;
       roundLimits_ = other.roundLimits_;
+      useInputFrameRate_ = other.useInputFrameRate_;
+      maxFrameRate_ = other.maxFrameRate_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -451,6 +454,73 @@ namespace Mediapipe {
       _hasBits0 &= ~128;
     }
 
+    /// <summary>Field number for the "use_input_frame_rate" field.</summary>
+    public const int UseInputFrameRateFieldNumber = 11;
+    private readonly static bool UseInputFrameRateDefaultValue = false;
+
+    private bool useInputFrameRate_;
+    /// <summary>
+    /// If set, the output frame rate is the same as the input frame rate.
+    /// You need to provide the frame rate of the input images in the header in the
+    /// input_side_packet.
+    /// This option only makes sense in combination with max_frame_rate. It will
+    /// hold on to the original frame rate unless it's higher than the
+    /// max_frame_rate.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool UseInputFrameRate {
+      get { if ((_hasBits0 & 1024) != 0) { return useInputFrameRate_; } else { return UseInputFrameRateDefaultValue; } }
+      set {
+        _hasBits0 |= 1024;
+        useInputFrameRate_ = value;
+      }
+    }
+    /// <summary>Gets whether the "use_input_frame_rate" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasUseInputFrameRate {
+      get { return (_hasBits0 & 1024) != 0; }
+    }
+    /// <summary>Clears the value of the "use_input_frame_rate" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearUseInputFrameRate() {
+      _hasBits0 &= ~1024;
+    }
+
+    /// <summary>Field number for the "max_frame_rate" field.</summary>
+    public const int MaxFrameRateFieldNumber = 12;
+    private readonly static double MaxFrameRateDefaultValue = -1D;
+
+    private double maxFrameRate_;
+    /// <summary>
+    /// If set, the output frame rate is limited to this value.
+    /// You need to provide the frame rate of the input images in the header in the
+    /// input_side_packet.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public double MaxFrameRate {
+      get { if ((_hasBits0 & 2048) != 0) { return maxFrameRate_; } else { return MaxFrameRateDefaultValue; } }
+      set {
+        _hasBits0 |= 2048;
+        maxFrameRate_ = value;
+      }
+    }
+    /// <summary>Gets whether the "max_frame_rate" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasMaxFrameRate {
+      get { return (_hasBits0 & 2048) != 0; }
+    }
+    /// <summary>Clears the value of the "max_frame_rate" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearMaxFrameRate() {
+      _hasBits0 &= ~2048;
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -476,6 +546,8 @@ namespace Mediapipe {
       if (StartTime != other.StartTime) return false;
       if (EndTime != other.EndTime) return false;
       if (RoundLimits != other.RoundLimits) return false;
+      if (UseInputFrameRate != other.UseInputFrameRate) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(MaxFrameRate, other.MaxFrameRate)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -493,6 +565,8 @@ namespace Mediapipe {
       if (HasStartTime) hash ^= StartTime.GetHashCode();
       if (HasEndTime) hash ^= EndTime.GetHashCode();
       if (HasRoundLimits) hash ^= RoundLimits.GetHashCode();
+      if (HasUseInputFrameRate) hash ^= UseInputFrameRate.GetHashCode();
+      if (HasMaxFrameRate) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(MaxFrameRate);
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -551,6 +625,14 @@ namespace Mediapipe {
         output.WriteRawTag(80);
         output.WriteBool(ReproducibleSampling);
       }
+      if (HasUseInputFrameRate) {
+        output.WriteRawTag(88);
+        output.WriteBool(UseInputFrameRate);
+      }
+      if (HasMaxFrameRate) {
+        output.WriteRawTag(97);
+        output.WriteDouble(MaxFrameRate);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -601,6 +683,14 @@ namespace Mediapipe {
         output.WriteRawTag(80);
         output.WriteBool(ReproducibleSampling);
       }
+      if (HasUseInputFrameRate) {
+        output.WriteRawTag(88);
+        output.WriteBool(UseInputFrameRate);
+      }
+      if (HasMaxFrameRate) {
+        output.WriteRawTag(97);
+        output.WriteDouble(MaxFrameRate);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -640,6 +730,12 @@ namespace Mediapipe {
       }
       if (HasRoundLimits) {
         size += 1 + 1;
+      }
+      if (HasUseInputFrameRate) {
+        size += 1 + 1;
+      }
+      if (HasMaxFrameRate) {
+        size += 1 + 8;
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -682,6 +778,12 @@ namespace Mediapipe {
       }
       if (other.HasRoundLimits) {
         RoundLimits = other.RoundLimits;
+      }
+      if (other.HasUseInputFrameRate) {
+        UseInputFrameRate = other.UseInputFrameRate;
+      }
+      if (other.HasMaxFrameRate) {
+        MaxFrameRate = other.MaxFrameRate;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -738,6 +840,14 @@ namespace Mediapipe {
             ReproducibleSampling = input.ReadBool();
             break;
           }
+          case 88: {
+            UseInputFrameRate = input.ReadBool();
+            break;
+          }
+          case 97: {
+            MaxFrameRate = input.ReadDouble();
+            break;
+          }
         }
       }
     #endif
@@ -791,6 +901,14 @@ namespace Mediapipe {
           }
           case 80: {
             ReproducibleSampling = input.ReadBool();
+            break;
+          }
+          case 88: {
+            UseInputFrameRate = input.ReadBool();
+            break;
+          }
+          case 97: {
+            MaxFrameRate = input.ReadDouble();
             break;
           }
         }

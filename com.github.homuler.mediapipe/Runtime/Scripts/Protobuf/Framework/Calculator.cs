@@ -55,7 +55,9 @@ namespace Mediapipe {
             "b2dfZHVyYXRpb25fZXZlbnRzGA0gASgIQgIYARIgChh0cmFjZV9sb2dfaW50",
             "ZXJ2YWxfY291bnQYDiABKAUSGgoSdHJhY2VfbG9nX2Rpc2FibGVkGA8gASgI",
             "EhUKDXRyYWNlX2VuYWJsZWQYECABKAgSIAoYdHJhY2VfbG9nX2luc3RhbnRf",
-            "ZXZlbnRzGBEgASgIEhkKEWNhbGN1bGF0b3JfZmlsdGVyGBIgASgJIvQKChVD",
+            "ZXZlbnRzGBEgASgIEhkKEWNhbGN1bGF0b3JfZmlsdGVyGBIgASgJIlgKFkdy",
+            "YXBoUnVudGltZUluZm9Db25maWcSIQoZZW5hYmxlX2dyYXBoX3J1bnRpbWVf",
+            "aW5mbxgBIAEoCBIbChNjYXB0dXJlX3BlcmlvZF9tc2VjGAIgASgNIq0LChVD",
             "YWxjdWxhdG9yR3JhcGhDb25maWcSMwoEbm9kZRgBIAMoCzIlLm1lZGlhcGlw",
             "ZS5DYWxjdWxhdG9yR3JhcGhDb25maWcuTm9kZRI2Cg5wYWNrZXRfZmFjdG9y",
             "eRgGIAMoCzIeLm1lZGlhcGlwZS5QYWNrZXRGYWN0b3J5Q29uZmlnEj4KEHBh",
@@ -65,30 +67,31 @@ namespace Mediapipe {
             "EhQKDGlucHV0X3N0cmVhbRgKIAMoCRIVCg1vdXRwdXRfc3RyZWFtGA8gAygJ",
             "EhkKEWlucHV0X3NpZGVfcGFja2V0GBAgAygJEhoKEm91dHB1dF9zaWRlX3Bh",
             "Y2tldBgRIAMoCRIWCg5tYXhfcXVldWVfc2l6ZRgLIAEoBRIXCg9yZXBvcnRf",
-            "ZGVhZGxvY2sYFSABKAgSQQoUaW5wdXRfc3RyZWFtX2hhbmRsZXIYDCABKAsy",
-            "Iy5tZWRpYXBpcGUuSW5wdXRTdHJlYW1IYW5kbGVyQ29uZmlnEkMKFW91dHB1",
-            "dF9zdHJlYW1faGFuZGxlchgNIAEoCzIkLm1lZGlhcGlwZS5PdXRwdXRTdHJl",
-            "YW1IYW5kbGVyQ29uZmlnEisKCGV4ZWN1dG9yGA4gAygLMhkubWVkaWFwaXBl",
-            "LkV4ZWN1dG9yQ29uZmlnEjIKD3Byb2ZpbGVyX2NvbmZpZxgSIAEoCzIZLm1l",
-            "ZGlhcGlwZS5Qcm9maWxlckNvbmZpZxIPCgdwYWNrYWdlGBMgASgJEgwKBHR5",
-            "cGUYFCABKAkSLQoHb3B0aW9ucxjpByABKAsyGy5tZWRpYXBpcGUuTWVkaWFQ",
-            "aXBlT3B0aW9ucxIsCg1ncmFwaF9vcHRpb25zGOoHIAMoCzIULmdvb2dsZS5w",
-            "cm90b2J1Zi5Bbnka5gQKBE5vZGUSDAoEbmFtZRgBIAEoCRISCgpjYWxjdWxh",
-            "dG9yGAIgASgJEhQKDGlucHV0X3N0cmVhbRgDIAMoCRIVCg1vdXRwdXRfc3Ry",
-            "ZWFtGAQgAygJEhkKEWlucHV0X3NpZGVfcGFja2V0GAUgAygJEhoKEm91dHB1",
-            "dF9zaWRlX3BhY2tldBgGIAMoCRItCgdvcHRpb25zGAcgASgLMhwubWVkaWFw",
-            "aXBlLkNhbGN1bGF0b3JPcHRpb25zEioKDG5vZGVfb3B0aW9ucxgIIAMoCzIU",
-            "Lmdvb2dsZS5wcm90b2J1Zi5BbnkSFAoMc291cmNlX2xheWVyGAkgASgFEhgK",
-            "EGJ1ZmZlcl9zaXplX2hpbnQYCiABKAUSQQoUaW5wdXRfc3RyZWFtX2hhbmRs",
-            "ZXIYCyABKAsyIy5tZWRpYXBpcGUuSW5wdXRTdHJlYW1IYW5kbGVyQ29uZmln",
-            "EkMKFW91dHB1dF9zdHJlYW1faGFuZGxlchgMIAEoCzIkLm1lZGlhcGlwZS5P",
-            "dXRwdXRTdHJlYW1IYW5kbGVyQ29uZmlnEjUKEWlucHV0X3N0cmVhbV9pbmZv",
-            "GA0gAygLMhoubWVkaWFwaXBlLklucHV0U3RyZWFtSW5mbxIQCghleGVjdXRv",
-            "chgOIAEoCRI2Cg9wcm9maWxlcl9jb25maWcYDyABKAsyGS5tZWRpYXBpcGUu",
-            "UHJvZmlsZXJDb25maWdCAhgBEhUKDW1heF9pbl9mbGlnaHQYECABKAUSFAoM",
-            "b3B0aW9uX3ZhbHVlGBEgAygJEhcKDmV4dGVybmFsX2lucHV0GO0HIAMoCUIt",
-            "Chpjb20uZ29vZ2xlLm1lZGlhcGlwZS5wcm90b0IPQ2FsY3VsYXRvclByb3Rv",
-            "UABiBnByb3RvMw=="));
+            "ZGVhZGxvY2sYFSABKAgSNwoMcnVudGltZV9pbmZvGBYgASgLMiEubWVkaWFw",
+            "aXBlLkdyYXBoUnVudGltZUluZm9Db25maWcSQQoUaW5wdXRfc3RyZWFtX2hh",
+            "bmRsZXIYDCABKAsyIy5tZWRpYXBpcGUuSW5wdXRTdHJlYW1IYW5kbGVyQ29u",
+            "ZmlnEkMKFW91dHB1dF9zdHJlYW1faGFuZGxlchgNIAEoCzIkLm1lZGlhcGlw",
+            "ZS5PdXRwdXRTdHJlYW1IYW5kbGVyQ29uZmlnEisKCGV4ZWN1dG9yGA4gAygL",
+            "MhkubWVkaWFwaXBlLkV4ZWN1dG9yQ29uZmlnEjIKD3Byb2ZpbGVyX2NvbmZp",
+            "ZxgSIAEoCzIZLm1lZGlhcGlwZS5Qcm9maWxlckNvbmZpZxIPCgdwYWNrYWdl",
+            "GBMgASgJEgwKBHR5cGUYFCABKAkSLQoHb3B0aW9ucxjpByABKAsyGy5tZWRp",
+            "YXBpcGUuTWVkaWFQaXBlT3B0aW9ucxIsCg1ncmFwaF9vcHRpb25zGOoHIAMo",
+            "CzIULmdvb2dsZS5wcm90b2J1Zi5Bbnka5gQKBE5vZGUSDAoEbmFtZRgBIAEo",
+            "CRISCgpjYWxjdWxhdG9yGAIgASgJEhQKDGlucHV0X3N0cmVhbRgDIAMoCRIV",
+            "Cg1vdXRwdXRfc3RyZWFtGAQgAygJEhkKEWlucHV0X3NpZGVfcGFja2V0GAUg",
+            "AygJEhoKEm91dHB1dF9zaWRlX3BhY2tldBgGIAMoCRItCgdvcHRpb25zGAcg",
+            "ASgLMhwubWVkaWFwaXBlLkNhbGN1bGF0b3JPcHRpb25zEioKDG5vZGVfb3B0",
+            "aW9ucxgIIAMoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSFAoMc291cmNlX2xh",
+            "eWVyGAkgASgFEhgKEGJ1ZmZlcl9zaXplX2hpbnQYCiABKAUSQQoUaW5wdXRf",
+            "c3RyZWFtX2hhbmRsZXIYCyABKAsyIy5tZWRpYXBpcGUuSW5wdXRTdHJlYW1I",
+            "YW5kbGVyQ29uZmlnEkMKFW91dHB1dF9zdHJlYW1faGFuZGxlchgMIAEoCzIk",
+            "Lm1lZGlhcGlwZS5PdXRwdXRTdHJlYW1IYW5kbGVyQ29uZmlnEjUKEWlucHV0",
+            "X3N0cmVhbV9pbmZvGA0gAygLMhoubWVkaWFwaXBlLklucHV0U3RyZWFtSW5m",
+            "bxIQCghleGVjdXRvchgOIAEoCRI2Cg9wcm9maWxlcl9jb25maWcYDyABKAsy",
+            "GS5tZWRpYXBpcGUuUHJvZmlsZXJDb25maWdCAhgBEhUKDW1heF9pbl9mbGln",
+            "aHQYECABKAUSFAoMb3B0aW9uX3ZhbHVlGBEgAygJEhcKDmV4dGVybmFsX2lu",
+            "cHV0GO0HIAMoCUItChpjb20uZ29vZ2xlLm1lZGlhcGlwZS5wcm90b0IPQ2Fs",
+            "Y3VsYXRvclByb3RvUABiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Mediapipe.CalculatorOptionsReflection.Descriptor, global::Google.Protobuf.WellKnownTypes.AnyReflection.Descriptor, global::Mediapipe.MediapipeOptionsReflection.Descriptor, global::Mediapipe.PacketFactoryReflection.Descriptor, global::Mediapipe.PacketGeneratorReflection.Descriptor, global::Mediapipe.StatusHandlerReflection.Descriptor, global::Mediapipe.StreamHandlerReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
@@ -97,7 +100,8 @@ namespace Mediapipe {
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InputCollectionSet), global::Mediapipe.InputCollectionSet.Parser, new[]{ "InputCollection" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InputStreamInfo), global::Mediapipe.InputStreamInfo.Parser, new[]{ "TagIndex", "BackEdge" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ProfilerConfig), global::Mediapipe.ProfilerConfig.Parser, new[]{ "HistogramIntervalSizeUsec", "NumHistogramIntervals", "EnableInputOutputLatency", "EnableProfiler", "EnableStreamLatency", "UsePacketTimestampForAddedPacket", "TraceLogCapacity", "TraceEventTypesDisabled", "TraceLogPath", "TraceLogCount", "TraceLogIntervalUsec", "TraceLogMarginUsec", "TraceLogDurationEvents", "TraceLogIntervalCount", "TraceLogDisabled", "TraceEnabled", "TraceLogInstantEvents", "CalculatorFilter" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.CalculatorGraphConfig), global::Mediapipe.CalculatorGraphConfig.Parser, new[]{ "Node", "PacketFactory", "PacketGenerator", "NumThreads", "StatusHandler", "InputStream", "OutputStream", "InputSidePacket", "OutputSidePacket", "MaxQueueSize", "ReportDeadlock", "InputStreamHandler", "OutputStreamHandler", "Executor", "ProfilerConfig", "Package", "Type", "Options", "GraphOptions" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.CalculatorGraphConfig.Types.Node), global::Mediapipe.CalculatorGraphConfig.Types.Node.Parser, new[]{ "Name", "Calculator", "InputStream", "OutputStream", "InputSidePacket", "OutputSidePacket", "Options", "NodeOptions", "SourceLayer", "BufferSizeHint", "InputStreamHandler", "OutputStreamHandler", "InputStreamInfo", "Executor", "ProfilerConfig", "MaxInFlight", "OptionValue", "ExternalInput" }, null, null, null, null)})
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.GraphRuntimeInfoConfig), global::Mediapipe.GraphRuntimeInfoConfig.Parser, new[]{ "EnableGraphRuntimeInfo", "CapturePeriodMsec" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.CalculatorGraphConfig), global::Mediapipe.CalculatorGraphConfig.Parser, new[]{ "Node", "PacketFactory", "PacketGenerator", "NumThreads", "StatusHandler", "InputStream", "OutputStream", "InputSidePacket", "OutputSidePacket", "MaxQueueSize", "ReportDeadlock", "RuntimeInfo", "InputStreamHandler", "OutputStreamHandler", "Executor", "ProfilerConfig", "Package", "Type", "Options", "GraphOptions" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.CalculatorGraphConfig.Types.Node), global::Mediapipe.CalculatorGraphConfig.Types.Node.Parser, new[]{ "Name", "Calculator", "InputStream", "OutputStream", "InputSidePacket", "OutputSidePacket", "Options", "NodeOptions", "SourceLayer", "BufferSizeHint", "InputStreamHandler", "OutputStreamHandler", "InputStreamInfo", "Executor", "ProfilerConfig", "MaxInFlight", "OptionValue", "ExternalInput" }, null, null, null, null)})
           }));
     }
     #endregion
@@ -2118,6 +2122,246 @@ namespace Mediapipe {
   }
 
   /// <summary>
+  /// Configuration for the runtime info logger. It collects runtime information
+  /// and statistics about calculators and their input streams at the configured
+  /// capture rate and writes them to LOG(INFO). It can be used to inspect a
+  /// stalled graph by understanding which calculators are waiting for input
+  /// packets to triger their Process() method.
+  /// </summary>
+  public sealed partial class GraphRuntimeInfoConfig : pb::IMessage<GraphRuntimeInfoConfig>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<GraphRuntimeInfoConfig> _parser = new pb::MessageParser<GraphRuntimeInfoConfig>(() => new GraphRuntimeInfoConfig());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<GraphRuntimeInfoConfig> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::Mediapipe.CalculatorReflection.Descriptor.MessageTypes[5]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public GraphRuntimeInfoConfig() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public GraphRuntimeInfoConfig(GraphRuntimeInfoConfig other) : this() {
+      enableGraphRuntimeInfo_ = other.enableGraphRuntimeInfo_;
+      capturePeriodMsec_ = other.capturePeriodMsec_;
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public GraphRuntimeInfoConfig Clone() {
+      return new GraphRuntimeInfoConfig(this);
+    }
+
+    /// <summary>Field number for the "enable_graph_runtime_info" field.</summary>
+    public const int EnableGraphRuntimeInfoFieldNumber = 1;
+    private bool enableGraphRuntimeInfo_;
+    /// <summary>
+    /// If true, the runtime info logger is enabled and runs in the background.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool EnableGraphRuntimeInfo {
+      get { return enableGraphRuntimeInfo_; }
+      set {
+        enableGraphRuntimeInfo_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "capture_period_msec" field.</summary>
+    public const int CapturePeriodMsecFieldNumber = 2;
+    private uint capturePeriodMsec_;
+    /// <summary>
+    /// The period in seconds at which the runtime info logger is updated. The
+    /// default value is 10 secods.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint CapturePeriodMsec {
+      get { return capturePeriodMsec_; }
+      set {
+        capturePeriodMsec_ = value;
+      }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as GraphRuntimeInfoConfig);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(GraphRuntimeInfoConfig other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (EnableGraphRuntimeInfo != other.EnableGraphRuntimeInfo) return false;
+      if (CapturePeriodMsec != other.CapturePeriodMsec) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (EnableGraphRuntimeInfo != false) hash ^= EnableGraphRuntimeInfo.GetHashCode();
+      if (CapturePeriodMsec != 0) hash ^= CapturePeriodMsec.GetHashCode();
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (EnableGraphRuntimeInfo != false) {
+        output.WriteRawTag(8);
+        output.WriteBool(EnableGraphRuntimeInfo);
+      }
+      if (CapturePeriodMsec != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(CapturePeriodMsec);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (EnableGraphRuntimeInfo != false) {
+        output.WriteRawTag(8);
+        output.WriteBool(EnableGraphRuntimeInfo);
+      }
+      if (CapturePeriodMsec != 0) {
+        output.WriteRawTag(16);
+        output.WriteUInt32(CapturePeriodMsec);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (EnableGraphRuntimeInfo != false) {
+        size += 1 + 1;
+      }
+      if (CapturePeriodMsec != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(CapturePeriodMsec);
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(GraphRuntimeInfoConfig other) {
+      if (other == null) {
+        return;
+      }
+      if (other.EnableGraphRuntimeInfo != false) {
+        EnableGraphRuntimeInfo = other.EnableGraphRuntimeInfo;
+      }
+      if (other.CapturePeriodMsec != 0) {
+        CapturePeriodMsec = other.CapturePeriodMsec;
+      }
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+        switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 8: {
+            EnableGraphRuntimeInfo = input.ReadBool();
+            break;
+          }
+          case 16: {
+            CapturePeriodMsec = input.ReadUInt32();
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+        switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 8: {
+            EnableGraphRuntimeInfo = input.ReadBool();
+            break;
+          }
+          case 16: {
+            CapturePeriodMsec = input.ReadUInt32();
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+  }
+
+  /// <summary>
   /// Describes the topology and function of a MediaPipe Graph.  The graph of
   /// Nodes must be a Directed Acyclic Graph (DAG) except as annotated by
   /// "back_edge" in InputStreamInfo.  Use a mediapipe::CalculatorGraph object to
@@ -2137,7 +2381,7 @@ namespace Mediapipe {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Mediapipe.CalculatorReflection.Descriptor.MessageTypes[5]; }
+      get { return global::Mediapipe.CalculatorReflection.Descriptor.MessageTypes[6]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -2168,6 +2412,7 @@ namespace Mediapipe {
       outputSidePacket_ = other.outputSidePacket_.Clone();
       maxQueueSize_ = other.maxQueueSize_;
       reportDeadlock_ = other.reportDeadlock_;
+      runtimeInfo_ = other.runtimeInfo_ != null ? other.runtimeInfo_.Clone() : null;
       inputStreamHandler_ = other.inputStreamHandler_ != null ? other.inputStreamHandler_.Clone() : null;
       outputStreamHandler_ = other.outputStreamHandler_ != null ? other.outputStreamHandler_.Clone() : null;
       executor_ = other.executor_.Clone();
@@ -2383,6 +2628,22 @@ namespace Mediapipe {
       }
     }
 
+    /// <summary>Field number for the "runtime_info" field.</summary>
+    public const int RuntimeInfoFieldNumber = 22;
+    private global::Mediapipe.GraphRuntimeInfoConfig runtimeInfo_;
+    /// <summary>
+    /// Enable the collection of runtime information and statistics about
+    /// calculators and their input streams.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Mediapipe.GraphRuntimeInfoConfig RuntimeInfo {
+      get { return runtimeInfo_; }
+      set {
+        runtimeInfo_ = value;
+      }
+    }
+
     /// <summary>Field number for the "input_stream_handler" field.</summary>
     public const int InputStreamHandlerFieldNumber = 12;
     private global::Mediapipe.InputStreamHandlerConfig inputStreamHandler_;
@@ -2548,6 +2809,7 @@ namespace Mediapipe {
       if(!outputSidePacket_.Equals(other.outputSidePacket_)) return false;
       if (MaxQueueSize != other.MaxQueueSize) return false;
       if (ReportDeadlock != other.ReportDeadlock) return false;
+      if (!object.Equals(RuntimeInfo, other.RuntimeInfo)) return false;
       if (!object.Equals(InputStreamHandler, other.InputStreamHandler)) return false;
       if (!object.Equals(OutputStreamHandler, other.OutputStreamHandler)) return false;
       if(!executor_.Equals(other.executor_)) return false;
@@ -2574,6 +2836,7 @@ namespace Mediapipe {
       hash ^= outputSidePacket_.GetHashCode();
       if (MaxQueueSize != 0) hash ^= MaxQueueSize.GetHashCode();
       if (ReportDeadlock != false) hash ^= ReportDeadlock.GetHashCode();
+      if (runtimeInfo_ != null) hash ^= RuntimeInfo.GetHashCode();
       if (inputStreamHandler_ != null) hash ^= InputStreamHandler.GetHashCode();
       if (outputStreamHandler_ != null) hash ^= OutputStreamHandler.GetHashCode();
       hash ^= executor_.GetHashCode();
@@ -2641,6 +2904,10 @@ namespace Mediapipe {
         output.WriteRawTag(168, 1);
         output.WriteBool(ReportDeadlock);
       }
+      if (runtimeInfo_ != null) {
+        output.WriteRawTag(178, 1);
+        output.WriteMessage(RuntimeInfo);
+      }
       if (options_ != null) {
         output.WriteRawTag(202, 62);
         output.WriteMessage(Options);
@@ -2697,6 +2964,10 @@ namespace Mediapipe {
         output.WriteRawTag(168, 1);
         output.WriteBool(ReportDeadlock);
       }
+      if (runtimeInfo_ != null) {
+        output.WriteRawTag(178, 1);
+        output.WriteMessage(RuntimeInfo);
+      }
       if (options_ != null) {
         output.WriteRawTag(202, 62);
         output.WriteMessage(Options);
@@ -2728,6 +2999,9 @@ namespace Mediapipe {
       }
       if (ReportDeadlock != false) {
         size += 2 + 1;
+      }
+      if (runtimeInfo_ != null) {
+        size += 2 + pb::CodedOutputStream.ComputeMessageSize(RuntimeInfo);
       }
       if (inputStreamHandler_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(InputStreamHandler);
@@ -2777,6 +3051,12 @@ namespace Mediapipe {
       }
       if (other.ReportDeadlock != false) {
         ReportDeadlock = other.ReportDeadlock;
+      }
+      if (other.runtimeInfo_ != null) {
+        if (runtimeInfo_ == null) {
+          RuntimeInfo = new global::Mediapipe.GraphRuntimeInfoConfig();
+        }
+        RuntimeInfo.MergeFrom(other.RuntimeInfo);
       }
       if (other.inputStreamHandler_ != null) {
         if (inputStreamHandler_ == null) {
@@ -2902,6 +3182,13 @@ namespace Mediapipe {
             ReportDeadlock = input.ReadBool();
             break;
           }
+          case 178: {
+            if (runtimeInfo_ == null) {
+              RuntimeInfo = new global::Mediapipe.GraphRuntimeInfoConfig();
+            }
+            input.ReadMessage(RuntimeInfo);
+            break;
+          }
           case 8010: {
             if (options_ == null) {
               Options = new global::Mediapipe.MediaPipeOptions();
@@ -3003,6 +3290,13 @@ namespace Mediapipe {
           }
           case 168: {
             ReportDeadlock = input.ReadBool();
+            break;
+          }
+          case 178: {
+            if (runtimeInfo_ == null) {
+              RuntimeInfo = new global::Mediapipe.GraphRuntimeInfoConfig();
+            }
+            input.ReadMessage(RuntimeInfo);
             break;
           }
           case 8010: {

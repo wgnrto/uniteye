@@ -28,25 +28,32 @@ namespace Mediapipe {
             "Y2tldF9jYWxjdWxhdG9yLnByb3RvEgltZWRpYXBpcGUaJG1lZGlhcGlwZS9m",
             "cmFtZXdvcmsvY2FsY3VsYXRvci5wcm90bxowbWVkaWFwaXBlL2ZyYW1ld29y",
             "ay9mb3JtYXRzL2NsYXNzaWZpY2F0aW9uLnByb3RvGiptZWRpYXBpcGUvZnJh",
-            "bWV3b3JrL2Zvcm1hdHMvbGFuZG1hcmsucHJvdG8aNG1lZGlhcGlwZS9mcmFt",
-            "ZXdvcmsvZm9ybWF0cy90aW1lX3Nlcmllc19oZWFkZXIucHJvdG8ivgQKI0Nv",
-            "bnN0YW50U2lkZVBhY2tldENhbGN1bGF0b3JPcHRpb25zElEKBnBhY2tldBgB",
-            "IAMoCzJBLm1lZGlhcGlwZS5Db25zdGFudFNpZGVQYWNrZXRDYWxjdWxhdG9y",
-            "T3B0aW9ucy5Db25zdGFudFNpZGVQYWNrZXQa5AIKEkNvbnN0YW50U2lkZVBh",
-            "Y2tldBITCglpbnRfdmFsdWUYASABKAVIABIVCgtmbG9hdF92YWx1ZRgCIAEo",
-            "AkgAEhQKCmJvb2xfdmFsdWUYAyABKAhIABIWCgxzdHJpbmdfdmFsdWUYBCAB",
-            "KAlIABIWCgx1aW50NjRfdmFsdWUYBSABKARIABJCChljbGFzc2lmaWNhdGlv",
-            "bl9saXN0X3ZhbHVlGAYgASgLMh0ubWVkaWFwaXBlLkNsYXNzaWZpY2F0aW9u",
-            "TGlzdEgAEjYKE2xhbmRtYXJrX2xpc3RfdmFsdWUYByABKAsyFy5tZWRpYXBp",
-            "cGUuTGFuZG1hcmtMaXN0SAASFgoMZG91YmxlX3ZhbHVlGAkgASgBSAASPwoY",
-            "dGltZV9zZXJpZXNfaGVhZGVyX3ZhbHVlGAogASgLMhsubWVkaWFwaXBlLlRp",
-            "bWVTZXJpZXNIZWFkZXJIAEIHCgV2YWx1ZTJdCgNleHQSHC5tZWRpYXBpcGUu",
-            "Q2FsY3VsYXRvck9wdGlvbnMYharuigEgASgLMi4ubWVkaWFwaXBlLkNvbnN0",
-            "YW50U2lkZVBhY2tldENhbGN1bGF0b3JPcHRpb25z"));
+            "bWV3b3JrL2Zvcm1hdHMvbGFuZG1hcmsucHJvdG8aLW1lZGlhcGlwZS9mcmFt",
+            "ZXdvcmsvZm9ybWF0cy9tYXRyaXhfZGF0YS5wcm90bxo0bWVkaWFwaXBlL2Zy",
+            "YW1ld29yay9mb3JtYXRzL3RpbWVfc2VyaWVzX2hlYWRlci5wcm90byKLBgoj",
+            "Q29uc3RhbnRTaWRlUGFja2V0Q2FsY3VsYXRvck9wdGlvbnMSUQoGcGFja2V0",
+            "GAEgAygLMkEubWVkaWFwaXBlLkNvbnN0YW50U2lkZVBhY2tldENhbGN1bGF0",
+            "b3JPcHRpb25zLkNvbnN0YW50U2lkZVBhY2tldBokCgxTdHJpbmdWZWN0b3IS",
+            "FAoMc3RyaW5nX3ZhbHVlGAEgAygJGosEChJDb25zdGFudFNpZGVQYWNrZXQS",
+            "EwoJaW50X3ZhbHVlGAEgASgFSAASFgoMdWludDY0X3ZhbHVlGAUgASgESAAS",
+            "FQoLaW50NjRfdmFsdWUYCyABKANIABIVCgtmbG9hdF92YWx1ZRgCIAEoAkgA",
+            "EhYKDGRvdWJsZV92YWx1ZRgJIAEoAUgAEhQKCmJvb2xfdmFsdWUYAyABKAhI",
+            "ABIWCgxzdHJpbmdfdmFsdWUYBCABKAlIABJCChljbGFzc2lmaWNhdGlvbl9s",
+            "aXN0X3ZhbHVlGAYgASgLMh0ubWVkaWFwaXBlLkNsYXNzaWZpY2F0aW9uTGlz",
+            "dEgAEjYKE2xhbmRtYXJrX2xpc3RfdmFsdWUYByABKAsyFy5tZWRpYXBpcGUu",
+            "TGFuZG1hcmtMaXN0SAASPwoYdGltZV9zZXJpZXNfaGVhZGVyX3ZhbHVlGAog",
+            "ASgLMhsubWVkaWFwaXBlLlRpbWVTZXJpZXNIZWFkZXJIABIyChFtYXRyaXhf",
+            "ZGF0YV92YWx1ZRgMIAEoCzIVLm1lZGlhcGlwZS5NYXRyaXhEYXRhSAASWgoT",
+            "c3RyaW5nX3ZlY3Rvcl92YWx1ZRgNIAEoCzI7Lm1lZGlhcGlwZS5Db25zdGFu",
+            "dFNpZGVQYWNrZXRDYWxjdWxhdG9yT3B0aW9ucy5TdHJpbmdWZWN0b3JIAEIH",
+            "CgV2YWx1ZTJdCgNleHQSHC5tZWRpYXBpcGUuQ2FsY3VsYXRvck9wdGlvbnMY",
+            "haruigEgASgLMi4ubWVkaWFwaXBlLkNvbnN0YW50U2lkZVBhY2tldENhbGN1",
+            "bGF0b3JPcHRpb25z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
-          new pbr::FileDescriptor[] { global::Mediapipe.CalculatorReflection.Descriptor, global::Mediapipe.ClassificationReflection.Descriptor, global::Mediapipe.LandmarkReflection.Descriptor, global::Mediapipe.TimeSeriesHeaderReflection.Descriptor, },
+          new pbr::FileDescriptor[] { global::Mediapipe.CalculatorReflection.Descriptor, global::Mediapipe.ClassificationReflection.Descriptor, global::Mediapipe.LandmarkReflection.Descriptor, global::Mediapipe.MatrixDataReflection.Descriptor, global::Mediapipe.TimeSeriesHeaderReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ConstantSidePacketCalculatorOptions), global::Mediapipe.ConstantSidePacketCalculatorOptions.Parser, new[]{ "Packet" }, null, null, new pb::Extension[] { global::Mediapipe.ConstantSidePacketCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.ConstantSidePacket), global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.ConstantSidePacket.Parser, new[]{ "IntValue", "FloatValue", "BoolValue", "StringValue", "Uint64Value", "ClassificationListValue", "LandmarkListValue", "DoubleValue", "TimeSeriesHeaderValue" }, new[]{ "Value" }, null, null, null)})
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ConstantSidePacketCalculatorOptions), global::Mediapipe.ConstantSidePacketCalculatorOptions.Parser, new[]{ "Packet" }, null, null, new pb::Extension[] { global::Mediapipe.ConstantSidePacketCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.StringVector), global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.StringVector.Parser, new[]{ "StringValue" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.ConstantSidePacket), global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.ConstantSidePacket.Parser, new[]{ "IntValue", "Uint64Value", "Int64Value", "FloatValue", "DoubleValue", "BoolValue", "StringValue", "ClassificationListValue", "LandmarkListValue", "TimeSeriesHeaderValue", "MatrixDataValue", "StringVectorValue" }, new[]{ "Value" }, null, null, null)})
           }));
     }
     #endregion
@@ -234,6 +241,184 @@ namespace Mediapipe {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static partial class Types {
+      public sealed partial class StringVector : pb::IMessage<StringVector>
+      #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+          , pb::IBufferMessage
+      #endif
+      {
+        private static readonly pb::MessageParser<StringVector> _parser = new pb::MessageParser<StringVector>(() => new StringVector());
+        private pb::UnknownFieldSet _unknownFields;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public static pb::MessageParser<StringVector> Parser { get { return _parser; } }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public static pbr::MessageDescriptor Descriptor {
+          get { return global::Mediapipe.ConstantSidePacketCalculatorOptions.Descriptor.NestedTypes[0]; }
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        pbr::MessageDescriptor pb::IMessage.Descriptor {
+          get { return Descriptor; }
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public StringVector() {
+          OnConstruction();
+        }
+
+        partial void OnConstruction();
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public StringVector(StringVector other) : this() {
+          stringValue_ = other.stringValue_.Clone();
+          _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public StringVector Clone() {
+          return new StringVector(this);
+        }
+
+        /// <summary>Field number for the "string_value" field.</summary>
+        public const int StringValueFieldNumber = 1;
+        private static readonly pb::FieldCodec<string> _repeated_stringValue_codec
+            = pb::FieldCodec.ForString(10);
+        private readonly pbc::RepeatedField<string> stringValue_ = new pbc::RepeatedField<string>();
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public pbc::RepeatedField<string> StringValue {
+          get { return stringValue_; }
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public override bool Equals(object other) {
+          return Equals(other as StringVector);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public bool Equals(StringVector other) {
+          if (ReferenceEquals(other, null)) {
+            return false;
+          }
+          if (ReferenceEquals(other, this)) {
+            return true;
+          }
+          if(!stringValue_.Equals(other.stringValue_)) return false;
+          return Equals(_unknownFields, other._unknownFields);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public override int GetHashCode() {
+          int hash = 1;
+          hash ^= stringValue_.GetHashCode();
+          if (_unknownFields != null) {
+            hash ^= _unknownFields.GetHashCode();
+          }
+          return hash;
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public override string ToString() {
+          return pb::JsonFormatter.ToDiagnosticString(this);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void WriteTo(pb::CodedOutputStream output) {
+        #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+          output.WriteRawMessage(this);
+        #else
+          stringValue_.WriteTo(output, _repeated_stringValue_codec);
+          if (_unknownFields != null) {
+            _unknownFields.WriteTo(output);
+          }
+        #endif
+        }
+
+        #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+          stringValue_.WriteTo(ref output, _repeated_stringValue_codec);
+          if (_unknownFields != null) {
+            _unknownFields.WriteTo(ref output);
+          }
+        }
+        #endif
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public int CalculateSize() {
+          int size = 0;
+          size += stringValue_.CalculateSize(_repeated_stringValue_codec);
+          if (_unknownFields != null) {
+            size += _unknownFields.CalculateSize();
+          }
+          return size;
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void MergeFrom(StringVector other) {
+          if (other == null) {
+            return;
+          }
+          stringValue_.Add(other.stringValue_);
+          _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void MergeFrom(pb::CodedInputStream input) {
+        #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+          input.ReadRawMessage(this);
+        #else
+          uint tag;
+          while ((tag = input.ReadTag()) != 0) {
+            switch(tag) {
+              default:
+                _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+                break;
+              case 10: {
+                stringValue_.AddEntriesFrom(input, _repeated_stringValue_codec);
+                break;
+              }
+            }
+          }
+        #endif
+        }
+
+        #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+          uint tag;
+          while ((tag = input.ReadTag()) != 0) {
+            switch(tag) {
+              default:
+                _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+                break;
+              case 10: {
+                stringValue_.AddEntriesFrom(ref input, _repeated_stringValue_codec);
+                break;
+              }
+            }
+          }
+        }
+        #endif
+
+      }
+
       public sealed partial class ConstantSidePacket : pb::IMessage<ConstantSidePacket>
       #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
           , pb::IBufferMessage
@@ -248,7 +433,7 @@ namespace Mediapipe {
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
         [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
         public static pbr::MessageDescriptor Descriptor {
-          get { return global::Mediapipe.ConstantSidePacketCalculatorOptions.Descriptor.NestedTypes[0]; }
+          get { return global::Mediapipe.ConstantSidePacketCalculatorOptions.Descriptor.NestedTypes[1]; }
         }
 
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -272,8 +457,17 @@ namespace Mediapipe {
             case ValueOneofCase.IntValue:
               IntValue = other.IntValue;
               break;
+            case ValueOneofCase.Uint64Value:
+              Uint64Value = other.Uint64Value;
+              break;
+            case ValueOneofCase.Int64Value:
+              Int64Value = other.Int64Value;
+              break;
             case ValueOneofCase.FloatValue:
               FloatValue = other.FloatValue;
+              break;
+            case ValueOneofCase.DoubleValue:
+              DoubleValue = other.DoubleValue;
               break;
             case ValueOneofCase.BoolValue:
               BoolValue = other.BoolValue;
@@ -281,20 +475,20 @@ namespace Mediapipe {
             case ValueOneofCase.StringValue:
               StringValue = other.StringValue;
               break;
-            case ValueOneofCase.Uint64Value:
-              Uint64Value = other.Uint64Value;
-              break;
             case ValueOneofCase.ClassificationListValue:
               ClassificationListValue = other.ClassificationListValue.Clone();
               break;
             case ValueOneofCase.LandmarkListValue:
               LandmarkListValue = other.LandmarkListValue.Clone();
               break;
-            case ValueOneofCase.DoubleValue:
-              DoubleValue = other.DoubleValue;
-              break;
             case ValueOneofCase.TimeSeriesHeaderValue:
               TimeSeriesHeaderValue = other.TimeSeriesHeaderValue.Clone();
+              break;
+            case ValueOneofCase.MatrixDataValue:
+              MatrixDataValue = other.MatrixDataValue.Clone();
+              break;
+            case ValueOneofCase.StringVectorValue:
+              StringVectorValue = other.StringVectorValue.Clone();
               break;
           }
 
@@ -333,6 +527,58 @@ namespace Mediapipe {
           }
         }
 
+        /// <summary>Field number for the "uint64_value" field.</summary>
+        public const int Uint64ValueFieldNumber = 5;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public ulong Uint64Value {
+          get { return HasUint64Value ? (ulong) value_ : 0UL; }
+          set {
+            value_ = value;
+            valueCase_ = ValueOneofCase.Uint64Value;
+          }
+        }
+        /// <summary>Gets whether the "uint64_value" field is set</summary>
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public bool HasUint64Value {
+          get { return valueCase_ == ValueOneofCase.Uint64Value; }
+        }
+        /// <summary> Clears the value of the oneof if it's currently set to "uint64_value" </summary>
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void ClearUint64Value() {
+          if (HasUint64Value) {
+            ClearValue();
+          }
+        }
+
+        /// <summary>Field number for the "int64_value" field.</summary>
+        public const int Int64ValueFieldNumber = 11;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public long Int64Value {
+          get { return HasInt64Value ? (long) value_ : 0L; }
+          set {
+            value_ = value;
+            valueCase_ = ValueOneofCase.Int64Value;
+          }
+        }
+        /// <summary>Gets whether the "int64_value" field is set</summary>
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public bool HasInt64Value {
+          get { return valueCase_ == ValueOneofCase.Int64Value; }
+        }
+        /// <summary> Clears the value of the oneof if it's currently set to "int64_value" </summary>
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void ClearInt64Value() {
+          if (HasInt64Value) {
+            ClearValue();
+          }
+        }
+
         /// <summary>Field number for the "float_value" field.</summary>
         public const int FloatValueFieldNumber = 2;
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -355,6 +601,32 @@ namespace Mediapipe {
         [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
         public void ClearFloatValue() {
           if (HasFloatValue) {
+            ClearValue();
+          }
+        }
+
+        /// <summary>Field number for the "double_value" field.</summary>
+        public const int DoubleValueFieldNumber = 9;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public double DoubleValue {
+          get { return HasDoubleValue ? (double) value_ : 0D; }
+          set {
+            value_ = value;
+            valueCase_ = ValueOneofCase.DoubleValue;
+          }
+        }
+        /// <summary>Gets whether the "double_value" field is set</summary>
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public bool HasDoubleValue {
+          get { return valueCase_ == ValueOneofCase.DoubleValue; }
+        }
+        /// <summary> Clears the value of the oneof if it's currently set to "double_value" </summary>
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void ClearDoubleValue() {
+          if (HasDoubleValue) {
             ClearValue();
           }
         }
@@ -411,32 +683,6 @@ namespace Mediapipe {
           }
         }
 
-        /// <summary>Field number for the "uint64_value" field.</summary>
-        public const int Uint64ValueFieldNumber = 5;
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-        public ulong Uint64Value {
-          get { return HasUint64Value ? (ulong) value_ : 0UL; }
-          set {
-            value_ = value;
-            valueCase_ = ValueOneofCase.Uint64Value;
-          }
-        }
-        /// <summary>Gets whether the "uint64_value" field is set</summary>
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-        public bool HasUint64Value {
-          get { return valueCase_ == ValueOneofCase.Uint64Value; }
-        }
-        /// <summary> Clears the value of the oneof if it's currently set to "uint64_value" </summary>
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-        public void ClearUint64Value() {
-          if (HasUint64Value) {
-            ClearValue();
-          }
-        }
-
         /// <summary>Field number for the "classification_list_value" field.</summary>
         public const int ClassificationListValueFieldNumber = 6;
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -461,32 +707,6 @@ namespace Mediapipe {
           }
         }
 
-        /// <summary>Field number for the "double_value" field.</summary>
-        public const int DoubleValueFieldNumber = 9;
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-        public double DoubleValue {
-          get { return HasDoubleValue ? (double) value_ : 0D; }
-          set {
-            value_ = value;
-            valueCase_ = ValueOneofCase.DoubleValue;
-          }
-        }
-        /// <summary>Gets whether the "double_value" field is set</summary>
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-        public bool HasDoubleValue {
-          get { return valueCase_ == ValueOneofCase.DoubleValue; }
-        }
-        /// <summary> Clears the value of the oneof if it's currently set to "double_value" </summary>
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-        public void ClearDoubleValue() {
-          if (HasDoubleValue) {
-            ClearValue();
-          }
-        }
-
         /// <summary>Field number for the "time_series_header_value" field.</summary>
         public const int TimeSeriesHeaderValueFieldNumber = 10;
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -499,19 +719,46 @@ namespace Mediapipe {
           }
         }
 
+        /// <summary>Field number for the "matrix_data_value" field.</summary>
+        public const int MatrixDataValueFieldNumber = 12;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public global::Mediapipe.MatrixData MatrixDataValue {
+          get { return valueCase_ == ValueOneofCase.MatrixDataValue ? (global::Mediapipe.MatrixData) value_ : null; }
+          set {
+            value_ = value;
+            valueCase_ = value == null ? ValueOneofCase.None : ValueOneofCase.MatrixDataValue;
+          }
+        }
+
+        /// <summary>Field number for the "string_vector_value" field.</summary>
+        public const int StringVectorValueFieldNumber = 13;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.StringVector StringVectorValue {
+          get { return valueCase_ == ValueOneofCase.StringVectorValue ? (global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.StringVector) value_ : null; }
+          set {
+            value_ = value;
+            valueCase_ = value == null ? ValueOneofCase.None : ValueOneofCase.StringVectorValue;
+          }
+        }
+
         private object value_;
         /// <summary>Enum of possible cases for the "value" oneof.</summary>
         public enum ValueOneofCase {
           None = 0,
           IntValue = 1,
+          Uint64Value = 5,
+          Int64Value = 11,
           FloatValue = 2,
+          DoubleValue = 9,
           BoolValue = 3,
           StringValue = 4,
-          Uint64Value = 5,
           ClassificationListValue = 6,
           LandmarkListValue = 7,
-          DoubleValue = 9,
           TimeSeriesHeaderValue = 10,
+          MatrixDataValue = 12,
+          StringVectorValue = 13,
         }
         private ValueOneofCase valueCase_ = ValueOneofCase.None;
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -543,14 +790,17 @@ namespace Mediapipe {
             return true;
           }
           if (IntValue != other.IntValue) return false;
+          if (Uint64Value != other.Uint64Value) return false;
+          if (Int64Value != other.Int64Value) return false;
           if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(FloatValue, other.FloatValue)) return false;
+          if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(DoubleValue, other.DoubleValue)) return false;
           if (BoolValue != other.BoolValue) return false;
           if (StringValue != other.StringValue) return false;
-          if (Uint64Value != other.Uint64Value) return false;
           if (!object.Equals(ClassificationListValue, other.ClassificationListValue)) return false;
           if (!object.Equals(LandmarkListValue, other.LandmarkListValue)) return false;
-          if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(DoubleValue, other.DoubleValue)) return false;
           if (!object.Equals(TimeSeriesHeaderValue, other.TimeSeriesHeaderValue)) return false;
+          if (!object.Equals(MatrixDataValue, other.MatrixDataValue)) return false;
+          if (!object.Equals(StringVectorValue, other.StringVectorValue)) return false;
           if (ValueCase != other.ValueCase) return false;
           return Equals(_unknownFields, other._unknownFields);
         }
@@ -560,14 +810,17 @@ namespace Mediapipe {
         public override int GetHashCode() {
           int hash = 1;
           if (HasIntValue) hash ^= IntValue.GetHashCode();
+          if (HasUint64Value) hash ^= Uint64Value.GetHashCode();
+          if (HasInt64Value) hash ^= Int64Value.GetHashCode();
           if (HasFloatValue) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(FloatValue);
+          if (HasDoubleValue) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(DoubleValue);
           if (HasBoolValue) hash ^= BoolValue.GetHashCode();
           if (HasStringValue) hash ^= StringValue.GetHashCode();
-          if (HasUint64Value) hash ^= Uint64Value.GetHashCode();
           if (valueCase_ == ValueOneofCase.ClassificationListValue) hash ^= ClassificationListValue.GetHashCode();
           if (valueCase_ == ValueOneofCase.LandmarkListValue) hash ^= LandmarkListValue.GetHashCode();
-          if (HasDoubleValue) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(DoubleValue);
           if (valueCase_ == ValueOneofCase.TimeSeriesHeaderValue) hash ^= TimeSeriesHeaderValue.GetHashCode();
+          if (valueCase_ == ValueOneofCase.MatrixDataValue) hash ^= MatrixDataValue.GetHashCode();
+          if (valueCase_ == ValueOneofCase.StringVectorValue) hash ^= StringVectorValue.GetHashCode();
           hash ^= (int) valueCase_;
           if (_unknownFields != null) {
             hash ^= _unknownFields.GetHashCode();
@@ -623,6 +876,18 @@ namespace Mediapipe {
             output.WriteRawTag(82);
             output.WriteMessage(TimeSeriesHeaderValue);
           }
+          if (HasInt64Value) {
+            output.WriteRawTag(88);
+            output.WriteInt64(Int64Value);
+          }
+          if (valueCase_ == ValueOneofCase.MatrixDataValue) {
+            output.WriteRawTag(98);
+            output.WriteMessage(MatrixDataValue);
+          }
+          if (valueCase_ == ValueOneofCase.StringVectorValue) {
+            output.WriteRawTag(106);
+            output.WriteMessage(StringVectorValue);
+          }
           if (_unknownFields != null) {
             _unknownFields.WriteTo(output);
           }
@@ -669,6 +934,18 @@ namespace Mediapipe {
             output.WriteRawTag(82);
             output.WriteMessage(TimeSeriesHeaderValue);
           }
+          if (HasInt64Value) {
+            output.WriteRawTag(88);
+            output.WriteInt64(Int64Value);
+          }
+          if (valueCase_ == ValueOneofCase.MatrixDataValue) {
+            output.WriteRawTag(98);
+            output.WriteMessage(MatrixDataValue);
+          }
+          if (valueCase_ == ValueOneofCase.StringVectorValue) {
+            output.WriteRawTag(106);
+            output.WriteMessage(StringVectorValue);
+          }
           if (_unknownFields != null) {
             _unknownFields.WriteTo(ref output);
           }
@@ -682,8 +959,17 @@ namespace Mediapipe {
           if (HasIntValue) {
             size += 1 + pb::CodedOutputStream.ComputeInt32Size(IntValue);
           }
+          if (HasUint64Value) {
+            size += 1 + pb::CodedOutputStream.ComputeUInt64Size(Uint64Value);
+          }
+          if (HasInt64Value) {
+            size += 1 + pb::CodedOutputStream.ComputeInt64Size(Int64Value);
+          }
           if (HasFloatValue) {
             size += 1 + 4;
+          }
+          if (HasDoubleValue) {
+            size += 1 + 8;
           }
           if (HasBoolValue) {
             size += 1 + 1;
@@ -691,20 +977,20 @@ namespace Mediapipe {
           if (HasStringValue) {
             size += 1 + pb::CodedOutputStream.ComputeStringSize(StringValue);
           }
-          if (HasUint64Value) {
-            size += 1 + pb::CodedOutputStream.ComputeUInt64Size(Uint64Value);
-          }
           if (valueCase_ == ValueOneofCase.ClassificationListValue) {
             size += 1 + pb::CodedOutputStream.ComputeMessageSize(ClassificationListValue);
           }
           if (valueCase_ == ValueOneofCase.LandmarkListValue) {
             size += 1 + pb::CodedOutputStream.ComputeMessageSize(LandmarkListValue);
           }
-          if (HasDoubleValue) {
-            size += 1 + 8;
-          }
           if (valueCase_ == ValueOneofCase.TimeSeriesHeaderValue) {
             size += 1 + pb::CodedOutputStream.ComputeMessageSize(TimeSeriesHeaderValue);
+          }
+          if (valueCase_ == ValueOneofCase.MatrixDataValue) {
+            size += 1 + pb::CodedOutputStream.ComputeMessageSize(MatrixDataValue);
+          }
+          if (valueCase_ == ValueOneofCase.StringVectorValue) {
+            size += 1 + pb::CodedOutputStream.ComputeMessageSize(StringVectorValue);
           }
           if (_unknownFields != null) {
             size += _unknownFields.CalculateSize();
@@ -722,17 +1008,23 @@ namespace Mediapipe {
             case ValueOneofCase.IntValue:
               IntValue = other.IntValue;
               break;
+            case ValueOneofCase.Uint64Value:
+              Uint64Value = other.Uint64Value;
+              break;
+            case ValueOneofCase.Int64Value:
+              Int64Value = other.Int64Value;
+              break;
             case ValueOneofCase.FloatValue:
               FloatValue = other.FloatValue;
+              break;
+            case ValueOneofCase.DoubleValue:
+              DoubleValue = other.DoubleValue;
               break;
             case ValueOneofCase.BoolValue:
               BoolValue = other.BoolValue;
               break;
             case ValueOneofCase.StringValue:
               StringValue = other.StringValue;
-              break;
-            case ValueOneofCase.Uint64Value:
-              Uint64Value = other.Uint64Value;
               break;
             case ValueOneofCase.ClassificationListValue:
               if (ClassificationListValue == null) {
@@ -746,14 +1038,23 @@ namespace Mediapipe {
               }
               LandmarkListValue.MergeFrom(other.LandmarkListValue);
               break;
-            case ValueOneofCase.DoubleValue:
-              DoubleValue = other.DoubleValue;
-              break;
             case ValueOneofCase.TimeSeriesHeaderValue:
               if (TimeSeriesHeaderValue == null) {
                 TimeSeriesHeaderValue = new global::Mediapipe.TimeSeriesHeader();
               }
               TimeSeriesHeaderValue.MergeFrom(other.TimeSeriesHeaderValue);
+              break;
+            case ValueOneofCase.MatrixDataValue:
+              if (MatrixDataValue == null) {
+                MatrixDataValue = new global::Mediapipe.MatrixData();
+              }
+              MatrixDataValue.MergeFrom(other.MatrixDataValue);
+              break;
+            case ValueOneofCase.StringVectorValue:
+              if (StringVectorValue == null) {
+                StringVectorValue = new global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.StringVector();
+              }
+              StringVectorValue.MergeFrom(other.StringVectorValue);
               break;
           }
 
@@ -823,6 +1124,28 @@ namespace Mediapipe {
                 TimeSeriesHeaderValue = subBuilder;
                 break;
               }
+              case 88: {
+                Int64Value = input.ReadInt64();
+                break;
+              }
+              case 98: {
+                global::Mediapipe.MatrixData subBuilder = new global::Mediapipe.MatrixData();
+                if (valueCase_ == ValueOneofCase.MatrixDataValue) {
+                  subBuilder.MergeFrom(MatrixDataValue);
+                }
+                input.ReadMessage(subBuilder);
+                MatrixDataValue = subBuilder;
+                break;
+              }
+              case 106: {
+                global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.StringVector subBuilder = new global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.StringVector();
+                if (valueCase_ == ValueOneofCase.StringVectorValue) {
+                  subBuilder.MergeFrom(StringVectorValue);
+                }
+                input.ReadMessage(subBuilder);
+                StringVectorValue = subBuilder;
+                break;
+              }
             }
           }
         #endif
@@ -887,6 +1210,28 @@ namespace Mediapipe {
                 }
                 input.ReadMessage(subBuilder);
                 TimeSeriesHeaderValue = subBuilder;
+                break;
+              }
+              case 88: {
+                Int64Value = input.ReadInt64();
+                break;
+              }
+              case 98: {
+                global::Mediapipe.MatrixData subBuilder = new global::Mediapipe.MatrixData();
+                if (valueCase_ == ValueOneofCase.MatrixDataValue) {
+                  subBuilder.MergeFrom(MatrixDataValue);
+                }
+                input.ReadMessage(subBuilder);
+                MatrixDataValue = subBuilder;
+                break;
+              }
+              case 106: {
+                global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.StringVector subBuilder = new global::Mediapipe.ConstantSidePacketCalculatorOptions.Types.StringVector();
+                if (valueCase_ == ValueOneofCase.StringVectorValue) {
+                  subBuilder.MergeFrom(StringVectorValue);
+                }
+                input.ReadMessage(subBuilder);
+                StringVectorValue = subBuilder;
                 break;
               }
             }

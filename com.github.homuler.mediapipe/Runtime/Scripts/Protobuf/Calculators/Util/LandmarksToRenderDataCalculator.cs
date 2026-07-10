@@ -27,25 +27,25 @@ namespace Mediapipe {
             "CkRtZWRpYXBpcGUvY2FsY3VsYXRvcnMvdXRpbC9sYW5kbWFya3NfdG9fcmVu",
             "ZGVyX2RhdGFfY2FsY3VsYXRvci5wcm90bxIJbWVkaWFwaXBlGiRtZWRpYXBp",
             "cGUvZnJhbWV3b3JrL2NhbGN1bGF0b3IucHJvdG8aGm1lZGlhcGlwZS91dGls",
-            "L2NvbG9yLnByb3RvIu4ECiZMYW5kbWFya3NUb1JlbmRlckRhdGFDYWxjdWxh",
+            "L2NvbG9yLnByb3RvIo4FCiZMYW5kbWFya3NUb1JlbmRlckRhdGFDYWxjdWxh",
             "dG9yT3B0aW9ucxIcChRsYW5kbWFya19jb25uZWN0aW9ucxgBIAMoBRIoCg5s",
-            "YW5kbWFya19jb2xvchgCIAEoCzIQLm1lZGlhcGlwZS5Db2xvchIqChBjb25u",
-            "ZWN0aW9uX2NvbG9yGAMgASgLMhAubWVkaWFwaXBlLkNvbG9yEhQKCXRoaWNr",
-            "bmVzcxgEIAEoAToBMRImChh2aXN1YWxpemVfbGFuZG1hcmtfZGVwdGgYBSAB",
-            "KAg6BHRydWUSIQoSdXRpbGl6ZV92aXNpYmlsaXR5GAYgASgIOgVmYWxzZRIf",
-            "ChR2aXNpYmlsaXR5X3RocmVzaG9sZBgHIAEoAToBMBIfChB1dGlsaXplX3By",
-            "ZXNlbmNlGAggASgIOgVmYWxzZRIdChJwcmVzZW5jZV90aHJlc2hvbGQYCSAB",
-            "KAE6ATASJQoabWluX2RlcHRoX2NpcmNsZV90aGlja25lc3MYCiABKAE6ATAS",
-            "JgoabWF4X2RlcHRoX2NpcmNsZV90aGlja25lc3MYCyABKAE6AjE4Ei4KFG1p",
-            "bl9kZXB0aF9saW5lX2NvbG9yGAwgASgLMhAubWVkaWFwaXBlLkNvbG9yEi4K",
-            "FG1heF9kZXB0aF9saW5lX2NvbG9yGA0gASgLMhAubWVkaWFwaXBlLkNvbG9y",
-            "Ml8KA2V4dBIcLm1lZGlhcGlwZS5DYWxjdWxhdG9yT3B0aW9ucxi90p17IAEo",
-            "CzIxLm1lZGlhcGlwZS5MYW5kbWFya3NUb1JlbmRlckRhdGFDYWxjdWxhdG9y",
-            "T3B0aW9ucw=="));
+            "YW5kbWFya19jb2xvchgCIAEoCzIQLm1lZGlhcGlwZS5Db2xvchIeChByZW5k",
+            "ZXJfbGFuZG1hcmtzGA4gASgIOgR0cnVlEioKEGNvbm5lY3Rpb25fY29sb3IY",
+            "AyABKAsyEC5tZWRpYXBpcGUuQ29sb3ISFAoJdGhpY2tuZXNzGAQgASgBOgEx",
+            "EiYKGHZpc3VhbGl6ZV9sYW5kbWFya19kZXB0aBgFIAEoCDoEdHJ1ZRIhChJ1",
+            "dGlsaXplX3Zpc2liaWxpdHkYBiABKAg6BWZhbHNlEh8KFHZpc2liaWxpdHlf",
+            "dGhyZXNob2xkGAcgASgBOgEwEh8KEHV0aWxpemVfcHJlc2VuY2UYCCABKAg6",
+            "BWZhbHNlEh0KEnByZXNlbmNlX3RocmVzaG9sZBgJIAEoAToBMBIlChptaW5f",
+            "ZGVwdGhfY2lyY2xlX3RoaWNrbmVzcxgKIAEoAToBMBImChptYXhfZGVwdGhf",
+            "Y2lyY2xlX3RoaWNrbmVzcxgLIAEoAToCMTgSLgoUbWluX2RlcHRoX2xpbmVf",
+            "Y29sb3IYDCABKAsyEC5tZWRpYXBpcGUuQ29sb3ISLgoUbWF4X2RlcHRoX2xp",
+            "bmVfY29sb3IYDSABKAsyEC5tZWRpYXBpcGUuQ29sb3IyXwoDZXh0EhwubWVk",
+            "aWFwaXBlLkNhbGN1bGF0b3JPcHRpb25zGL3SnXsgASgLMjEubWVkaWFwaXBl",
+            "LkxhbmRtYXJrc1RvUmVuZGVyRGF0YUNhbGN1bGF0b3JPcHRpb25z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Mediapipe.CalculatorReflection.Descriptor, global::Mediapipe.ColorReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.LandmarksToRenderDataCalculatorOptions), global::Mediapipe.LandmarksToRenderDataCalculatorOptions.Parser, new[]{ "LandmarkConnections", "LandmarkColor", "ConnectionColor", "Thickness", "VisualizeLandmarkDepth", "UtilizeVisibility", "VisibilityThreshold", "UtilizePresence", "PresenceThreshold", "MinDepthCircleThickness", "MaxDepthCircleThickness", "MinDepthLineColor", "MaxDepthLineColor" }, null, null, new pb::Extension[] { global::Mediapipe.LandmarksToRenderDataCalculatorOptions.Extensions.Ext }, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.LandmarksToRenderDataCalculatorOptions), global::Mediapipe.LandmarksToRenderDataCalculatorOptions.Parser, new[]{ "LandmarkConnections", "LandmarkColor", "RenderLandmarks", "ConnectionColor", "Thickness", "VisualizeLandmarkDepth", "UtilizeVisibility", "VisibilityThreshold", "UtilizePresence", "PresenceThreshold", "MinDepthCircleThickness", "MaxDepthCircleThickness", "MinDepthLineColor", "MaxDepthLineColor" }, null, null, new pb::Extension[] { global::Mediapipe.LandmarksToRenderDataCalculatorOptions.Extensions.Ext }, null)
           }));
     }
     #endregion
@@ -90,6 +90,7 @@ namespace Mediapipe {
       _hasBits0 = other._hasBits0;
       landmarkConnections_ = other.landmarkConnections_.Clone();
       landmarkColor_ = other.landmarkColor_ != null ? other.landmarkColor_.Clone() : null;
+      renderLandmarks_ = other.renderLandmarks_;
       connectionColor_ = other.connectionColor_ != null ? other.connectionColor_.Clone() : null;
       thickness_ = other.thickness_;
       visualizeLandmarkDepth_ = other.visualizeLandmarkDepth_;
@@ -140,6 +141,36 @@ namespace Mediapipe {
       set {
         landmarkColor_ = value;
       }
+    }
+
+    /// <summary>Field number for the "render_landmarks" field.</summary>
+    public const int RenderLandmarksFieldNumber = 14;
+    private readonly static bool RenderLandmarksDefaultValue = true;
+
+    private bool renderLandmarks_;
+    /// <summary>
+    /// Whether to render landmarks as points.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool RenderLandmarks {
+      get { if ((_hasBits0 & 256) != 0) { return renderLandmarks_; } else { return RenderLandmarksDefaultValue; } }
+      set {
+        _hasBits0 |= 256;
+        renderLandmarks_ = value;
+      }
+    }
+    /// <summary>Gets whether the "render_landmarks" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasRenderLandmarks {
+      get { return (_hasBits0 & 256) != 0; }
+    }
+    /// <summary>Clears the value of the "render_landmarks" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearRenderLandmarks() {
+      _hasBits0 &= ~256;
     }
 
     /// <summary>Field number for the "connection_color" field.</summary>
@@ -450,6 +481,7 @@ namespace Mediapipe {
       }
       if(!landmarkConnections_.Equals(other.landmarkConnections_)) return false;
       if (!object.Equals(LandmarkColor, other.LandmarkColor)) return false;
+      if (RenderLandmarks != other.RenderLandmarks) return false;
       if (!object.Equals(ConnectionColor, other.ConnectionColor)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Thickness, other.Thickness)) return false;
       if (VisualizeLandmarkDepth != other.VisualizeLandmarkDepth) return false;
@@ -470,6 +502,7 @@ namespace Mediapipe {
       int hash = 1;
       hash ^= landmarkConnections_.GetHashCode();
       if (landmarkColor_ != null) hash ^= LandmarkColor.GetHashCode();
+      if (HasRenderLandmarks) hash ^= RenderLandmarks.GetHashCode();
       if (connectionColor_ != null) hash ^= ConnectionColor.GetHashCode();
       if (HasThickness) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Thickness);
       if (HasVisualizeLandmarkDepth) hash ^= VisualizeLandmarkDepth.GetHashCode();
@@ -548,6 +581,10 @@ namespace Mediapipe {
         output.WriteRawTag(106);
         output.WriteMessage(MaxDepthLineColor);
       }
+      if (HasRenderLandmarks) {
+        output.WriteRawTag(112);
+        output.WriteBool(RenderLandmarks);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -607,6 +644,10 @@ namespace Mediapipe {
         output.WriteRawTag(106);
         output.WriteMessage(MaxDepthLineColor);
       }
+      if (HasRenderLandmarks) {
+        output.WriteRawTag(112);
+        output.WriteBool(RenderLandmarks);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -620,6 +661,9 @@ namespace Mediapipe {
       size += landmarkConnections_.CalculateSize(_repeated_landmarkConnections_codec);
       if (landmarkColor_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(LandmarkColor);
+      }
+      if (HasRenderLandmarks) {
+        size += 1 + 1;
       }
       if (connectionColor_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(ConnectionColor);
@@ -672,6 +716,9 @@ namespace Mediapipe {
           LandmarkColor = new global::Mediapipe.Color();
         }
         LandmarkColor.MergeFrom(other.LandmarkColor);
+      }
+      if (other.HasRenderLandmarks) {
+        RenderLandmarks = other.RenderLandmarks;
       }
       if (other.connectionColor_ != null) {
         if (connectionColor_ == null) {
@@ -795,6 +842,10 @@ namespace Mediapipe {
             input.ReadMessage(MaxDepthLineColor);
             break;
           }
+          case 112: {
+            RenderLandmarks = input.ReadBool();
+            break;
+          }
         }
       }
     #endif
@@ -873,6 +924,10 @@ namespace Mediapipe {
               MaxDepthLineColor = new global::Mediapipe.Color();
             }
             input.ReadMessage(MaxDepthLineColor);
+            break;
+          }
+          case 112: {
+            RenderLandmarks = input.ReadBool();
             break;
           }
         }

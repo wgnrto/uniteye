@@ -26,7 +26,7 @@ namespace Mediapipe {
           string.Concat(
             "CjVtZWRpYXBpcGUvdXRpbC90cmFja2luZy9yZWdpb25fZmxvd19jb21wdXRh",
             "dGlvbi5wcm90bxIJbWVkaWFwaXBlGi1tZWRpYXBpcGUvdXRpbC90cmFja2lu",
-            "Zy90b25lX2VzdGltYXRpb24ucHJvdG8i0xAKD1RyYWNraW5nT3B0aW9ucxJX",
+            "Zy90b25lX2VzdGltYXRpb24ucHJvdG8isBAKD1RyYWNraW5nT3B0aW9ucxJX",
             "ChtpbnRlcm5hbF90cmFja2luZ19kaXJlY3Rpb24YEyABKA4yKC5tZWRpYXBp",
             "cGUuVHJhY2tpbmdPcHRpb25zLkZsb3dEaXJlY3Rpb246CEJBQ0tXQVJEElEK",
             "FW91dHB1dF9mbG93X2RpcmVjdGlvbhgUIAEoDjIoLm1lZGlhcGlwZS5UcmFj",
@@ -58,108 +58,108 @@ namespace Mediapipe {
             "DyABKAI6AzAuOBIrChxyZWZpbmVfd2lkZV9iYXNlbGluZV9tYXRjaGVzGBAg",
             "ASgIOgVmYWxzZRIsCiFyZXVzZV9mZWF0dXJlc19tYXhfZnJhbWVfZGlzdGFu",
             "Y2UYESABKAU6ATASLQogcmV1c2VfZmVhdHVyZXNfbWluX3N1cnZpdmVkX2Zy",
-            "YWMYEiABKAI6AzAuNxInChl1c2VfY3ZfdHJhY2tpbmdfYWxnb3JpdGhtGB4g",
-            "ASgIOgR0cnVlEmMKGmtsdF90cmFja2VyX2ltcGxlbWVudGF0aW9uGCAgASgO",
-            "MjMubWVkaWFwaXBlLlRyYWNraW5nT3B0aW9ucy5LbHRUcmFja2VySW1wbGVt",
-            "ZW50YXRpb246CktMVF9PUEVOQ1YacAobTWluRWlnVmFsRXh0cmFjdGlvblNl",
-            "dHRpbmdzEiMKFWZlYXR1cmVfcXVhbGl0eV9sZXZlbBgBIAEoAjoEMC4wMRIs",
-            "Ch1hZGFwdGl2ZV9sb3dlc3RfcXVhbGl0eV9sZXZlbBgCIAEoAjoFOGUtMDUa",
-            "QgoYSGFycmlzRXh0cmFjdGlvblNldHRpbmdzEiYKFWZlYXR1cmVfcXVhbGl0",
-            "eV9sZXZlbBgBIAEoAjoHMC4wMDAyNRovChZGYXN0RXh0cmFjdGlvblNldHRp",
-            "bmdzEhUKCXRocmVzaG9sZBgBIAEoBToCMTAiPQoNRmxvd0RpcmVjdGlvbhIL",
-            "CgdGT1JXQVJEEAESDAoIQkFDS1dBUkQQAhIRCg1DT05TRUNVVElWRUxZEAMi",
-            "WQoOVHJhY2tpbmdQb2xpY3kSFwoTUE9MSUNZX1NJTkdMRV9GUkFNRRABEhYK",
-            "ElBPTElDWV9NVUxUSV9GUkFNRRACEhYKElBPTElDWV9MT05HX1RSQUNLUxAD",
-            "ImAKFkNvcm5lckV4dHJhY3Rpb25NZXRob2QSFQoRRVhUUkFDVElPTl9IQVJS",
-            "SVMQARIaChZFWFRSQUNUSU9OX01JTl9FSUdfVkFMEAISEwoPRVhUUkFDVElP",
-            "Tl9GQVNUEAMiOwoYS2x0VHJhY2tlckltcGxlbWVudGF0aW9uEg8KC1VOU1BF",
-            "Q0lGSUVEEAASDgoKS0xUX09QRU5DVhABKgQIAxAEKgQICxAMKgQIDBANIucc",
-            "ChxSZWdpb25GbG93Q29tcHV0YXRpb25PcHRpb25zEjQKEHRyYWNraW5nX29w",
-            "dGlvbnMYASABKAsyGi5tZWRpYXBpcGUuVHJhY2tpbmdPcHRpb25zEh4KE21p",
-            "bl9mZWF0dXJlX2lubGllcnMYAiABKAU6ATMSKQoccmVsYXRpdmVfbWluX2Zl",
-            "YXR1cmVfaW5saWVycxguIAEoAjoDMC4yEhsKDnByZV9ibHVyX3NpZ21hGCEg",
-            "ASgCOgMwLjgSJAoYcmFuc2FjX3JvdW5kc19wZXJfcmVnaW9uGAMgASgFOgIx",
-            "NRIqCh9hYnNvbHV0ZV9pbmxpZXJfZXJyb3JfdGhyZXNob2xkGAQgASgCOgEy",
-            "EiYKG2ZyYWNfaW5saWVyX2Vycm9yX3RocmVzaG9sZBg0IAEoAjoBMBIsCh9y",
-            "ZWxhdGl2ZV9pbmxpZXJfZXJyb3JfdGhyZXNob2xkGCwgASgCOgMwLjESGgoP",
-            "dG9wX2lubGllcl9zZXRzGC0gASgFOgEyEiEKEm5vX2VzdGltYXRpb25fbW9k",
-            "ZRgoIAEoCDoFZmFsc2USKAoaZmFzdF9lc3RpbWF0aW9uX2Jsb2NrX3NpemUY",
-            "BiABKAI6BDAuMjUSKwoeZmFzdF9lc3RpbWF0aW9uX21pbl9ibG9ja19zaXpl",
-            "GBkgASgFOgMxMDASKAodZmFzdF9lc3RpbWF0aW9uX292ZXJsYXBfZ3JpZHMY",
-            "FiABKAU6ATMSKgodbWF4X21hZ25pdHVkZV90aHJlc2hvbGRfcmF0aW8YFyAB",
-            "KAI6AzAuMhIiChdtZWRpYW5fbWFnbml0dWRlX2JvdW5kcxgzIAEoAjoBMBJp",
-            "ChNpcmxzX2luaXRpYWxpemF0aW9uGDEgASgOMjoubWVkaWFwaXBlLlJlZ2lv",
-            "bkZsb3dDb21wdXRhdGlvbk9wdGlvbnMuSXJsc0luaXRpYWxpemF0aW9uOhBJ",
-            "TklUX0NPTlNJU1RFTkNZEmAKD2Rvd25zYW1wbGVfbW9kZRgLIAEoDjI2Lm1l",
-            "ZGlhcGlwZS5SZWdpb25GbG93Q29tcHV0YXRpb25PcHRpb25zLkRvd25zYW1w",
-            "bGVNb2RlOg9ET1dOU0FNUExFX05PTkUSHgoRZG93bnNhbXBsaW5nX3NpemUY",
-            "DCABKAU6AzI1NhIcChFkb3duc2FtcGxlX2ZhY3RvchgSIAEoAjoBMhImChdy",
-            "b3VuZF9kb3duc2FtcGxlX2ZhY3Rvchg+IAEoCDoFZmFsc2USVwoTZG93bnNh",
-            "bXBsZV9zY2hlZHVsZRgTIAEoCzI6Lm1lZGlhcGlwZS5SZWdpb25GbG93Q29t",
-            "cHV0YXRpb25PcHRpb25zLkRvd25TYW1wbGVTY2hlZHVsZRIjChdtaW5fZmVh",
-            "dHVyZV9yZXF1aXJlbWVudBgNIAEoBToCMjASHwoRbWluX2ZlYXR1cmVfY292",
-            "ZXIYDiABKAI6BDAuMTUSIQoWbWluX2ZlYXR1cmVfY292ZXJfZ3JpZBgUIAEo",
-            "BToBOBIhChJjb21wdXRlX2JsdXJfc2NvcmUYESABKAg6BWZhbHNlElQKEmJs",
-            "dXJfc2NvcmVfb3B0aW9ucxgfIAEoCzI4Lm1lZGlhcGlwZS5SZWdpb25GbG93",
-            "Q29tcHV0YXRpb25PcHRpb25zLkJsdXJTY29yZU9wdGlvbnMSZAoadmlzdWFs",
-            "X2NvbnNpc3RlbmN5X29wdGlvbnMYNyABKAsyQC5tZWRpYXBpcGUuUmVnaW9u",
-            "Rmxvd0NvbXB1dGF0aW9uT3B0aW9ucy5WaXN1YWxDb25zaXN0ZW5jeU9wdGlv",
-            "bnMSIgoXcGF0Y2hfZGVzY3JpcHRvcl9yYWRpdXMYFSABKAU6ATMSHwoUZGlz",
-            "dGFuY2VfZnJvbV9ib3JkZXIYMiABKAU6ATMSIwoVY29ybmVyX3Jlc3BvbnNl",
-            "X3NjYWxlGBogASgCOgQxNTAwEh4KD3ZlcmlmeV9mZWF0dXJlcxgbIAEoCDoF",
-            "ZmFsc2USIgoVdmVyaWZpY2F0aW9uX2Rpc3RhbmNlGBwgASgCOgMwLjUSIgoU",
-            "dmVyaWZ5X2xvbmdfZmVhdHVyZXMYNSABKAg6BHRydWUSMQojbG9uZ19mZWF0",
-            "dXJlX3ZlcmlmaWNhdGlvbl90aHJlc2hvbGQYNiABKAI6BDAuMDQSKAodbWF4",
-            "X2xvbmdfZmVhdHVyZV9hY2NlbGVyYXRpb24YOCABKAI6ATUSLwogdmVyaWZ5",
-            "X2xvbmdfZmVhdHVyZV9hY2NlbGVyYXRpb24YPyABKAg6BWZhbHNlEiwKIXZl",
-            "cmlmeV9sb25nX2ZlYXR1cmVfdHJpZ2dlcl9yYXRpbxhAIAEoAjoBMBIlChZo",
-            "aXN0b2dyYW1fZXF1YWxpemF0aW9uGDkgASgIOgVmYWxzZRI6Cit1c2Vfc3lu",
-            "dGhldGljX3plcm9fbW90aW9uX3RyYWNrc19hbGxfZnJhbWVzGCIgASgIOgVm",
-            "YWxzZRI7Cix1c2Vfc3ludGhldGljX3plcm9fbW90aW9uX3RyYWNrc19maXJz",
-            "dF9mcmFtZRgjIAEoCDoFZmFsc2USHgoPZ2Fpbl9jb3JyZWN0aW9uGCQgASgI",
-            "OgVmYWxzZRIjChRmYXN0X2dhaW5fY29ycmVjdGlvbhg9IAEoCDoFZmFsc2US",
-            "MQojZ2Fpbl9jb3JyZWN0aW9uX211bHRpcGxlX2h5cG90aGVzZXMYLyABKAg6",
-            "BHRydWUSNAonZ2Fpbl9jb3JyZWN0aW9uX2lubGllcl9pbXByb3ZlbWVudF9m",
-            "cmFjGDAgASgCOgMwLjESLwogZ2Fpbl9jb3JyZWN0aW9uX2JyaWdodF9yZWZl",
-            "cmVuY2UYOyABKAg6BWZhbHNlEisKIGdhaW5fY29ycmVjdGlvbl90cmlnZ2Vy",
-            "aW5nX3JhdGlvGDwgASgCOgEwEiMKFmZyYWNfZ2Fpbl9mZWF0dXJlX3NpemUY",
-            "JSABKAI6AzAuMxIbCg5mcmFjX2dhaW5fc3RlcBgmIAEoAjoDMC4xEm0KEWdh",
-            "aW5fY29ycmVjdF9tb2RlGCkgASgOMjcubWVkaWFwaXBlLlJlZ2lvbkZsb3dD",
-            "b21wdXRhdGlvbk9wdGlvbnMuR2FpbkNvcnJlY3RNb2RlOhlHQUlOX0NPUlJF",
-            "Q1RfREVGQVVMVF9VU0VSEkkKEGdhaW5fYmlhc19ib3VuZHMYJyABKAsyLy5t",
-            "ZWRpYXBpcGUuVG9uZUVzdGltYXRpb25PcHRpb25zLkdhaW5CaWFzQm91bmRz",
-            "ElUKDGltYWdlX2Zvcm1hdBg6IAEoDjIzLm1lZGlhcGlwZS5SZWdpb25GbG93",
-            "Q29tcHV0YXRpb25PcHRpb25zLkltYWdlRm9ybWF0OgpGT1JNQVRfUkdCEmcK",
-            "GWRlc2NyaXB0b3JfZXh0cmFjdG9yX3R5cGUYQSABKA4yPy5tZWRpYXBpcGUu",
-            "UmVnaW9uRmxvd0NvbXB1dGF0aW9uT3B0aW9ucy5EZXNjcmlwdG9yRXh0cmFj",
-            "dG9yVHlwZToDT1JCEisKHWNvbXB1dGVfZGVyaXZhdGl2ZV9pbl9weXJhbWlk",
-            "GEIgASgIOgR0cnVlGqEBChJEb3duU2FtcGxlU2NoZWR1bGUSIQoWZG93bnNh",
-            "bXBsZV9mYWN0b3JfMzYwcBgBIAEoAjoBMRIhChZkb3duc2FtcGxlX2ZhY3Rv",
-            "cl80ODBwGAIgASgCOgExEiEKFmRvd25zYW1wbGVfZmFjdG9yXzcyMHAYAyAB",
-            "KAI6ATISIgoXZG93bnNhbXBsZV9mYWN0b3JfMTA4MHAYBCABKAI6ATIaqwEK",
-            "EEJsdXJTY29yZU9wdGlvbnMSGgoPYm94X2ZpbHRlcl9kaWFtGAEgASgFOgEz",
-            "EisKHXJlbGF0aXZlX2Nvcm5lcm5lc3NfdGhyZXNob2xkGAIgASgCOgQwLjAz",
-            "Ei0KHWFic29sdXRlX2Nvcm5lcm5lc3NfdGhyZXNob2xkGAMgASgCOgYwLjAw",
-            "MDESHwoRbWVkaWFuX3BlcmNlbnRpbGUYBSABKAI6BDAuODUaXwoYVmlzdWFs",
-            "Q29uc2lzdGVuY3lPcHRpb25zEiEKE2NvbXB1dGVfY29uc2lzdGVuY3kYASAB",
-            "KAg6BHRydWUSIAoUdGlueV9pbWFnZV9kaW1lbnNpb24YAiABKAU6AjIwIjwK",
-            "EklybHNJbml0aWFsaXphdGlvbhIQCgxJTklUX1VOSUZPUk0QARIUChBJTklU",
-            "X0NPTlNJU1RFTkNZEAIisQEKDkRvd25zYW1wbGVNb2RlEhMKD0RPV05TQU1Q",
-            "TEVfTk9ORRABEhoKFkRPV05TQU1QTEVfVE9fTUFYX1NJWkUQAhIYChRET1dO",
-            "U0FNUExFX0JZX0ZBQ1RPUhADEhoKFkRPV05TQU1QTEVfQllfU0NIRURVTEUQ",
-            "BBIaChZET1dOU0FNUExFX1RPX01JTl9TSVpFEAUSHAoYRE9XTlNBTVBMRV9U",
-            "T19JTlBVVF9TSVpFEAYifAoPR2FpbkNvcnJlY3RNb2RlEh0KGUdBSU5fQ09S",
-            "UkVDVF9ERUZBVUxUX1VTRVIQARIWChJHQUlOX0NPUlJFQ1RfVklERU8QAhIU",
-            "ChBHQUlOX0NPUlJFQ1RfSERSEAMSHAoYR0FJTl9DT1JSRUNUX1BIT1RPX0JV",
-            "UlNUEAQiZQoLSW1hZ2VGb3JtYXQSFAoQRk9STUFUX0dSQVlTQ0FMRRABEg4K",
-            "CkZPUk1BVF9SR0IQAhIPCgtGT1JNQVRfUkdCQRADEg4KCkZPUk1BVF9CR1IQ",
-            "BBIPCgtGT1JNQVRfQkdSQRAFIiIKF0Rlc2NyaXB0b3JFeHRyYWN0b3JUeXBl",
-            "EgcKA09SQhAAKgQIBRAGKgQIBxAIKgQICBAJKgQICRAKKgQIChALKgQIDxAQ",
-            "KgQIEBARKgQIGBAZKgQIHRAeKgQIHhAfKgQIIBAhKgQIKhArKgQIKxAs"));
+            "YWMYEiABKAI6AzAuNxJjChprbHRfdHJhY2tlcl9pbXBsZW1lbnRhdGlvbhgg",
+            "IAEoDjIzLm1lZGlhcGlwZS5UcmFja2luZ09wdGlvbnMuS2x0VHJhY2tlcklt",
+            "cGxlbWVudGF0aW9uOgpLTFRfT1BFTkNWGnAKG01pbkVpZ1ZhbEV4dHJhY3Rp",
+            "b25TZXR0aW5ncxIjChVmZWF0dXJlX3F1YWxpdHlfbGV2ZWwYASABKAI6BDAu",
+            "MDESLAodYWRhcHRpdmVfbG93ZXN0X3F1YWxpdHlfbGV2ZWwYAiABKAI6BThl",
+            "LTA1GkIKGEhhcnJpc0V4dHJhY3Rpb25TZXR0aW5ncxImChVmZWF0dXJlX3F1",
+            "YWxpdHlfbGV2ZWwYASABKAI6BzAuMDAwMjUaLwoWRmFzdEV4dHJhY3Rpb25T",
+            "ZXR0aW5ncxIVCgl0aHJlc2hvbGQYASABKAU6AjEwIj0KDUZsb3dEaXJlY3Rp",
+            "b24SCwoHRk9SV0FSRBABEgwKCEJBQ0tXQVJEEAISEQoNQ09OU0VDVVRJVkVM",
+            "WRADIlkKDlRyYWNraW5nUG9saWN5EhcKE1BPTElDWV9TSU5HTEVfRlJBTUUQ",
+            "ARIWChJQT0xJQ1lfTVVMVElfRlJBTUUQAhIWChJQT0xJQ1lfTE9OR19UUkFD",
+            "S1MQAyJgChZDb3JuZXJFeHRyYWN0aW9uTWV0aG9kEhUKEUVYVFJBQ1RJT05f",
+            "SEFSUklTEAESGgoWRVhUUkFDVElPTl9NSU5fRUlHX1ZBTBACEhMKD0VYVFJB",
+            "Q1RJT05fRkFTVBADIjsKGEtsdFRyYWNrZXJJbXBsZW1lbnRhdGlvbhIPCgtV",
+            "TlNQRUNJRklFRBAAEg4KCktMVF9PUEVOQ1YQASoECAMQBCoECAsQDCoECAwQ",
+            "DSoECB4QHyLnHAocUmVnaW9uRmxvd0NvbXB1dGF0aW9uT3B0aW9ucxI0ChB0",
+            "cmFja2luZ19vcHRpb25zGAEgASgLMhoubWVkaWFwaXBlLlRyYWNraW5nT3B0",
+            "aW9ucxIeChNtaW5fZmVhdHVyZV9pbmxpZXJzGAIgASgFOgEzEikKHHJlbGF0",
+            "aXZlX21pbl9mZWF0dXJlX2lubGllcnMYLiABKAI6AzAuMhIbCg5wcmVfYmx1",
+            "cl9zaWdtYRghIAEoAjoDMC44EiQKGHJhbnNhY19yb3VuZHNfcGVyX3JlZ2lv",
+            "bhgDIAEoBToCMTUSKgofYWJzb2x1dGVfaW5saWVyX2Vycm9yX3RocmVzaG9s",
+            "ZBgEIAEoAjoBMhImChtmcmFjX2lubGllcl9lcnJvcl90aHJlc2hvbGQYNCAB",
+            "KAI6ATASLAofcmVsYXRpdmVfaW5saWVyX2Vycm9yX3RocmVzaG9sZBgsIAEo",
+            "AjoDMC4xEhoKD3RvcF9pbmxpZXJfc2V0cxgtIAEoBToBMhIhChJub19lc3Rp",
+            "bWF0aW9uX21vZGUYKCABKAg6BWZhbHNlEigKGmZhc3RfZXN0aW1hdGlvbl9i",
+            "bG9ja19zaXplGAYgASgCOgQwLjI1EisKHmZhc3RfZXN0aW1hdGlvbl9taW5f",
+            "YmxvY2tfc2l6ZRgZIAEoBToDMTAwEigKHWZhc3RfZXN0aW1hdGlvbl9vdmVy",
+            "bGFwX2dyaWRzGBYgASgFOgEzEioKHW1heF9tYWduaXR1ZGVfdGhyZXNob2xk",
+            "X3JhdGlvGBcgASgCOgMwLjISIgoXbWVkaWFuX21hZ25pdHVkZV9ib3VuZHMY",
+            "MyABKAI6ATASaQoTaXJsc19pbml0aWFsaXphdGlvbhgxIAEoDjI6Lm1lZGlh",
+            "cGlwZS5SZWdpb25GbG93Q29tcHV0YXRpb25PcHRpb25zLklybHNJbml0aWFs",
+            "aXphdGlvbjoQSU5JVF9DT05TSVNURU5DWRJgCg9kb3duc2FtcGxlX21vZGUY",
+            "CyABKA4yNi5tZWRpYXBpcGUuUmVnaW9uRmxvd0NvbXB1dGF0aW9uT3B0aW9u",
+            "cy5Eb3duc2FtcGxlTW9kZToPRE9XTlNBTVBMRV9OT05FEh4KEWRvd25zYW1w",
+            "bGluZ19zaXplGAwgASgFOgMyNTYSHAoRZG93bnNhbXBsZV9mYWN0b3IYEiAB",
+            "KAI6ATISJgoXcm91bmRfZG93bnNhbXBsZV9mYWN0b3IYPiABKAg6BWZhbHNl",
+            "ElcKE2Rvd25zYW1wbGVfc2NoZWR1bGUYEyABKAsyOi5tZWRpYXBpcGUuUmVn",
+            "aW9uRmxvd0NvbXB1dGF0aW9uT3B0aW9ucy5Eb3duU2FtcGxlU2NoZWR1bGUS",
+            "IwoXbWluX2ZlYXR1cmVfcmVxdWlyZW1lbnQYDSABKAU6AjIwEh8KEW1pbl9m",
+            "ZWF0dXJlX2NvdmVyGA4gASgCOgQwLjE1EiEKFm1pbl9mZWF0dXJlX2NvdmVy",
+            "X2dyaWQYFCABKAU6ATgSIQoSY29tcHV0ZV9ibHVyX3Njb3JlGBEgASgIOgVm",
+            "YWxzZRJUChJibHVyX3Njb3JlX29wdGlvbnMYHyABKAsyOC5tZWRpYXBpcGUu",
+            "UmVnaW9uRmxvd0NvbXB1dGF0aW9uT3B0aW9ucy5CbHVyU2NvcmVPcHRpb25z",
+            "EmQKGnZpc3VhbF9jb25zaXN0ZW5jeV9vcHRpb25zGDcgASgLMkAubWVkaWFw",
+            "aXBlLlJlZ2lvbkZsb3dDb21wdXRhdGlvbk9wdGlvbnMuVmlzdWFsQ29uc2lz",
+            "dGVuY3lPcHRpb25zEiIKF3BhdGNoX2Rlc2NyaXB0b3JfcmFkaXVzGBUgASgF",
+            "OgEzEh8KFGRpc3RhbmNlX2Zyb21fYm9yZGVyGDIgASgFOgEzEiMKFWNvcm5l",
+            "cl9yZXNwb25zZV9zY2FsZRgaIAEoAjoEMTUwMBIeCg92ZXJpZnlfZmVhdHVy",
+            "ZXMYGyABKAg6BWZhbHNlEiIKFXZlcmlmaWNhdGlvbl9kaXN0YW5jZRgcIAEo",
+            "AjoDMC41EiIKFHZlcmlmeV9sb25nX2ZlYXR1cmVzGDUgASgIOgR0cnVlEjEK",
+            "I2xvbmdfZmVhdHVyZV92ZXJpZmljYXRpb25fdGhyZXNob2xkGDYgASgCOgQw",
+            "LjA0EigKHW1heF9sb25nX2ZlYXR1cmVfYWNjZWxlcmF0aW9uGDggASgCOgE1",
+            "Ei8KIHZlcmlmeV9sb25nX2ZlYXR1cmVfYWNjZWxlcmF0aW9uGD8gASgIOgVm",
+            "YWxzZRIsCiF2ZXJpZnlfbG9uZ19mZWF0dXJlX3RyaWdnZXJfcmF0aW8YQCAB",
+            "KAI6ATASJQoWaGlzdG9ncmFtX2VxdWFsaXphdGlvbhg5IAEoCDoFZmFsc2US",
+            "OgordXNlX3N5bnRoZXRpY196ZXJvX21vdGlvbl90cmFja3NfYWxsX2ZyYW1l",
+            "cxgiIAEoCDoFZmFsc2USOwosdXNlX3N5bnRoZXRpY196ZXJvX21vdGlvbl90",
+            "cmFja3NfZmlyc3RfZnJhbWUYIyABKAg6BWZhbHNlEh4KD2dhaW5fY29ycmVj",
+            "dGlvbhgkIAEoCDoFZmFsc2USIwoUZmFzdF9nYWluX2NvcnJlY3Rpb24YPSAB",
+            "KAg6BWZhbHNlEjEKI2dhaW5fY29ycmVjdGlvbl9tdWx0aXBsZV9oeXBvdGhl",
+            "c2VzGC8gASgIOgR0cnVlEjQKJ2dhaW5fY29ycmVjdGlvbl9pbmxpZXJfaW1w",
+            "cm92ZW1lbnRfZnJhYxgwIAEoAjoDMC4xEi8KIGdhaW5fY29ycmVjdGlvbl9i",
+            "cmlnaHRfcmVmZXJlbmNlGDsgASgIOgVmYWxzZRIrCiBnYWluX2NvcnJlY3Rp",
+            "b25fdHJpZ2dlcmluZ19yYXRpbxg8IAEoAjoBMBIjChZmcmFjX2dhaW5fZmVh",
+            "dHVyZV9zaXplGCUgASgCOgMwLjMSGwoOZnJhY19nYWluX3N0ZXAYJiABKAI6",
+            "AzAuMRJtChFnYWluX2NvcnJlY3RfbW9kZRgpIAEoDjI3Lm1lZGlhcGlwZS5S",
+            "ZWdpb25GbG93Q29tcHV0YXRpb25PcHRpb25zLkdhaW5Db3JyZWN0TW9kZToZ",
+            "R0FJTl9DT1JSRUNUX0RFRkFVTFRfVVNFUhJJChBnYWluX2JpYXNfYm91bmRz",
+            "GCcgASgLMi8ubWVkaWFwaXBlLlRvbmVFc3RpbWF0aW9uT3B0aW9ucy5HYWlu",
+            "Qmlhc0JvdW5kcxJVCgxpbWFnZV9mb3JtYXQYOiABKA4yMy5tZWRpYXBpcGUu",
+            "UmVnaW9uRmxvd0NvbXB1dGF0aW9uT3B0aW9ucy5JbWFnZUZvcm1hdDoKRk9S",
+            "TUFUX1JHQhJnChlkZXNjcmlwdG9yX2V4dHJhY3Rvcl90eXBlGEEgASgOMj8u",
+            "bWVkaWFwaXBlLlJlZ2lvbkZsb3dDb21wdXRhdGlvbk9wdGlvbnMuRGVzY3Jp",
+            "cHRvckV4dHJhY3RvclR5cGU6A09SQhIrCh1jb21wdXRlX2Rlcml2YXRpdmVf",
+            "aW5fcHlyYW1pZBhCIAEoCDoEdHJ1ZRqhAQoSRG93blNhbXBsZVNjaGVkdWxl",
+            "EiEKFmRvd25zYW1wbGVfZmFjdG9yXzM2MHAYASABKAI6ATESIQoWZG93bnNh",
+            "bXBsZV9mYWN0b3JfNDgwcBgCIAEoAjoBMRIhChZkb3duc2FtcGxlX2ZhY3Rv",
+            "cl83MjBwGAMgASgCOgEyEiIKF2Rvd25zYW1wbGVfZmFjdG9yXzEwODBwGAQg",
+            "ASgCOgEyGqsBChBCbHVyU2NvcmVPcHRpb25zEhoKD2JveF9maWx0ZXJfZGlh",
+            "bRgBIAEoBToBMxIrCh1yZWxhdGl2ZV9jb3JuZXJuZXNzX3RocmVzaG9sZBgC",
+            "IAEoAjoEMC4wMxItCh1hYnNvbHV0ZV9jb3JuZXJuZXNzX3RocmVzaG9sZBgD",
+            "IAEoAjoGMC4wMDAxEh8KEW1lZGlhbl9wZXJjZW50aWxlGAUgASgCOgQwLjg1",
+            "Gl8KGFZpc3VhbENvbnNpc3RlbmN5T3B0aW9ucxIhChNjb21wdXRlX2NvbnNp",
+            "c3RlbmN5GAEgASgIOgR0cnVlEiAKFHRpbnlfaW1hZ2VfZGltZW5zaW9uGAIg",
+            "ASgFOgIyMCI8ChJJcmxzSW5pdGlhbGl6YXRpb24SEAoMSU5JVF9VTklGT1JN",
+            "EAESFAoQSU5JVF9DT05TSVNURU5DWRACIrEBCg5Eb3duc2FtcGxlTW9kZRIT",
+            "Cg9ET1dOU0FNUExFX05PTkUQARIaChZET1dOU0FNUExFX1RPX01BWF9TSVpF",
+            "EAISGAoURE9XTlNBTVBMRV9CWV9GQUNUT1IQAxIaChZET1dOU0FNUExFX0JZ",
+            "X1NDSEVEVUxFEAQSGgoWRE9XTlNBTVBMRV9UT19NSU5fU0laRRAFEhwKGERP",
+            "V05TQU1QTEVfVE9fSU5QVVRfU0laRRAGInwKD0dhaW5Db3JyZWN0TW9kZRId",
+            "ChlHQUlOX0NPUlJFQ1RfREVGQVVMVF9VU0VSEAESFgoSR0FJTl9DT1JSRUNU",
+            "X1ZJREVPEAISFAoQR0FJTl9DT1JSRUNUX0hEUhADEhwKGEdBSU5fQ09SUkVD",
+            "VF9QSE9UT19CVVJTVBAEImUKC0ltYWdlRm9ybWF0EhQKEEZPUk1BVF9HUkFZ",
+            "U0NBTEUQARIOCgpGT1JNQVRfUkdCEAISDwoLRk9STUFUX1JHQkEQAxIOCgpG",
+            "T1JNQVRfQkdSEAQSDwoLRk9STUFUX0JHUkEQBSIiChdEZXNjcmlwdG9yRXh0",
+            "cmFjdG9yVHlwZRIHCgNPUkIQACoECAUQBioECAcQCCoECAgQCSoECAkQCioE",
+            "CAoQCyoECA8QECoECBAQESoECBgQGSoECB0QHioECB4QHyoECCAQISoECCoQ",
+            "KyoECCsQLA=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Mediapipe.ToneEstimationReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TrackingOptions), global::Mediapipe.TrackingOptions.Parser, new[]{ "InternalTrackingDirection", "OutputFlowDirection", "TrackingPolicy", "MultiFramesToTrack", "LongTracksMaxFrames", "MaxFeatures", "CornerExtractionMethod", "MinEigValSettings", "HarrisSettings", "FastSettings", "TrackingWindowSize", "TrackingIterations", "FractionalTrackingDistance", "AdaptiveTrackingDistance", "MinFeatureDistance", "DistanceDownscaleSqrt", "AdaptiveGoodFeaturesToTrack", "AdaptiveFeaturesBlockSize", "AdaptiveFeaturesLevels", "AdaptiveExtractionLevels", "AdaptiveExtractionLevelsLowestSize", "SyntheticZeroMotionGridStep", "WideBaselineMatching", "RatioTestThreshold", "RefineWideBaselineMatches", "ReuseFeaturesMaxFrameDistance", "ReuseFeaturesMinSurvivedFrac", "UseCvTrackingAlgorithm", "KltTrackerImplementation" }, null, new[]{ typeof(global::Mediapipe.TrackingOptions.Types.FlowDirection), typeof(global::Mediapipe.TrackingOptions.Types.TrackingPolicy), typeof(global::Mediapipe.TrackingOptions.Types.CornerExtractionMethod), typeof(global::Mediapipe.TrackingOptions.Types.KltTrackerImplementation) }, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TrackingOptions.Types.MinEigValExtractionSettings), global::Mediapipe.TrackingOptions.Types.MinEigValExtractionSettings.Parser, new[]{ "FeatureQualityLevel", "AdaptiveLowestQualityLevel" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TrackingOptions), global::Mediapipe.TrackingOptions.Parser, new[]{ "InternalTrackingDirection", "OutputFlowDirection", "TrackingPolicy", "MultiFramesToTrack", "LongTracksMaxFrames", "MaxFeatures", "CornerExtractionMethod", "MinEigValSettings", "HarrisSettings", "FastSettings", "TrackingWindowSize", "TrackingIterations", "FractionalTrackingDistance", "AdaptiveTrackingDistance", "MinFeatureDistance", "DistanceDownscaleSqrt", "AdaptiveGoodFeaturesToTrack", "AdaptiveFeaturesBlockSize", "AdaptiveFeaturesLevels", "AdaptiveExtractionLevels", "AdaptiveExtractionLevelsLowestSize", "SyntheticZeroMotionGridStep", "WideBaselineMatching", "RatioTestThreshold", "RefineWideBaselineMatches", "ReuseFeaturesMaxFrameDistance", "ReuseFeaturesMinSurvivedFrac", "KltTrackerImplementation" }, null, new[]{ typeof(global::Mediapipe.TrackingOptions.Types.FlowDirection), typeof(global::Mediapipe.TrackingOptions.Types.TrackingPolicy), typeof(global::Mediapipe.TrackingOptions.Types.CornerExtractionMethod), typeof(global::Mediapipe.TrackingOptions.Types.KltTrackerImplementation) }, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TrackingOptions.Types.MinEigValExtractionSettings), global::Mediapipe.TrackingOptions.Types.MinEigValExtractionSettings.Parser, new[]{ "FeatureQualityLevel", "AdaptiveLowestQualityLevel" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TrackingOptions.Types.HarrisExtractionSettings), global::Mediapipe.TrackingOptions.Types.HarrisExtractionSettings.Parser, new[]{ "FeatureQualityLevel" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TrackingOptions.Types.FastExtractionSettings), global::Mediapipe.TrackingOptions.Types.FastExtractionSettings.Parser, new[]{ "Threshold" }, null, null, null, null)}),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.RegionFlowComputationOptions), global::Mediapipe.RegionFlowComputationOptions.Parser, new[]{ "TrackingOptions", "MinFeatureInliers", "RelativeMinFeatureInliers", "PreBlurSigma", "RansacRoundsPerRegion", "AbsoluteInlierErrorThreshold", "FracInlierErrorThreshold", "RelativeInlierErrorThreshold", "TopInlierSets", "NoEstimationMode", "FastEstimationBlockSize", "FastEstimationMinBlockSize", "FastEstimationOverlapGrids", "MaxMagnitudeThresholdRatio", "MedianMagnitudeBounds", "IrlsInitialization", "DownsampleMode", "DownsamplingSize", "DownsampleFactor", "RoundDownsampleFactor", "DownsampleSchedule", "MinFeatureRequirement", "MinFeatureCover", "MinFeatureCoverGrid", "ComputeBlurScore", "BlurScoreOptions", "VisualConsistencyOptions", "PatchDescriptorRadius", "DistanceFromBorder", "CornerResponseScale", "VerifyFeatures", "VerificationDistance", "VerifyLongFeatures", "LongFeatureVerificationThreshold", "MaxLongFeatureAcceleration", "VerifyLongFeatureAcceleration", "VerifyLongFeatureTriggerRatio", "HistogramEqualization", "UseSyntheticZeroMotionTracksAllFrames", "UseSyntheticZeroMotionTracksFirstFrame", "GainCorrection", "FastGainCorrection", "GainCorrectionMultipleHypotheses", "GainCorrectionInlierImprovementFrac", "GainCorrectionBrightReference", "GainCorrectionTriggeringRatio", "FracGainFeatureSize", "FracGainStep", "GainCorrectMode", "GainBiasBounds", "ImageFormat", "DescriptorExtractorType", "ComputeDerivativeInPyramid" }, null, new[]{ typeof(global::Mediapipe.RegionFlowComputationOptions.Types.IrlsInitialization), typeof(global::Mediapipe.RegionFlowComputationOptions.Types.DownsampleMode), typeof(global::Mediapipe.RegionFlowComputationOptions.Types.GainCorrectMode), typeof(global::Mediapipe.RegionFlowComputationOptions.Types.ImageFormat), typeof(global::Mediapipe.RegionFlowComputationOptions.Types.DescriptorExtractorType) }, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.RegionFlowComputationOptions.Types.DownSampleSchedule), global::Mediapipe.RegionFlowComputationOptions.Types.DownSampleSchedule.Parser, new[]{ "DownsampleFactor360P", "DownsampleFactor480P", "DownsampleFactor720P", "DownsampleFactor1080P" }, null, null, null, null),
@@ -239,7 +239,6 @@ namespace Mediapipe {
       refineWideBaselineMatches_ = other.refineWideBaselineMatches_;
       reuseFeaturesMaxFrameDistance_ = other.reuseFeaturesMaxFrameDistance_;
       reuseFeaturesMinSurvivedFrac_ = other.reuseFeaturesMinSurvivedFrac_;
-      useCvTrackingAlgorithm_ = other.useCvTrackingAlgorithm_;
       kltTrackerImplementation_ = other.kltTrackerImplementation_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
       _extensions = pb::ExtensionSet.Clone(other._extensions);
@@ -517,6 +516,10 @@ namespace Mediapipe {
     private readonly static int TrackingWindowSizeDefaultValue = 10;
 
     private int trackingWindowSize_;
+    /// <summary>
+    /// Radius of the window size so that the full window is
+    /// 2*tracking_window_size+1
+    /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public int TrackingWindowSize {
@@ -1049,37 +1052,6 @@ namespace Mediapipe {
       _hasBits0 &= ~16384;
     }
 
-    /// <summary>Field number for the "use_cv_tracking_algorithm" field.</summary>
-    public const int UseCvTrackingAlgorithmFieldNumber = 30;
-    private readonly static bool UseCvTrackingAlgorithmDefaultValue = true;
-
-    private bool useCvTrackingAlgorithm_;
-    /// <summary>
-    /// If set uses newer OpenCV tracking algorithm.
-    /// Recommended to be set for all new projects.
-    /// </summary>
-    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public bool UseCvTrackingAlgorithm {
-      get { if ((_hasBits0 & 16777216) != 0) { return useCvTrackingAlgorithm_; } else { return UseCvTrackingAlgorithmDefaultValue; } }
-      set {
-        _hasBits0 |= 16777216;
-        useCvTrackingAlgorithm_ = value;
-      }
-    }
-    /// <summary>Gets whether the "use_cv_tracking_algorithm" field is set</summary>
-    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public bool HasUseCvTrackingAlgorithm {
-      get { return (_hasBits0 & 16777216) != 0; }
-    }
-    /// <summary>Clears the value of the "use_cv_tracking_algorithm" field</summary>
-    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public void ClearUseCvTrackingAlgorithm() {
-      _hasBits0 &= ~16777216;
-    }
-
     /// <summary>Field number for the "klt_tracker_implementation" field.</summary>
     public const int KltTrackerImplementationFieldNumber = 32;
     private readonly static global::Mediapipe.TrackingOptions.Types.KltTrackerImplementation KltTrackerImplementationDefaultValue = global::Mediapipe.TrackingOptions.Types.KltTrackerImplementation.KltOpencv;
@@ -1091,9 +1063,9 @@ namespace Mediapipe {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public global::Mediapipe.TrackingOptions.Types.KltTrackerImplementation KltTrackerImplementation {
-      get { if ((_hasBits0 & 33554432) != 0) { return kltTrackerImplementation_; } else { return KltTrackerImplementationDefaultValue; } }
+      get { if ((_hasBits0 & 16777216) != 0) { return kltTrackerImplementation_; } else { return KltTrackerImplementationDefaultValue; } }
       set {
-        _hasBits0 |= 33554432;
+        _hasBits0 |= 16777216;
         kltTrackerImplementation_ = value;
       }
     }
@@ -1101,13 +1073,13 @@ namespace Mediapipe {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public bool HasKltTrackerImplementation {
-      get { return (_hasBits0 & 33554432) != 0; }
+      get { return (_hasBits0 & 16777216) != 0; }
     }
     /// <summary>Clears the value of the "klt_tracker_implementation" field</summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public void ClearKltTrackerImplementation() {
-      _hasBits0 &= ~33554432;
+      _hasBits0 &= ~16777216;
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -1152,7 +1124,6 @@ namespace Mediapipe {
       if (RefineWideBaselineMatches != other.RefineWideBaselineMatches) return false;
       if (ReuseFeaturesMaxFrameDistance != other.ReuseFeaturesMaxFrameDistance) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(ReuseFeaturesMinSurvivedFrac, other.ReuseFeaturesMinSurvivedFrac)) return false;
-      if (UseCvTrackingAlgorithm != other.UseCvTrackingAlgorithm) return false;
       if (KltTrackerImplementation != other.KltTrackerImplementation) return false;
       if (!Equals(_extensions, other._extensions)) {
         return false;
@@ -1191,7 +1162,6 @@ namespace Mediapipe {
       if (HasRefineWideBaselineMatches) hash ^= RefineWideBaselineMatches.GetHashCode();
       if (HasReuseFeaturesMaxFrameDistance) hash ^= ReuseFeaturesMaxFrameDistance.GetHashCode();
       if (HasReuseFeaturesMinSurvivedFrac) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(ReuseFeaturesMinSurvivedFrac);
-      if (HasUseCvTrackingAlgorithm) hash ^= UseCvTrackingAlgorithm.GetHashCode();
       if (HasKltTrackerImplementation) hash ^= KltTrackerImplementation.GetHashCode();
       if (_extensions != null) {
         hash ^= _extensions.GetHashCode();
@@ -1318,10 +1288,6 @@ namespace Mediapipe {
         output.WriteRawTag(234, 1);
         output.WriteMessage(HarrisSettings);
       }
-      if (HasUseCvTrackingAlgorithm) {
-        output.WriteRawTag(240, 1);
-        output.WriteBool(UseCvTrackingAlgorithm);
-      }
       if (fastSettings_ != null) {
         output.WriteRawTag(250, 1);
         output.WriteMessage(FastSettings);
@@ -1447,10 +1413,6 @@ namespace Mediapipe {
         output.WriteRawTag(234, 1);
         output.WriteMessage(HarrisSettings);
       }
-      if (HasUseCvTrackingAlgorithm) {
-        output.WriteRawTag(240, 1);
-        output.WriteBool(UseCvTrackingAlgorithm);
-      }
       if (fastSettings_ != null) {
         output.WriteRawTag(250, 1);
         output.WriteMessage(FastSettings);
@@ -1552,9 +1514,6 @@ namespace Mediapipe {
       }
       if (HasReuseFeaturesMinSurvivedFrac) {
         size += 2 + 4;
-      }
-      if (HasUseCvTrackingAlgorithm) {
-        size += 2 + 1;
       }
       if (HasKltTrackerImplementation) {
         size += 2 + pb::CodedOutputStream.ComputeEnumSize((int) KltTrackerImplementation);
@@ -1663,9 +1622,6 @@ namespace Mediapipe {
       }
       if (other.HasReuseFeaturesMinSurvivedFrac) {
         ReuseFeaturesMinSurvivedFrac = other.ReuseFeaturesMinSurvivedFrac;
-      }
-      if (other.HasUseCvTrackingAlgorithm) {
-        UseCvTrackingAlgorithm = other.UseCvTrackingAlgorithm;
       }
       if (other.HasKltTrackerImplementation) {
         KltTrackerImplementation = other.KltTrackerImplementation;
@@ -1796,10 +1752,6 @@ namespace Mediapipe {
               HarrisSettings = new global::Mediapipe.TrackingOptions.Types.HarrisExtractionSettings();
             }
             input.ReadMessage(HarrisSettings);
-            break;
-          }
-          case 240: {
-            UseCvTrackingAlgorithm = input.ReadBool();
             break;
           }
           case 250: {
@@ -1938,10 +1890,6 @@ namespace Mediapipe {
               HarrisSettings = new global::Mediapipe.TrackingOptions.Types.HarrisExtractionSettings();
             }
             input.ReadMessage(HarrisSettings);
-            break;
-          }
-          case 240: {
-            UseCvTrackingAlgorithm = input.ReadBool();
             break;
           }
           case 250: {

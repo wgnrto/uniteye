@@ -27,41 +27,69 @@ namespace Mediapipe {
             "CjdtZWRpYXBpcGUvY2FsY3VsYXRvcnMvdGVuc29yL2luZmVyZW5jZV9jYWxj",
             "dWxhdG9yLnByb3RvEgltZWRpYXBpcGUaJG1lZGlhcGlwZS9mcmFtZXdvcmsv",
             "Y2FsY3VsYXRvci5wcm90bxosbWVkaWFwaXBlL2ZyYW1ld29yay9jYWxjdWxh",
-            "dG9yX29wdGlvbnMucHJvdG8ikwkKGkluZmVyZW5jZUNhbGN1bGF0b3JPcHRp",
-            "b25zEhIKCm1vZGVsX3BhdGgYASABKAkSGgoHdXNlX2dwdRgCIAEoCDoFZmFs",
-            "c2VCAhgBEhwKCXVzZV9ubmFwaRgDIAEoCDoFZmFsc2VCAhgBEhoKDmNwdV9u",
-            "dW1fdGhyZWFkGAQgASgFOgItMRJACghkZWxlZ2F0ZRgFIAEoCzIuLm1lZGlh",
-            "cGlwZS5JbmZlcmVuY2VDYWxjdWxhdG9yT3B0aW9ucy5EZWxlZ2F0ZRryBgoI",
-            "RGVsZWdhdGUSRwoGdGZsaXRlGAEgASgLMjUubWVkaWFwaXBlLkluZmVyZW5j",
-            "ZUNhbGN1bGF0b3JPcHRpb25zLkRlbGVnYXRlLlRmTGl0ZUgAEkEKA2dwdRgC",
-            "IAEoCzIyLm1lZGlhcGlwZS5JbmZlcmVuY2VDYWxjdWxhdG9yT3B0aW9ucy5E",
-            "ZWxlZ2F0ZS5HcHVIABJFCgVubmFwaRgDIAEoCzI0Lm1lZGlhcGlwZS5JbmZl",
-            "cmVuY2VDYWxjdWxhdG9yT3B0aW9ucy5EZWxlZ2F0ZS5ObmFwaUgAEkkKB3hu",
-            "bnBhY2sYBCABKAsyNi5tZWRpYXBpcGUuSW5mZXJlbmNlQ2FsY3VsYXRvck9w",
-            "dGlvbnMuRGVsZWdhdGUuWG5ucGFja0gAGggKBlRmTGl0ZRrCAwoDR3B1EiMK",
-            "FHVzZV9hZHZhbmNlZF9ncHVfYXBpGAEgASgIOgVmYWxzZRJICgNhcGkYBCAB",
-            "KA4yNi5tZWRpYXBpcGUuSW5mZXJlbmNlQ2FsY3VsYXRvck9wdGlvbnMuRGVs",
-            "ZWdhdGUuR3B1LkFwaToDQU5ZEiIKFGFsbG93X3ByZWNpc2lvbl9sb3NzGAMg",
-            "ASgIOgR0cnVlEhoKEmNhY2hlZF9rZXJuZWxfcGF0aBgCIAEoCRIcChRzZXJp",
-            "YWxpemVkX21vZGVsX2RpchgHIAEoCRITCgttb2RlbF90b2tlbhgIIAEoCRJh",
-            "CgV1c2FnZRgFIAEoDjJBLm1lZGlhcGlwZS5JbmZlcmVuY2VDYWxjdWxhdG9y",
-            "T3B0aW9ucy5EZWxlZ2F0ZS5HcHUuSW5mZXJlbmNlVXNhZ2U6D1NVU1RBSU5F",
-            "RF9TUEVFRCImCgNBcGkSBwoDQU5ZEAASCgoGT1BFTkdMEAESCgoGT1BFTkNM",
-            "EAIiTgoOSW5mZXJlbmNlVXNhZ2USDwoLVU5TUEVDSUZJRUQQABIWChJGQVNU",
-            "X1NJTkdMRV9BTlNXRVIQARITCg9TVVNUQUlORURfU1BFRUQQAhpJCgVObmFw",
-            "aRIRCgljYWNoZV9kaXIYASABKAkSEwoLbW9kZWxfdG9rZW4YAiABKAkSGAoQ",
-            "YWNjZWxlcmF0b3JfbmFtZRgDIAEoCRoiCgdYbm5wYWNrEhcKC251bV90aHJl",
-            "YWRzGAEgASgFOgItMUIKCghkZWxlZ2F0ZTJUCgNleHQSHC5tZWRpYXBpcGUu",
+            "dG9yX29wdGlvbnMucHJvdG8i+BEKGkluZmVyZW5jZUNhbGN1bGF0b3JPcHRp",
+            "b25zEhIKCm1vZGVsX3BhdGgYASABKAkSFgoOdHJ5X21tYXBfbW9kZWwYByAB",
+            "KAgSGgoHdXNlX2dwdRgCIAEoCDoFZmFsc2VCAhgBEhwKCXVzZV9ubmFwaRgD",
+            "IAEoCDoFZmFsc2VCAhgBEhoKDmNwdV9udW1fdGhyZWFkGAQgASgFOgItMRJA",
+            "CghkZWxlZ2F0ZRgFIAEoCzIuLm1lZGlhcGlwZS5JbmZlcmVuY2VDYWxjdWxh",
+            "dG9yT3B0aW9ucy5EZWxlZ2F0ZRJUChNpbnB1dF9vdXRwdXRfY29uZmlnGAgg",
+            "ASgLMjcubWVkaWFwaXBlLkluZmVyZW5jZUNhbGN1bGF0b3JPcHRpb25zLklu",
+            "cHV0T3V0cHV0Q29uZmlnGt4ICghEZWxlZ2F0ZRJHCgZ0ZmxpdGUYASABKAsy",
+            "NS5tZWRpYXBpcGUuSW5mZXJlbmNlQ2FsY3VsYXRvck9wdGlvbnMuRGVsZWdh",
+            "dGUuVGZMaXRlSAASQQoDZ3B1GAIgASgLMjIubWVkaWFwaXBlLkluZmVyZW5j",
+            "ZUNhbGN1bGF0b3JPcHRpb25zLkRlbGVnYXRlLkdwdUgAEkUKBW5uYXBpGAMg",
+            "ASgLMjQubWVkaWFwaXBlLkluZmVyZW5jZUNhbGN1bGF0b3JPcHRpb25zLkRl",
+            "bGVnYXRlLk5uYXBpSAASSQoHeG5ucGFjaxgEIAEoCzI2Lm1lZGlhcGlwZS5J",
+            "bmZlcmVuY2VDYWxjdWxhdG9yT3B0aW9ucy5EZWxlZ2F0ZS5Ybm5wYWNrSAAa",
+            "CAoGVGZMaXRlGoQFCgNHcHUSIwoUdXNlX2FkdmFuY2VkX2dwdV9hcGkYASAB",
+            "KAg6BWZhbHNlEkgKA2FwaRgEIAEoDjI2Lm1lZGlhcGlwZS5JbmZlcmVuY2VD",
+            "YWxjdWxhdG9yT3B0aW9ucy5EZWxlZ2F0ZS5HcHUuQXBpOgNBTlkSIgoUYWxs",
+            "b3dfcHJlY2lzaW9uX2xvc3MYAyABKAg6BHRydWUSGgoSY2FjaGVkX2tlcm5l",
+            "bF9wYXRoGAIgASgJEhwKFHNlcmlhbGl6ZWRfbW9kZWxfZGlyGAcgASgJEncK",
+            "FmNhY2hlX3dyaXRpbmdfYmVoYXZpb3IYCiABKA4yRy5tZWRpYXBpcGUuSW5m",
+            "ZXJlbmNlQ2FsY3VsYXRvck9wdGlvbnMuRGVsZWdhdGUuR3B1LkNhY2hlV3Jp",
+            "dGluZ0JlaGF2aW9yOg5XUklURV9PUl9FUlJPUhITCgttb2RlbF90b2tlbhgI",
+            "IAEoCRJhCgV1c2FnZRgFIAEoDjJBLm1lZGlhcGlwZS5JbmZlcmVuY2VDYWxj",
+            "dWxhdG9yT3B0aW9ucy5EZWxlZ2F0ZS5HcHUuSW5mZXJlbmNlVXNhZ2U6D1NV",
+            "U1RBSU5FRF9TUEVFRCImCgNBcGkSBwoDQU5ZEAASCgoGT1BFTkdMEAESCgoG",
+            "T1BFTkNMEAIiRwoUQ2FjaGVXcml0aW5nQmVoYXZpb3ISDAoITk9fV1JJVEUQ",
+            "ABINCglUUllfV1JJVEUQARISCg5XUklURV9PUl9FUlJPUhACIk4KDkluZmVy",
+            "ZW5jZVVzYWdlEg8KC1VOU1BFQ0lGSUVEEAASFgoSRkFTVF9TSU5HTEVfQU5T",
+            "V0VSEAESEwoPU1VTVEFJTkVEX1NQRUVEEAIaSQoFTm5hcGkSEQoJY2FjaGVf",
+            "ZGlyGAEgASgJEhMKC21vZGVsX3Rva2VuGAIgASgJEhgKEGFjY2VsZXJhdG9y",
+            "X25hbWUYAyABKAkaTAoHWG5ucGFjaxIXCgtudW1fdGhyZWFkcxgBIAEoBToC",
+            "LTESIgoaZW5hYmxlX3plcm9fY29weV90ZW5zb3JfaW8YByABKAhKBAgDEARC",
+            "CgoIZGVsZWdhdGUaiAYKEUlucHV0T3V0cHV0Q29uZmlnEmwKGGlucHV0X3Rl",
+            "bnNvcl9pbmRpY2VzX21hcBgBIAEoCzJILm1lZGlhcGlwZS5JbmZlcmVuY2VD",
+            "YWxjdWxhdG9yT3B0aW9ucy5JbnB1dE91dHB1dENvbmZpZy5UZW5zb3JJbmRp",
+            "Y2VzTWFwSAASaAoWaW5wdXRfdGVuc29yX25hbWVzX21hcBgDIAEoCzJGLm1l",
+            "ZGlhcGlwZS5JbmZlcmVuY2VDYWxjdWxhdG9yT3B0aW9ucy5JbnB1dE91dHB1",
+            "dENvbmZpZy5UZW5zb3JOYW1lc01hcEgAEm0KGW91dHB1dF90ZW5zb3JfaW5k",
+            "aWNlc19tYXAYAiABKAsySC5tZWRpYXBpcGUuSW5mZXJlbmNlQ2FsY3VsYXRv",
+            "ck9wdGlvbnMuSW5wdXRPdXRwdXRDb25maWcuVGVuc29ySW5kaWNlc01hcEgB",
+            "EmkKF291dHB1dF90ZW5zb3JfbmFtZXNfbWFwGAQgASgLMkYubWVkaWFwaXBl",
+            "LkluZmVyZW5jZUNhbGN1bGF0b3JPcHRpb25zLklucHV0T3V0cHV0Q29uZmln",
+            "LlRlbnNvck5hbWVzTWFwSAESaQoVZmVlZGJhY2tfdGVuc29yX2xpbmtzGAUg",
+            "AygLMkoubWVkaWFwaXBlLkluZmVyZW5jZUNhbGN1bGF0b3JPcHRpb25zLklu",
+            "cHV0T3V0cHV0Q29uZmlnLkZlZWRiYWNrVGVuc29yTGluaxo0ChBUZW5zb3JJ",
+            "bmRpY2VzTWFwEiAKFG1vZGVsX3RlbnNvcl9pbmRpY2VzGAEgAygFQgIQARom",
+            "Cg5UZW5zb3JOYW1lc01hcBIUCgx0ZW5zb3JfbmFtZXMYASADKAkaUwoSRmVl",
+            "ZGJhY2tUZW5zb3JMaW5rEh8KF2Zyb21fb3V0cHV0X3RlbnNvcl9uYW1lGAEg",
+            "ASgJEhwKFHRvX2lucHV0X3RlbnNvcl9uYW1lGAIgASgJQhAKDklucHV0VGVu",
+            "c29yTWFwQhEKD091dHB1dFRlbnNvck1hcDJUCgNleHQSHC5tZWRpYXBpcGUu",
             "Q2FsY3VsYXRvck9wdGlvbnMY99PLoAEgASgLMiUubWVkaWFwaXBlLkluZmVy",
             "ZW5jZUNhbGN1bGF0b3JPcHRpb25zQkEKJWNvbS5nb29nbGUubWVkaWFwaXBl",
             "LmNhbGN1bGF0b3IucHJvdG9CGEluZmVyZW5jZUNhbGN1bGF0b3JQcm90bw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Mediapipe.CalculatorReflection.Descriptor, global::Mediapipe.CalculatorOptionsReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions), global::Mediapipe.InferenceCalculatorOptions.Parser, new[]{ "ModelPath", "UseGpu", "UseNnapi", "CpuNumThread", "Delegate" }, null, null, new pb::Extension[] { global::Mediapipe.InferenceCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate), global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Parser, new[]{ "Tflite", "Gpu", "Nnapi", "Xnnpack" }, new[]{ "Delegate" }, null, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.TfLite), global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.TfLite.Parser, null, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu), global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Parser, new[]{ "UseAdvancedGpuApi", "Api", "AllowPrecisionLoss", "CachedKernelPath", "SerializedModelDir", "ModelToken", "Usage" }, null, new[]{ typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.Api), typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.InferenceUsage) }, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions), global::Mediapipe.InferenceCalculatorOptions.Parser, new[]{ "ModelPath", "TryMmapModel", "UseGpu", "UseNnapi", "CpuNumThread", "Delegate", "InputOutputConfig" }, null, null, new pb::Extension[] { global::Mediapipe.InferenceCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate), global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Parser, new[]{ "Tflite", "Gpu", "Nnapi", "Xnnpack" }, new[]{ "Delegate" }, null, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.TfLite), global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.TfLite.Parser, null, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu), global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Parser, new[]{ "UseAdvancedGpuApi", "Api", "AllowPrecisionLoss", "CachedKernelPath", "SerializedModelDir", "CacheWritingBehavior", "ModelToken", "Usage" }, null, new[]{ typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.Api), typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.CacheWritingBehavior), typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.InferenceUsage) }, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Nnapi), global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Nnapi.Parser, new[]{ "CacheDir", "ModelToken", "AcceleratorName" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Xnnpack), global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Xnnpack.Parser, new[]{ "NumThreads" }, null, null, null, null)})})
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Xnnpack), global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Xnnpack.Parser, new[]{ "NumThreads", "EnableZeroCopyTensorIo" }, null, null, null, null)}),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig), global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Parser, new[]{ "InputTensorIndicesMap", "InputTensorNamesMap", "OutputTensorIndicesMap", "OutputTensorNamesMap", "FeedbackTensorLinks" }, new[]{ "InputTensorMap", "OutputTensorMap" }, null, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap), global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap.Parser, new[]{ "ModelTensorIndices" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap), global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap.Parser, new[]{ "TensorNames" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.FeedbackTensorLink), global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.FeedbackTensorLink.Parser, new[]{ "FromOutputTensorName", "ToInputTensorName" }, null, null, null, null)})})
           }));
     }
     #endregion
@@ -78,6 +106,7 @@ namespace Mediapipe {
   ///   options {
   ///     [mediapipe.InferenceCalculatorOptions.ext] {
   ///       model_path: "model.tflite"
+  ///       try_mmap_model: true
   ///       delegate { gpu {} }
   ///     }
   ///   }
@@ -120,10 +149,12 @@ namespace Mediapipe {
     public InferenceCalculatorOptions(InferenceCalculatorOptions other) : this() {
       _hasBits0 = other._hasBits0;
       modelPath_ = other.modelPath_;
+      tryMmapModel_ = other.tryMmapModel_;
       useGpu_ = other.useGpu_;
       useNnapi_ = other.useNnapi_;
       cpuNumThread_ = other.cpuNumThread_;
       delegate_ = other.delegate_ != null ? other.delegate_.Clone() : null;
+      inputOutputConfig_ = other.inputOutputConfig_ != null ? other.inputOutputConfig_.Clone() : null;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -161,6 +192,39 @@ namespace Mediapipe {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public void ClearModelPath() {
       modelPath_ = null;
+    }
+
+    /// <summary>Field number for the "try_mmap_model" field.</summary>
+    public const int TryMmapModelFieldNumber = 7;
+    private readonly static bool TryMmapModelDefaultValue = false;
+
+    private bool tryMmapModel_;
+    /// <summary>
+    /// If true, and model_path is specified, tries to load the model as memory
+    /// mapped file if available. This can be significantly faster that loading the
+    /// model into a buffer first. If memory mapping is not available or fails,
+    /// falls back to loading from buffer.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool TryMmapModel {
+      get { if ((_hasBits0 & 8) != 0) { return tryMmapModel_; } else { return TryMmapModelDefaultValue; } }
+      set {
+        _hasBits0 |= 8;
+        tryMmapModel_ = value;
+      }
+    }
+    /// <summary>Gets whether the "try_mmap_model" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasTryMmapModel {
+      get { return (_hasBits0 & 8) != 0; }
+    }
+    /// <summary>Clears the value of the "try_mmap_model" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearTryMmapModel() {
+      _hasBits0 &= ~8;
     }
 
     /// <summary>Field number for the "use_gpu" field.</summary>
@@ -288,6 +352,22 @@ namespace Mediapipe {
       }
     }
 
+    /// <summary>Field number for the "input_output_config" field.</summary>
+    public const int InputOutputConfigFieldNumber = 8;
+    private global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig inputOutputConfig_;
+    /// <summary>
+    /// Optionally remaps input and output tensors to align with TfLite model and
+    /// InferenceCalculator input/output stream order.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig InputOutputConfig {
+      get { return inputOutputConfig_; }
+      set {
+        inputOutputConfig_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -304,10 +384,12 @@ namespace Mediapipe {
         return true;
       }
       if (ModelPath != other.ModelPath) return false;
+      if (TryMmapModel != other.TryMmapModel) return false;
       if (UseGpu != other.UseGpu) return false;
       if (UseNnapi != other.UseNnapi) return false;
       if (CpuNumThread != other.CpuNumThread) return false;
       if (!object.Equals(Delegate, other.Delegate)) return false;
+      if (!object.Equals(InputOutputConfig, other.InputOutputConfig)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -316,10 +398,12 @@ namespace Mediapipe {
     public override int GetHashCode() {
       int hash = 1;
       if (HasModelPath) hash ^= ModelPath.GetHashCode();
+      if (HasTryMmapModel) hash ^= TryMmapModel.GetHashCode();
       if (HasUseGpu) hash ^= UseGpu.GetHashCode();
       if (HasUseNnapi) hash ^= UseNnapi.GetHashCode();
       if (HasCpuNumThread) hash ^= CpuNumThread.GetHashCode();
       if (delegate_ != null) hash ^= Delegate.GetHashCode();
+      if (inputOutputConfig_ != null) hash ^= InputOutputConfig.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -358,6 +442,14 @@ namespace Mediapipe {
         output.WriteRawTag(42);
         output.WriteMessage(Delegate);
       }
+      if (HasTryMmapModel) {
+        output.WriteRawTag(56);
+        output.WriteBool(TryMmapModel);
+      }
+      if (inputOutputConfig_ != null) {
+        output.WriteRawTag(66);
+        output.WriteMessage(InputOutputConfig);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -388,6 +480,14 @@ namespace Mediapipe {
         output.WriteRawTag(42);
         output.WriteMessage(Delegate);
       }
+      if (HasTryMmapModel) {
+        output.WriteRawTag(56);
+        output.WriteBool(TryMmapModel);
+      }
+      if (inputOutputConfig_ != null) {
+        output.WriteRawTag(66);
+        output.WriteMessage(InputOutputConfig);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -401,6 +501,9 @@ namespace Mediapipe {
       if (HasModelPath) {
         size += 1 + pb::CodedOutputStream.ComputeStringSize(ModelPath);
       }
+      if (HasTryMmapModel) {
+        size += 1 + 1;
+      }
       if (HasUseGpu) {
         size += 1 + 1;
       }
@@ -412,6 +515,9 @@ namespace Mediapipe {
       }
       if (delegate_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(Delegate);
+      }
+      if (inputOutputConfig_ != null) {
+        size += 1 + pb::CodedOutputStream.ComputeMessageSize(InputOutputConfig);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -428,6 +534,9 @@ namespace Mediapipe {
       if (other.HasModelPath) {
         ModelPath = other.ModelPath;
       }
+      if (other.HasTryMmapModel) {
+        TryMmapModel = other.TryMmapModel;
+      }
       if (other.HasUseGpu) {
         UseGpu = other.UseGpu;
       }
@@ -442,6 +551,12 @@ namespace Mediapipe {
           Delegate = new global::Mediapipe.InferenceCalculatorOptions.Types.Delegate();
         }
         Delegate.MergeFrom(other.Delegate);
+      }
+      if (other.inputOutputConfig_ != null) {
+        if (inputOutputConfig_ == null) {
+          InputOutputConfig = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig();
+        }
+        InputOutputConfig.MergeFrom(other.InputOutputConfig);
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -481,6 +596,17 @@ namespace Mediapipe {
             input.ReadMessage(Delegate);
             break;
           }
+          case 56: {
+            TryMmapModel = input.ReadBool();
+            break;
+          }
+          case 66: {
+            if (inputOutputConfig_ == null) {
+              InputOutputConfig = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig();
+            }
+            input.ReadMessage(InputOutputConfig);
+            break;
+          }
         }
       }
     #endif
@@ -517,6 +643,17 @@ namespace Mediapipe {
               Delegate = new global::Mediapipe.InferenceCalculatorOptions.Types.Delegate();
             }
             input.ReadMessage(Delegate);
+            break;
+          }
+          case 56: {
+            TryMmapModel = input.ReadBool();
+            break;
+          }
+          case 66: {
+            if (inputOutputConfig_ == null) {
+              InputOutputConfig = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig();
+            }
+            input.ReadMessage(InputOutputConfig);
             break;
           }
         }
@@ -1123,6 +1260,7 @@ namespace Mediapipe {
               allowPrecisionLoss_ = other.allowPrecisionLoss_;
               cachedKernelPath_ = other.cachedKernelPath_;
               serializedModelDir_ = other.serializedModelDir_;
+              cacheWritingBehavior_ = other.cacheWritingBehavior_;
               modelToken_ = other.modelToken_;
               usage_ = other.usage_;
               _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
@@ -1233,13 +1371,21 @@ namespace Mediapipe {
             private string cachedKernelPath_;
             /// <summary>
             /// Load pre-compiled serialized binary cache to accelerate init process.
-            /// Only available for OpenCL delegate on Android.
+            ///
             /// Kernel caching will only be enabled if this path is set.
+            ///
+            /// NOTE: available for OpenCL delegate on Android only when
+            /// "use_advanced_gpu_api" is set  to true and either "model_path" or
+            /// "model_token" is specified saving to:
+            /// $cached_kernel_path/basename($model_path).ker
+            /// or
+            /// $cached_kernel_path/$model_token.ker if model_path is not specified.
+            /// TODO b/330806422 - update to prefer model_token
             ///
             /// NOTE: binary cache usage may be skipped if valid serialized model,
             /// specified by "serialized_model_dir", exists.
             ///
-            /// TODO: update to cached_kernel_dir
+            /// TODO b/202767296 - update to cached_kernel_dir
             /// </summary>
             [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
             [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -1298,6 +1444,36 @@ namespace Mediapipe {
             [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
             public void ClearSerializedModelDir() {
               serializedModelDir_ = null;
+            }
+
+            /// <summary>Field number for the "cache_writing_behavior" field.</summary>
+            public const int CacheWritingBehaviorFieldNumber = 10;
+            private readonly static global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.CacheWritingBehavior CacheWritingBehaviorDefaultValue = global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.CacheWritingBehavior.WriteOrError;
+
+            private global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.CacheWritingBehavior cacheWritingBehavior_;
+            /// <summary>
+            /// Specifies how GPU caches are written to disk.
+            /// </summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.CacheWritingBehavior CacheWritingBehavior {
+              get { if ((_hasBits0 & 16) != 0) { return cacheWritingBehavior_; } else { return CacheWritingBehaviorDefaultValue; } }
+              set {
+                _hasBits0 |= 16;
+                cacheWritingBehavior_ = value;
+              }
+            }
+            /// <summary>Gets whether the "cache_writing_behavior" field is set</summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public bool HasCacheWritingBehavior {
+              get { return (_hasBits0 & 16) != 0; }
+            }
+            /// <summary>Clears the value of the "cache_writing_behavior" field</summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void ClearCacheWritingBehavior() {
+              _hasBits0 &= ~16;
             }
 
             /// <summary>Field number for the "model_token" field.</summary>
@@ -1378,6 +1554,7 @@ namespace Mediapipe {
               if (AllowPrecisionLoss != other.AllowPrecisionLoss) return false;
               if (CachedKernelPath != other.CachedKernelPath) return false;
               if (SerializedModelDir != other.SerializedModelDir) return false;
+              if (CacheWritingBehavior != other.CacheWritingBehavior) return false;
               if (ModelToken != other.ModelToken) return false;
               if (Usage != other.Usage) return false;
               return Equals(_unknownFields, other._unknownFields);
@@ -1392,6 +1569,7 @@ namespace Mediapipe {
               if (HasAllowPrecisionLoss) hash ^= AllowPrecisionLoss.GetHashCode();
               if (HasCachedKernelPath) hash ^= CachedKernelPath.GetHashCode();
               if (HasSerializedModelDir) hash ^= SerializedModelDir.GetHashCode();
+              if (HasCacheWritingBehavior) hash ^= CacheWritingBehavior.GetHashCode();
               if (HasModelToken) hash ^= ModelToken.GetHashCode();
               if (HasUsage) hash ^= Usage.GetHashCode();
               if (_unknownFields != null) {
@@ -1440,6 +1618,10 @@ namespace Mediapipe {
                 output.WriteRawTag(66);
                 output.WriteString(ModelToken);
               }
+              if (HasCacheWritingBehavior) {
+                output.WriteRawTag(80);
+                output.WriteEnum((int) CacheWritingBehavior);
+              }
               if (_unknownFields != null) {
                 _unknownFields.WriteTo(output);
               }
@@ -1478,6 +1660,10 @@ namespace Mediapipe {
                 output.WriteRawTag(66);
                 output.WriteString(ModelToken);
               }
+              if (HasCacheWritingBehavior) {
+                output.WriteRawTag(80);
+                output.WriteEnum((int) CacheWritingBehavior);
+              }
               if (_unknownFields != null) {
                 _unknownFields.WriteTo(ref output);
               }
@@ -1502,6 +1688,9 @@ namespace Mediapipe {
               }
               if (HasSerializedModelDir) {
                 size += 1 + pb::CodedOutputStream.ComputeStringSize(SerializedModelDir);
+              }
+              if (HasCacheWritingBehavior) {
+                size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) CacheWritingBehavior);
               }
               if (HasModelToken) {
                 size += 1 + pb::CodedOutputStream.ComputeStringSize(ModelToken);
@@ -1535,6 +1724,9 @@ namespace Mediapipe {
               }
               if (other.HasSerializedModelDir) {
                 SerializedModelDir = other.SerializedModelDir;
+              }
+              if (other.HasCacheWritingBehavior) {
+                CacheWritingBehavior = other.CacheWritingBehavior;
               }
               if (other.HasModelToken) {
                 ModelToken = other.ModelToken;
@@ -1585,6 +1777,10 @@ namespace Mediapipe {
                     ModelToken = input.ReadString();
                     break;
                   }
+                  case 80: {
+                    CacheWritingBehavior = (global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.CacheWritingBehavior) input.ReadEnum();
+                    break;
+                  }
                 }
               }
             #endif
@@ -1628,6 +1824,10 @@ namespace Mediapipe {
                     ModelToken = input.ReadString();
                     break;
                   }
+                  case 80: {
+                    CacheWritingBehavior = (global::Mediapipe.InferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.CacheWritingBehavior) input.ReadEnum();
+                    break;
+                  }
                 }
               }
             }
@@ -1646,6 +1846,21 @@ namespace Mediapipe {
                 [pbr::OriginalName("ANY")] Any = 0,
                 [pbr::OriginalName("OPENGL")] Opengl = 1,
                 [pbr::OriginalName("OPENCL")] Opencl = 2,
+              }
+
+              public enum CacheWritingBehavior {
+                /// <summary>
+                /// Do not write any caches.
+                /// </summary>
+                [pbr::OriginalName("NO_WRITE")] NoWrite = 0,
+                /// <summary>
+                /// Try to write caches, log on failure.
+                /// </summary>
+                [pbr::OriginalName("TRY_WRITE")] TryWrite = 1,
+                /// <summary>
+                /// Write caches or return an error if write fails.
+                /// </summary>
+                [pbr::OriginalName("WRITE_OR_ERROR")] WriteOrError = 2,
               }
 
               /// <summary>
@@ -2028,6 +2243,7 @@ namespace Mediapipe {
             public Xnnpack(Xnnpack other) : this() {
               _hasBits0 = other._hasBits0;
               numThreads_ = other.numThreads_;
+              enableZeroCopyTensorIo_ = other.enableZeroCopyTensorIo_;
               _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
             }
 
@@ -2068,6 +2284,42 @@ namespace Mediapipe {
               _hasBits0 &= ~1;
             }
 
+            /// <summary>Field number for the "enable_zero_copy_tensor_io" field.</summary>
+            public const int EnableZeroCopyTensorIoFieldNumber = 7;
+            private readonly static bool EnableZeroCopyTensorIoDefaultValue = false;
+
+            private bool enableZeroCopyTensorIo_;
+            /// <summary>
+            /// Enables an experimental TfLite feature to directly access the MP input
+            /// tensors (and this way avoids copying the data). Note that this requires
+            /// *all* input tensors to be aligned to tflite::kDefaultTensorAlignment
+            /// bytes and that the model has no duplicate output tensors (tensors with
+            /// identical TfLite tensor indices) and no passthrough input->output
+            /// tensors (input and output tensors with identical TfLite tensor
+            /// indices).
+            /// </summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public bool EnableZeroCopyTensorIo {
+              get { if ((_hasBits0 & 2) != 0) { return enableZeroCopyTensorIo_; } else { return EnableZeroCopyTensorIoDefaultValue; } }
+              set {
+                _hasBits0 |= 2;
+                enableZeroCopyTensorIo_ = value;
+              }
+            }
+            /// <summary>Gets whether the "enable_zero_copy_tensor_io" field is set</summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public bool HasEnableZeroCopyTensorIo {
+              get { return (_hasBits0 & 2) != 0; }
+            }
+            /// <summary>Clears the value of the "enable_zero_copy_tensor_io" field</summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void ClearEnableZeroCopyTensorIo() {
+              _hasBits0 &= ~2;
+            }
+
             [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
             [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
             public override bool Equals(object other) {
@@ -2084,6 +2336,7 @@ namespace Mediapipe {
                 return true;
               }
               if (NumThreads != other.NumThreads) return false;
+              if (EnableZeroCopyTensorIo != other.EnableZeroCopyTensorIo) return false;
               return Equals(_unknownFields, other._unknownFields);
             }
 
@@ -2092,6 +2345,7 @@ namespace Mediapipe {
             public override int GetHashCode() {
               int hash = 1;
               if (HasNumThreads) hash ^= NumThreads.GetHashCode();
+              if (HasEnableZeroCopyTensorIo) hash ^= EnableZeroCopyTensorIo.GetHashCode();
               if (_unknownFields != null) {
                 hash ^= _unknownFields.GetHashCode();
               }
@@ -2114,6 +2368,10 @@ namespace Mediapipe {
                 output.WriteRawTag(8);
                 output.WriteInt32(NumThreads);
               }
+              if (HasEnableZeroCopyTensorIo) {
+                output.WriteRawTag(56);
+                output.WriteBool(EnableZeroCopyTensorIo);
+              }
               if (_unknownFields != null) {
                 _unknownFields.WriteTo(output);
               }
@@ -2128,6 +2386,10 @@ namespace Mediapipe {
                 output.WriteRawTag(8);
                 output.WriteInt32(NumThreads);
               }
+              if (HasEnableZeroCopyTensorIo) {
+                output.WriteRawTag(56);
+                output.WriteBool(EnableZeroCopyTensorIo);
+              }
               if (_unknownFields != null) {
                 _unknownFields.WriteTo(ref output);
               }
@@ -2140,6 +2402,9 @@ namespace Mediapipe {
               int size = 0;
               if (HasNumThreads) {
                 size += 1 + pb::CodedOutputStream.ComputeInt32Size(NumThreads);
+              }
+              if (HasEnableZeroCopyTensorIo) {
+                size += 1 + 1;
               }
               if (_unknownFields != null) {
                 size += _unknownFields.CalculateSize();
@@ -2155,6 +2420,9 @@ namespace Mediapipe {
               }
               if (other.HasNumThreads) {
                 NumThreads = other.NumThreads;
+              }
+              if (other.HasEnableZeroCopyTensorIo) {
+                EnableZeroCopyTensorIo = other.EnableZeroCopyTensorIo;
               }
               _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
             }
@@ -2175,6 +2443,10 @@ namespace Mediapipe {
                     NumThreads = input.ReadInt32();
                     break;
                   }
+                  case 56: {
+                    EnableZeroCopyTensorIo = input.ReadBool();
+                    break;
+                  }
                 }
               }
             #endif
@@ -2192,6 +2464,1168 @@ namespace Mediapipe {
                     break;
                   case 8: {
                     NumThreads = input.ReadInt32();
+                    break;
+                  }
+                  case 56: {
+                    EnableZeroCopyTensorIo = input.ReadBool();
+                    break;
+                  }
+                }
+              }
+            }
+            #endif
+
+          }
+
+        }
+        #endregion
+
+      }
+
+      /// <summary>
+      /// InputOutputConfig enables us to reorder the tensors in the input and output
+      /// of the InferenceCalculator. This is useful when the order of the tensors in
+      /// the input and output of the InferenceCalculator does not match the order of
+      /// the tensors in the input and output of the underlying TFLite model. In this
+      /// example, Tensor_1 and Tensor_2 are swapped.
+      ///
+      ///                 Inference Calculator Inputs
+      ///    ┌─────▼─────────▼─────────▼────────▼──────────▼──────────┐
+      ///    │  Tensor_0, Tensor_1, Tensor_2, Tensor_3, Tensor_4      │
+      ///    └────────────────────────────────────────────────────────┘
+      ///                      [input_tensor_map]
+      ///    ┌────────────────────────────────────────────────────────┐
+      ///    │  Tensor_0, Tensor_2, Tensor_1, Tensor_3, Tensor_4      │
+      ///    └─────┬─────────┬─────────┬────────┬──────────┬──────────┘
+      ///          │         │         │        │          │
+      ///    ┌─────▼─────────▼─────────▼────────▼──────────▼──────────┐
+      ///    │                       Inference                        │
+      ///    └─────┬─────────┬─────────┬────────┬──────────┬──────────┘
+      ///          │         │         │        │          │
+      ///    ┌─────▼─────────▼─────────▼────────▼──────────▼──────────┐
+      ///    │  Tensor_0, Tensor_2, Tensor_1, Tensor_3, Tensor_4      │
+      ///    └────────────────────────────────────────────────────────┘
+      ///                     [output_tensor_map]
+      ///    ┌────────────────────────────────────────────────────────┐
+      ///    │  Tensor_0, Tensor_1, Tensor_2, Tensor_3, Tensor_4      │
+      ///    └──────┬─────────┬─────────┬────────┬──────────┬─────────┘
+      ///           ▼         ▼         ▼        ▼          ▼
+      ///                 Inference Calculator Outputs
+      /// </summary>
+      public sealed partial class InputOutputConfig : pb::IMessage<InputOutputConfig>
+      #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+          , pb::IBufferMessage
+      #endif
+      {
+        private static readonly pb::MessageParser<InputOutputConfig> _parser = new pb::MessageParser<InputOutputConfig>(() => new InputOutputConfig());
+        private pb::UnknownFieldSet _unknownFields;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public static pb::MessageParser<InputOutputConfig> Parser { get { return _parser; } }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public static pbr::MessageDescriptor Descriptor {
+          get { return global::Mediapipe.InferenceCalculatorOptions.Descriptor.NestedTypes[1]; }
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        pbr::MessageDescriptor pb::IMessage.Descriptor {
+          get { return Descriptor; }
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public InputOutputConfig() {
+          OnConstruction();
+        }
+
+        partial void OnConstruction();
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public InputOutputConfig(InputOutputConfig other) : this() {
+          feedbackTensorLinks_ = other.feedbackTensorLinks_.Clone();
+          switch (other.InputTensorMapCase) {
+            case InputTensorMapOneofCase.InputTensorIndicesMap:
+              InputTensorIndicesMap = other.InputTensorIndicesMap.Clone();
+              break;
+            case InputTensorMapOneofCase.InputTensorNamesMap:
+              InputTensorNamesMap = other.InputTensorNamesMap.Clone();
+              break;
+          }
+
+          switch (other.OutputTensorMapCase) {
+            case OutputTensorMapOneofCase.OutputTensorIndicesMap:
+              OutputTensorIndicesMap = other.OutputTensorIndicesMap.Clone();
+              break;
+            case OutputTensorMapOneofCase.OutputTensorNamesMap:
+              OutputTensorNamesMap = other.OutputTensorNamesMap.Clone();
+              break;
+          }
+
+          _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public InputOutputConfig Clone() {
+          return new InputOutputConfig(this);
+        }
+
+        /// <summary>Field number for the "input_tensor_indices_map" field.</summary>
+        public const int InputTensorIndicesMapFieldNumber = 1;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap InputTensorIndicesMap {
+          get { return inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorIndicesMap ? (global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap) inputTensorMap_ : null; }
+          set {
+            inputTensorMap_ = value;
+            inputTensorMapCase_ = value == null ? InputTensorMapOneofCase.None : InputTensorMapOneofCase.InputTensorIndicesMap;
+          }
+        }
+
+        /// <summary>Field number for the "input_tensor_names_map" field.</summary>
+        public const int InputTensorNamesMapFieldNumber = 3;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap InputTensorNamesMap {
+          get { return inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorNamesMap ? (global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap) inputTensorMap_ : null; }
+          set {
+            inputTensorMap_ = value;
+            inputTensorMapCase_ = value == null ? InputTensorMapOneofCase.None : InputTensorMapOneofCase.InputTensorNamesMap;
+          }
+        }
+
+        /// <summary>Field number for the "output_tensor_indices_map" field.</summary>
+        public const int OutputTensorIndicesMapFieldNumber = 2;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap OutputTensorIndicesMap {
+          get { return outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorIndicesMap ? (global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap) outputTensorMap_ : null; }
+          set {
+            outputTensorMap_ = value;
+            outputTensorMapCase_ = value == null ? OutputTensorMapOneofCase.None : OutputTensorMapOneofCase.OutputTensorIndicesMap;
+          }
+        }
+
+        /// <summary>Field number for the "output_tensor_names_map" field.</summary>
+        public const int OutputTensorNamesMapFieldNumber = 4;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap OutputTensorNamesMap {
+          get { return outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorNamesMap ? (global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap) outputTensorMap_ : null; }
+          set {
+            outputTensorMap_ = value;
+            outputTensorMapCase_ = value == null ? OutputTensorMapOneofCase.None : OutputTensorMapOneofCase.OutputTensorNamesMap;
+          }
+        }
+
+        /// <summary>Field number for the "feedback_tensor_links" field.</summary>
+        public const int FeedbackTensorLinksFieldNumber = 5;
+        private static readonly pb::FieldCodec<global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.FeedbackTensorLink> _repeated_feedbackTensorLinks_codec
+            = pb::FieldCodec.ForMessage(42, global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.FeedbackTensorLink.Parser);
+        private readonly pbc::RepeatedField<global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.FeedbackTensorLink> feedbackTensorLinks_ = new pbc::RepeatedField<global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.FeedbackTensorLink>();
+        /// <summary>
+        /// Defines a mapping between output tensors that should be
+        /// used as input tensors during the next inference invocation.
+        /// </summary>
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public pbc::RepeatedField<global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.FeedbackTensorLink> FeedbackTensorLinks {
+          get { return feedbackTensorLinks_; }
+        }
+
+        private object inputTensorMap_;
+        /// <summary>Enum of possible cases for the "InputTensorMap" oneof.</summary>
+        public enum InputTensorMapOneofCase {
+          None = 0,
+          InputTensorIndicesMap = 1,
+          InputTensorNamesMap = 3,
+        }
+        private InputTensorMapOneofCase inputTensorMapCase_ = InputTensorMapOneofCase.None;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public InputTensorMapOneofCase InputTensorMapCase {
+          get { return inputTensorMapCase_; }
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void ClearInputTensorMap() {
+          inputTensorMapCase_ = InputTensorMapOneofCase.None;
+          inputTensorMap_ = null;
+        }
+
+        private object outputTensorMap_;
+        /// <summary>Enum of possible cases for the "OutputTensorMap" oneof.</summary>
+        public enum OutputTensorMapOneofCase {
+          None = 0,
+          OutputTensorIndicesMap = 2,
+          OutputTensorNamesMap = 4,
+        }
+        private OutputTensorMapOneofCase outputTensorMapCase_ = OutputTensorMapOneofCase.None;
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public OutputTensorMapOneofCase OutputTensorMapCase {
+          get { return outputTensorMapCase_; }
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void ClearOutputTensorMap() {
+          outputTensorMapCase_ = OutputTensorMapOneofCase.None;
+          outputTensorMap_ = null;
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public override bool Equals(object other) {
+          return Equals(other as InputOutputConfig);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public bool Equals(InputOutputConfig other) {
+          if (ReferenceEquals(other, null)) {
+            return false;
+          }
+          if (ReferenceEquals(other, this)) {
+            return true;
+          }
+          if (!object.Equals(InputTensorIndicesMap, other.InputTensorIndicesMap)) return false;
+          if (!object.Equals(InputTensorNamesMap, other.InputTensorNamesMap)) return false;
+          if (!object.Equals(OutputTensorIndicesMap, other.OutputTensorIndicesMap)) return false;
+          if (!object.Equals(OutputTensorNamesMap, other.OutputTensorNamesMap)) return false;
+          if(!feedbackTensorLinks_.Equals(other.feedbackTensorLinks_)) return false;
+          if (InputTensorMapCase != other.InputTensorMapCase) return false;
+          if (OutputTensorMapCase != other.OutputTensorMapCase) return false;
+          return Equals(_unknownFields, other._unknownFields);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public override int GetHashCode() {
+          int hash = 1;
+          if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorIndicesMap) hash ^= InputTensorIndicesMap.GetHashCode();
+          if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorNamesMap) hash ^= InputTensorNamesMap.GetHashCode();
+          if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorIndicesMap) hash ^= OutputTensorIndicesMap.GetHashCode();
+          if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorNamesMap) hash ^= OutputTensorNamesMap.GetHashCode();
+          hash ^= feedbackTensorLinks_.GetHashCode();
+          hash ^= (int) inputTensorMapCase_;
+          hash ^= (int) outputTensorMapCase_;
+          if (_unknownFields != null) {
+            hash ^= _unknownFields.GetHashCode();
+          }
+          return hash;
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public override string ToString() {
+          return pb::JsonFormatter.ToDiagnosticString(this);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void WriteTo(pb::CodedOutputStream output) {
+        #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+          output.WriteRawMessage(this);
+        #else
+          if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorIndicesMap) {
+            output.WriteRawTag(10);
+            output.WriteMessage(InputTensorIndicesMap);
+          }
+          if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorIndicesMap) {
+            output.WriteRawTag(18);
+            output.WriteMessage(OutputTensorIndicesMap);
+          }
+          if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorNamesMap) {
+            output.WriteRawTag(26);
+            output.WriteMessage(InputTensorNamesMap);
+          }
+          if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorNamesMap) {
+            output.WriteRawTag(34);
+            output.WriteMessage(OutputTensorNamesMap);
+          }
+          feedbackTensorLinks_.WriteTo(output, _repeated_feedbackTensorLinks_codec);
+          if (_unknownFields != null) {
+            _unknownFields.WriteTo(output);
+          }
+        #endif
+        }
+
+        #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+          if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorIndicesMap) {
+            output.WriteRawTag(10);
+            output.WriteMessage(InputTensorIndicesMap);
+          }
+          if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorIndicesMap) {
+            output.WriteRawTag(18);
+            output.WriteMessage(OutputTensorIndicesMap);
+          }
+          if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorNamesMap) {
+            output.WriteRawTag(26);
+            output.WriteMessage(InputTensorNamesMap);
+          }
+          if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorNamesMap) {
+            output.WriteRawTag(34);
+            output.WriteMessage(OutputTensorNamesMap);
+          }
+          feedbackTensorLinks_.WriteTo(ref output, _repeated_feedbackTensorLinks_codec);
+          if (_unknownFields != null) {
+            _unknownFields.WriteTo(ref output);
+          }
+        }
+        #endif
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public int CalculateSize() {
+          int size = 0;
+          if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorIndicesMap) {
+            size += 1 + pb::CodedOutputStream.ComputeMessageSize(InputTensorIndicesMap);
+          }
+          if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorNamesMap) {
+            size += 1 + pb::CodedOutputStream.ComputeMessageSize(InputTensorNamesMap);
+          }
+          if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorIndicesMap) {
+            size += 1 + pb::CodedOutputStream.ComputeMessageSize(OutputTensorIndicesMap);
+          }
+          if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorNamesMap) {
+            size += 1 + pb::CodedOutputStream.ComputeMessageSize(OutputTensorNamesMap);
+          }
+          size += feedbackTensorLinks_.CalculateSize(_repeated_feedbackTensorLinks_codec);
+          if (_unknownFields != null) {
+            size += _unknownFields.CalculateSize();
+          }
+          return size;
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void MergeFrom(InputOutputConfig other) {
+          if (other == null) {
+            return;
+          }
+          feedbackTensorLinks_.Add(other.feedbackTensorLinks_);
+          switch (other.InputTensorMapCase) {
+            case InputTensorMapOneofCase.InputTensorIndicesMap:
+              if (InputTensorIndicesMap == null) {
+                InputTensorIndicesMap = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap();
+              }
+              InputTensorIndicesMap.MergeFrom(other.InputTensorIndicesMap);
+              break;
+            case InputTensorMapOneofCase.InputTensorNamesMap:
+              if (InputTensorNamesMap == null) {
+                InputTensorNamesMap = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap();
+              }
+              InputTensorNamesMap.MergeFrom(other.InputTensorNamesMap);
+              break;
+          }
+
+          switch (other.OutputTensorMapCase) {
+            case OutputTensorMapOneofCase.OutputTensorIndicesMap:
+              if (OutputTensorIndicesMap == null) {
+                OutputTensorIndicesMap = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap();
+              }
+              OutputTensorIndicesMap.MergeFrom(other.OutputTensorIndicesMap);
+              break;
+            case OutputTensorMapOneofCase.OutputTensorNamesMap:
+              if (OutputTensorNamesMap == null) {
+                OutputTensorNamesMap = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap();
+              }
+              OutputTensorNamesMap.MergeFrom(other.OutputTensorNamesMap);
+              break;
+          }
+
+          _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+        }
+
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public void MergeFrom(pb::CodedInputStream input) {
+        #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+          input.ReadRawMessage(this);
+        #else
+          uint tag;
+          while ((tag = input.ReadTag()) != 0) {
+            switch(tag) {
+              default:
+                _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+                break;
+              case 10: {
+                global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap subBuilder = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap();
+                if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorIndicesMap) {
+                  subBuilder.MergeFrom(InputTensorIndicesMap);
+                }
+                input.ReadMessage(subBuilder);
+                InputTensorIndicesMap = subBuilder;
+                break;
+              }
+              case 18: {
+                global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap subBuilder = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap();
+                if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorIndicesMap) {
+                  subBuilder.MergeFrom(OutputTensorIndicesMap);
+                }
+                input.ReadMessage(subBuilder);
+                OutputTensorIndicesMap = subBuilder;
+                break;
+              }
+              case 26: {
+                global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap subBuilder = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap();
+                if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorNamesMap) {
+                  subBuilder.MergeFrom(InputTensorNamesMap);
+                }
+                input.ReadMessage(subBuilder);
+                InputTensorNamesMap = subBuilder;
+                break;
+              }
+              case 34: {
+                global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap subBuilder = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap();
+                if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorNamesMap) {
+                  subBuilder.MergeFrom(OutputTensorNamesMap);
+                }
+                input.ReadMessage(subBuilder);
+                OutputTensorNamesMap = subBuilder;
+                break;
+              }
+              case 42: {
+                feedbackTensorLinks_.AddEntriesFrom(input, _repeated_feedbackTensorLinks_codec);
+                break;
+              }
+            }
+          }
+        #endif
+        }
+
+        #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+          uint tag;
+          while ((tag = input.ReadTag()) != 0) {
+            switch(tag) {
+              default:
+                _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+                break;
+              case 10: {
+                global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap subBuilder = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap();
+                if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorIndicesMap) {
+                  subBuilder.MergeFrom(InputTensorIndicesMap);
+                }
+                input.ReadMessage(subBuilder);
+                InputTensorIndicesMap = subBuilder;
+                break;
+              }
+              case 18: {
+                global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap subBuilder = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorIndicesMap();
+                if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorIndicesMap) {
+                  subBuilder.MergeFrom(OutputTensorIndicesMap);
+                }
+                input.ReadMessage(subBuilder);
+                OutputTensorIndicesMap = subBuilder;
+                break;
+              }
+              case 26: {
+                global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap subBuilder = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap();
+                if (inputTensorMapCase_ == InputTensorMapOneofCase.InputTensorNamesMap) {
+                  subBuilder.MergeFrom(InputTensorNamesMap);
+                }
+                input.ReadMessage(subBuilder);
+                InputTensorNamesMap = subBuilder;
+                break;
+              }
+              case 34: {
+                global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap subBuilder = new global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Types.TensorNamesMap();
+                if (outputTensorMapCase_ == OutputTensorMapOneofCase.OutputTensorNamesMap) {
+                  subBuilder.MergeFrom(OutputTensorNamesMap);
+                }
+                input.ReadMessage(subBuilder);
+                OutputTensorNamesMap = subBuilder;
+                break;
+              }
+              case 42: {
+                feedbackTensorLinks_.AddEntriesFrom(ref input, _repeated_feedbackTensorLinks_codec);
+                break;
+              }
+            }
+          }
+        }
+        #endif
+
+        #region Nested types
+        /// <summary>Container for nested types declared in the InputOutputConfig message type.</summary>
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+        [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+        public static partial class Types {
+          /// <summary>
+          /// Defines tensor order described by the indices.
+          /// </summary>
+          public sealed partial class TensorIndicesMap : pb::IMessage<TensorIndicesMap>
+          #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+              , pb::IBufferMessage
+          #endif
+          {
+            private static readonly pb::MessageParser<TensorIndicesMap> _parser = new pb::MessageParser<TensorIndicesMap>(() => new TensorIndicesMap());
+            private pb::UnknownFieldSet _unknownFields;
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public static pb::MessageParser<TensorIndicesMap> Parser { get { return _parser; } }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public static pbr::MessageDescriptor Descriptor {
+              get { return global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Descriptor.NestedTypes[0]; }
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            pbr::MessageDescriptor pb::IMessage.Descriptor {
+              get { return Descriptor; }
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public TensorIndicesMap() {
+              OnConstruction();
+            }
+
+            partial void OnConstruction();
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public TensorIndicesMap(TensorIndicesMap other) : this() {
+              modelTensorIndices_ = other.modelTensorIndices_.Clone();
+              _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public TensorIndicesMap Clone() {
+              return new TensorIndicesMap(this);
+            }
+
+            /// <summary>Field number for the "model_tensor_indices" field.</summary>
+            public const int ModelTensorIndicesFieldNumber = 1;
+            private static readonly pb::FieldCodec<int> _repeated_modelTensorIndices_codec
+                = pb::FieldCodec.ForInt32(10);
+            private readonly pbc::RepeatedField<int> modelTensorIndices_ = new pbc::RepeatedField<int>();
+            /// <summary>
+            /// Ordered list of tensor indices describing a bijective mapping between
+            /// the InferenceCalculator tensor index and the TFLite model I/O index.
+            /// The nth entry in the list maps the nth InferenceCalculator tensor to
+            /// *[nth] model I/O index. The size of the list must match the number of
+            /// tensors in the input or output of the InferenceCalculator.
+            ///
+            /// Example configurations:
+            /// Input (Input&lt;std::vector&lt;Tensor>> or Input&lt;Tensor>::Multiple) config:
+            /// - Desired inference calculator input order: tensor0, tensor1, tensor2
+            /// - Given model tensor input order: [Tensor2, Tensor1, Tensor0]
+            /// - model_tensor_indices: [2, 1, 0]
+            /// Output (Output&lt;std::vector&lt;Tensor>> or Output&lt;Tensor>::Multiple)
+            /// config:
+            /// - Given model tensor output order: [Tensor2, Tensor1, Tensor0]
+            /// - Desired InferenceCalculator output order: tensor0, tensor1, tensor2
+            /// - model_tensor_indices: [2, 1, 0]
+            /// </summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public pbc::RepeatedField<int> ModelTensorIndices {
+              get { return modelTensorIndices_; }
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public override bool Equals(object other) {
+              return Equals(other as TensorIndicesMap);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public bool Equals(TensorIndicesMap other) {
+              if (ReferenceEquals(other, null)) {
+                return false;
+              }
+              if (ReferenceEquals(other, this)) {
+                return true;
+              }
+              if(!modelTensorIndices_.Equals(other.modelTensorIndices_)) return false;
+              return Equals(_unknownFields, other._unknownFields);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public override int GetHashCode() {
+              int hash = 1;
+              hash ^= modelTensorIndices_.GetHashCode();
+              if (_unknownFields != null) {
+                hash ^= _unknownFields.GetHashCode();
+              }
+              return hash;
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public override string ToString() {
+              return pb::JsonFormatter.ToDiagnosticString(this);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void WriteTo(pb::CodedOutputStream output) {
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+              output.WriteRawMessage(this);
+            #else
+              modelTensorIndices_.WriteTo(output, _repeated_modelTensorIndices_codec);
+              if (_unknownFields != null) {
+                _unknownFields.WriteTo(output);
+              }
+            #endif
+            }
+
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+              modelTensorIndices_.WriteTo(ref output, _repeated_modelTensorIndices_codec);
+              if (_unknownFields != null) {
+                _unknownFields.WriteTo(ref output);
+              }
+            }
+            #endif
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public int CalculateSize() {
+              int size = 0;
+              size += modelTensorIndices_.CalculateSize(_repeated_modelTensorIndices_codec);
+              if (_unknownFields != null) {
+                size += _unknownFields.CalculateSize();
+              }
+              return size;
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void MergeFrom(TensorIndicesMap other) {
+              if (other == null) {
+                return;
+              }
+              modelTensorIndices_.Add(other.modelTensorIndices_);
+              _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void MergeFrom(pb::CodedInputStream input) {
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+              input.ReadRawMessage(this);
+            #else
+              uint tag;
+              while ((tag = input.ReadTag()) != 0) {
+                switch(tag) {
+                  default:
+                    _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+                    break;
+                  case 10:
+                  case 8: {
+                    modelTensorIndices_.AddEntriesFrom(input, _repeated_modelTensorIndices_codec);
+                    break;
+                  }
+                }
+              }
+            #endif
+            }
+
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+              uint tag;
+              while ((tag = input.ReadTag()) != 0) {
+                switch(tag) {
+                  default:
+                    _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+                    break;
+                  case 10:
+                  case 8: {
+                    modelTensorIndices_.AddEntriesFrom(ref input, _repeated_modelTensorIndices_codec);
+                    break;
+                  }
+                }
+              }
+            }
+            #endif
+
+          }
+
+          /// <summary>
+          /// Defines tensor order described by the TfLite signature names.
+          /// </summary>
+          public sealed partial class TensorNamesMap : pb::IMessage<TensorNamesMap>
+          #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+              , pb::IBufferMessage
+          #endif
+          {
+            private static readonly pb::MessageParser<TensorNamesMap> _parser = new pb::MessageParser<TensorNamesMap>(() => new TensorNamesMap());
+            private pb::UnknownFieldSet _unknownFields;
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public static pb::MessageParser<TensorNamesMap> Parser { get { return _parser; } }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public static pbr::MessageDescriptor Descriptor {
+              get { return global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Descriptor.NestedTypes[1]; }
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            pbr::MessageDescriptor pb::IMessage.Descriptor {
+              get { return Descriptor; }
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public TensorNamesMap() {
+              OnConstruction();
+            }
+
+            partial void OnConstruction();
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public TensorNamesMap(TensorNamesMap other) : this() {
+              tensorNames_ = other.tensorNames_.Clone();
+              _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public TensorNamesMap Clone() {
+              return new TensorNamesMap(this);
+            }
+
+            /// <summary>Field number for the "tensor_names" field.</summary>
+            public const int TensorNamesFieldNumber = 1;
+            private static readonly pb::FieldCodec<string> _repeated_tensorNames_codec
+                = pb::FieldCodec.ForString(10);
+            private readonly pbc::RepeatedField<string> tensorNames_ = new pbc::RepeatedField<string>();
+            /// <summary>
+            /// Ordered list of tensor names describing a bijective mapping between
+            /// the InferenceCalculator tensor I/O index and the TFLite model I/O
+            /// tensor names (only models with a single signature are supported). The
+            /// nth entry in the list maps the nth InferenceCalculator I/O tensor. The
+            /// size of the list must match the number of tensors in the input or
+            /// output of the InferenceCalculator.
+            ///
+            /// Example configurations:
+            /// Input (Input&lt;std::vector&lt;Tensor>> or Input&lt;Tensor>::Multiple) config:
+            /// - Desired inference calculator input order: tensor0, tensor1, tensor2
+            /// - Given model tensor input order: [Tensor2, Tensor1, Tensor0]
+            /// - tensor_names_map: ["Tensor0", "Tensor1", "Tensor2"]
+            /// Output (Output&lt;std::vector&lt;Tensor>> or Output&lt;Tensor>::Multiple)
+            /// config:
+            /// - Given model tensor output order: [Tensor2, Tensor1, Tensor0]
+            /// - Desired InferenceCalculator output order: tensor0, tensor1, tensor2
+            /// - tensor_names_map: ["Tensor0", "Tensor1", "Tensor2"]
+            /// </summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public pbc::RepeatedField<string> TensorNames {
+              get { return tensorNames_; }
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public override bool Equals(object other) {
+              return Equals(other as TensorNamesMap);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public bool Equals(TensorNamesMap other) {
+              if (ReferenceEquals(other, null)) {
+                return false;
+              }
+              if (ReferenceEquals(other, this)) {
+                return true;
+              }
+              if(!tensorNames_.Equals(other.tensorNames_)) return false;
+              return Equals(_unknownFields, other._unknownFields);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public override int GetHashCode() {
+              int hash = 1;
+              hash ^= tensorNames_.GetHashCode();
+              if (_unknownFields != null) {
+                hash ^= _unknownFields.GetHashCode();
+              }
+              return hash;
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public override string ToString() {
+              return pb::JsonFormatter.ToDiagnosticString(this);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void WriteTo(pb::CodedOutputStream output) {
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+              output.WriteRawMessage(this);
+            #else
+              tensorNames_.WriteTo(output, _repeated_tensorNames_codec);
+              if (_unknownFields != null) {
+                _unknownFields.WriteTo(output);
+              }
+            #endif
+            }
+
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+              tensorNames_.WriteTo(ref output, _repeated_tensorNames_codec);
+              if (_unknownFields != null) {
+                _unknownFields.WriteTo(ref output);
+              }
+            }
+            #endif
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public int CalculateSize() {
+              int size = 0;
+              size += tensorNames_.CalculateSize(_repeated_tensorNames_codec);
+              if (_unknownFields != null) {
+                size += _unknownFields.CalculateSize();
+              }
+              return size;
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void MergeFrom(TensorNamesMap other) {
+              if (other == null) {
+                return;
+              }
+              tensorNames_.Add(other.tensorNames_);
+              _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void MergeFrom(pb::CodedInputStream input) {
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+              input.ReadRawMessage(this);
+            #else
+              uint tag;
+              while ((tag = input.ReadTag()) != 0) {
+                switch(tag) {
+                  default:
+                    _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+                    break;
+                  case 10: {
+                    tensorNames_.AddEntriesFrom(input, _repeated_tensorNames_codec);
+                    break;
+                  }
+                }
+              }
+            #endif
+            }
+
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+              uint tag;
+              while ((tag = input.ReadTag()) != 0) {
+                switch(tag) {
+                  default:
+                    _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+                    break;
+                  case 10: {
+                    tensorNames_.AddEntriesFrom(ref input, _repeated_tensorNames_codec);
+                    break;
+                  }
+                }
+              }
+            }
+            #endif
+
+          }
+
+          /// <summary>
+          /// Feedback tensor links are pairs of model input / output tensors where
+          /// the output should be set as inputs in the next model invocation. This
+          /// allows to manage a notion of temporal state by continuously feeding from
+          /// the model's output to the model's input during each inference step.  Note
+          /// that these feedback tensors must be excluded from the input/output
+          /// tensor maps above as they are not used as regular inputs/outputs of the
+          /// inference calculator.
+          /// </summary>
+          public sealed partial class FeedbackTensorLink : pb::IMessage<FeedbackTensorLink>
+          #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+              , pb::IBufferMessage
+          #endif
+          {
+            private static readonly pb::MessageParser<FeedbackTensorLink> _parser = new pb::MessageParser<FeedbackTensorLink>(() => new FeedbackTensorLink());
+            private pb::UnknownFieldSet _unknownFields;
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public static pb::MessageParser<FeedbackTensorLink> Parser { get { return _parser; } }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public static pbr::MessageDescriptor Descriptor {
+              get { return global::Mediapipe.InferenceCalculatorOptions.Types.InputOutputConfig.Descriptor.NestedTypes[2]; }
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            pbr::MessageDescriptor pb::IMessage.Descriptor {
+              get { return Descriptor; }
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public FeedbackTensorLink() {
+              OnConstruction();
+            }
+
+            partial void OnConstruction();
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public FeedbackTensorLink(FeedbackTensorLink other) : this() {
+              fromOutputTensorName_ = other.fromOutputTensorName_;
+              toInputTensorName_ = other.toInputTensorName_;
+              _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public FeedbackTensorLink Clone() {
+              return new FeedbackTensorLink(this);
+            }
+
+            /// <summary>Field number for the "from_output_tensor_name" field.</summary>
+            public const int FromOutputTensorNameFieldNumber = 1;
+            private readonly static string FromOutputTensorNameDefaultValue = "";
+
+            private string fromOutputTensorName_;
+            /// <summary>
+            /// TfLite output tensor name from default TfLite signature to use as
+            /// source.
+            /// </summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public string FromOutputTensorName {
+              get { return fromOutputTensorName_ ?? FromOutputTensorNameDefaultValue; }
+              set {
+                fromOutputTensorName_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+              }
+            }
+            /// <summary>Gets whether the "from_output_tensor_name" field is set</summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public bool HasFromOutputTensorName {
+              get { return fromOutputTensorName_ != null; }
+            }
+            /// <summary>Clears the value of the "from_output_tensor_name" field</summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void ClearFromOutputTensorName() {
+              fromOutputTensorName_ = null;
+            }
+
+            /// <summary>Field number for the "to_input_tensor_name" field.</summary>
+            public const int ToInputTensorNameFieldNumber = 2;
+            private readonly static string ToInputTensorNameDefaultValue = "";
+
+            private string toInputTensorName_;
+            /// <summary>
+            /// TfLite tensor name from default TfLitesignature to pass input
+            /// tensor to.
+            /// </summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public string ToInputTensorName {
+              get { return toInputTensorName_ ?? ToInputTensorNameDefaultValue; }
+              set {
+                toInputTensorName_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+              }
+            }
+            /// <summary>Gets whether the "to_input_tensor_name" field is set</summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public bool HasToInputTensorName {
+              get { return toInputTensorName_ != null; }
+            }
+            /// <summary>Clears the value of the "to_input_tensor_name" field</summary>
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void ClearToInputTensorName() {
+              toInputTensorName_ = null;
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public override bool Equals(object other) {
+              return Equals(other as FeedbackTensorLink);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public bool Equals(FeedbackTensorLink other) {
+              if (ReferenceEquals(other, null)) {
+                return false;
+              }
+              if (ReferenceEquals(other, this)) {
+                return true;
+              }
+              if (FromOutputTensorName != other.FromOutputTensorName) return false;
+              if (ToInputTensorName != other.ToInputTensorName) return false;
+              return Equals(_unknownFields, other._unknownFields);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public override int GetHashCode() {
+              int hash = 1;
+              if (HasFromOutputTensorName) hash ^= FromOutputTensorName.GetHashCode();
+              if (HasToInputTensorName) hash ^= ToInputTensorName.GetHashCode();
+              if (_unknownFields != null) {
+                hash ^= _unknownFields.GetHashCode();
+              }
+              return hash;
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public override string ToString() {
+              return pb::JsonFormatter.ToDiagnosticString(this);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void WriteTo(pb::CodedOutputStream output) {
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+              output.WriteRawMessage(this);
+            #else
+              if (HasFromOutputTensorName) {
+                output.WriteRawTag(10);
+                output.WriteString(FromOutputTensorName);
+              }
+              if (HasToInputTensorName) {
+                output.WriteRawTag(18);
+                output.WriteString(ToInputTensorName);
+              }
+              if (_unknownFields != null) {
+                _unknownFields.WriteTo(output);
+              }
+            #endif
+            }
+
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+              if (HasFromOutputTensorName) {
+                output.WriteRawTag(10);
+                output.WriteString(FromOutputTensorName);
+              }
+              if (HasToInputTensorName) {
+                output.WriteRawTag(18);
+                output.WriteString(ToInputTensorName);
+              }
+              if (_unknownFields != null) {
+                _unknownFields.WriteTo(ref output);
+              }
+            }
+            #endif
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public int CalculateSize() {
+              int size = 0;
+              if (HasFromOutputTensorName) {
+                size += 1 + pb::CodedOutputStream.ComputeStringSize(FromOutputTensorName);
+              }
+              if (HasToInputTensorName) {
+                size += 1 + pb::CodedOutputStream.ComputeStringSize(ToInputTensorName);
+              }
+              if (_unknownFields != null) {
+                size += _unknownFields.CalculateSize();
+              }
+              return size;
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void MergeFrom(FeedbackTensorLink other) {
+              if (other == null) {
+                return;
+              }
+              if (other.HasFromOutputTensorName) {
+                FromOutputTensorName = other.FromOutputTensorName;
+              }
+              if (other.HasToInputTensorName) {
+                ToInputTensorName = other.ToInputTensorName;
+              }
+              _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+            }
+
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            public void MergeFrom(pb::CodedInputStream input) {
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+              input.ReadRawMessage(this);
+            #else
+              uint tag;
+              while ((tag = input.ReadTag()) != 0) {
+                switch(tag) {
+                  default:
+                    _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+                    break;
+                  case 10: {
+                    FromOutputTensorName = input.ReadString();
+                    break;
+                  }
+                  case 18: {
+                    ToInputTensorName = input.ReadString();
+                    break;
+                  }
+                }
+              }
+            #endif
+            }
+
+            #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+            [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+            [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+            void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+              uint tag;
+              while ((tag = input.ReadTag()) != 0) {
+                switch(tag) {
+                  default:
+                    _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+                    break;
+                  case 10: {
+                    FromOutputTensorName = input.ReadString();
+                    break;
+                  }
+                  case 18: {
+                    ToInputTensorName = input.ReadString();
                     break;
                   }
                 }

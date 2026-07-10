@@ -98,7 +98,7 @@ namespace Mediapipe {
 
     private float minScoreThreshold_;
     /// <summary>
-    /// Score threshold for perserving the class.
+    /// Score threshold for preserving the class.
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]

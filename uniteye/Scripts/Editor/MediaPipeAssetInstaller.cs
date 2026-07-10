@@ -16,13 +16,11 @@ public static class MediaPipeAssetInstaller
 {
     const string PackageResources = "Packages/com.github.homuler.mediapipe/PackageResources/MediaPipe";
 
-    // The FaceMesh (+iris via the attention model) path requests exactly these; face_landmark.bytes is
-    // the non-attention fallback in case refineLandmarks is turned off.
+    // The Task API (FaceLandmarker) loads a single self-contained .task bundle. face_landmarker_v2
+    // includes the face detector + 478-landmark model with iris, so it's the only model UnitEye needs.
     static readonly string[] RequiredAssets =
     {
-        "face_detection_short_range.bytes",
-        "face_landmark_with_attention.bytes",
-        "face_landmark.bytes",
+        "face_landmarker_v2.bytes",
     };
 
     [MenuItem("UnitEye/Install MediaPipe StreamingAssets")]

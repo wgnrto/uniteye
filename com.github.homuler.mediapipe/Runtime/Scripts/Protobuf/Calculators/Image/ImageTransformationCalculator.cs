@@ -28,7 +28,7 @@ namespace Mediapipe {
             "YXRpb25fY2FsY3VsYXRvci5wcm90bxIJbWVkaWFwaXBlGi9tZWRpYXBpcGUv",
             "Y2FsY3VsYXRvcnMvaW1hZ2Uvcm90YXRpb25fbW9kZS5wcm90bxokbWVkaWFw",
             "aXBlL2ZyYW1ld29yay9jYWxjdWxhdG9yLnByb3RvGh5tZWRpYXBpcGUvZ3B1",
-            "L3NjYWxlX21vZGUucHJvdG8iiAQKJEltYWdlVHJhbnNmb3JtYXRpb25DYWxj",
+            "L3NjYWxlX21vZGUucHJvdG8iogUKJEltYWdlVHJhbnNmb3JtYXRpb25DYWxj",
             "dWxhdG9yT3B0aW9ucxIXCgxvdXRwdXRfd2lkdGgYASABKAU6ATASGAoNb3V0",
             "cHV0X2hlaWdodBgCIAEoBToBMBIzCg1yb3RhdGlvbl9tb2RlGAMgASgOMhwu",
             "bWVkaWFwaXBlLlJvdGF0aW9uTW9kZS5Nb2RlEh4KD2ZsaXBfdmVydGljYWxs",
@@ -36,16 +36,20 @@ namespace Mediapipe {
             "bHNlEi0KCnNjYWxlX21vZGUYBiABKA4yGS5tZWRpYXBpcGUuU2NhbGVNb2Rl",
             "Lk1vZGUSHgoQY29uc3RhbnRfcGFkZGluZxgHIAEoCDoEdHJ1ZRJMCg1wYWRk",
             "aW5nX2NvbG9yGAggASgLMjUubWVkaWFwaXBlLkltYWdlVHJhbnNmb3JtYXRp",
-            "b25DYWxjdWxhdG9yT3B0aW9ucy5Db2xvcho6CgVDb2xvchIOCgNyZWQYASAB",
-            "KAU6ATASEAoFZ3JlZW4YAiABKAU6ATASDwoEYmx1ZRgDIAEoBToBMDJdCgNl",
-            "eHQSHC5tZWRpYXBpcGUuQ2FsY3VsYXRvck9wdGlvbnMYvv2ReCABKAsyLy5t",
-            "ZWRpYXBpcGUuSW1hZ2VUcmFuc2Zvcm1hdGlvbkNhbGN1bGF0b3JPcHRpb25z",
-            "QlIKJWNvbS5nb29nbGUubWVkaWFwaXBlLmNhbGN1bGF0b3IucHJvdG9CKUlt",
-            "YWdlVHJhbnNmb3JtYXRpb25DYWxjdWxhdG9yT3B0aW9uc1Byb3Rv"));
+            "b25DYWxjdWxhdG9yT3B0aW9ucy5Db2xvchJdChJpbnRlcnBvbGF0aW9uX21v",
+            "ZGUYCSABKA4yQS5tZWRpYXBpcGUuSW1hZ2VUcmFuc2Zvcm1hdGlvbkNhbGN1",
+            "bGF0b3JPcHRpb25zLkludGVycG9sYXRpb25Nb2RlGjoKBUNvbG9yEg4KA3Jl",
+            "ZBgBIAEoBToBMBIQCgVncmVlbhgCIAEoBToBMBIPCgRibHVlGAMgASgFOgEw",
+            "IjkKEUludGVycG9sYXRpb25Nb2RlEgsKB0RFRkFVTFQQABIKCgZMSU5FQVIQ",
+            "ARILCgdORUFSRVNUEAIyXQoDZXh0EhwubWVkaWFwaXBlLkNhbGN1bGF0b3JP",
+            "cHRpb25zGL79kXggASgLMi8ubWVkaWFwaXBlLkltYWdlVHJhbnNmb3JtYXRp",
+            "b25DYWxjdWxhdG9yT3B0aW9uc0JSCiVjb20uZ29vZ2xlLm1lZGlhcGlwZS5j",
+            "YWxjdWxhdG9yLnByb3RvQilJbWFnZVRyYW5zZm9ybWF0aW9uQ2FsY3VsYXRv",
+            "ck9wdGlvbnNQcm90bw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Mediapipe.RotationModeReflection.Descriptor, global::Mediapipe.CalculatorReflection.Descriptor, global::Mediapipe.ScaleModeReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ImageTransformationCalculatorOptions), global::Mediapipe.ImageTransformationCalculatorOptions.Parser, new[]{ "OutputWidth", "OutputHeight", "RotationMode", "FlipVertically", "FlipHorizontally", "ScaleMode", "ConstantPadding", "PaddingColor" }, null, null, new pb::Extension[] { global::Mediapipe.ImageTransformationCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ImageTransformationCalculatorOptions.Types.Color), global::Mediapipe.ImageTransformationCalculatorOptions.Types.Color.Parser, new[]{ "Red", "Green", "Blue" }, null, null, null, null)})
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ImageTransformationCalculatorOptions), global::Mediapipe.ImageTransformationCalculatorOptions.Parser, new[]{ "OutputWidth", "OutputHeight", "RotationMode", "FlipVertically", "FlipHorizontally", "ScaleMode", "ConstantPadding", "PaddingColor", "InterpolationMode" }, null, new[]{ typeof(global::Mediapipe.ImageTransformationCalculatorOptions.Types.InterpolationMode) }, new pb::Extension[] { global::Mediapipe.ImageTransformationCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.ImageTransformationCalculatorOptions.Types.Color), global::Mediapipe.ImageTransformationCalculatorOptions.Types.Color.Parser, new[]{ "Red", "Green", "Blue" }, null, null, null, null)})
           }));
     }
     #endregion
@@ -96,6 +100,7 @@ namespace Mediapipe {
       scaleMode_ = other.scaleMode_;
       constantPadding_ = other.constantPadding_;
       paddingColor_ = other.paddingColor_ != null ? other.paddingColor_.Clone() : null;
+      interpolationMode_ = other.interpolationMode_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -288,9 +293,10 @@ namespace Mediapipe {
 
     private bool constantPadding_;
     /// <summary>
-    /// Padding type. This option is only used when the scale mode is FIT.
-    /// Default is to use BORDER_CONSTANT. If set to false, it will use
-    /// BORDER_REPLICATE instead.
+    /// Padding type. This option is only used when the scale mode is FIT. If set
+    /// to true (default), a constant border is added with color specified by
+    /// padding_color. If set to false, a border is added by replicating edge
+    /// pixels (only supported for CPU).
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -319,7 +325,7 @@ namespace Mediapipe {
     private global::Mediapipe.ImageTransformationCalculatorOptions.Types.Color paddingColor_;
     /// <summary>
     /// The color for the padding. This option is only used when the scale mode is
-    /// FIT. Default is black. This is for CPU only.
+    /// FIT. Default is black.
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -328,6 +334,36 @@ namespace Mediapipe {
       set {
         paddingColor_ = value;
       }
+    }
+
+    /// <summary>Field number for the "interpolation_mode" field.</summary>
+    public const int InterpolationModeFieldNumber = 9;
+    private readonly static global::Mediapipe.ImageTransformationCalculatorOptions.Types.InterpolationMode InterpolationModeDefaultValue = global::Mediapipe.ImageTransformationCalculatorOptions.Types.InterpolationMode.Default;
+
+    private global::Mediapipe.ImageTransformationCalculatorOptions.Types.InterpolationMode interpolationMode_;
+    /// <summary>
+    /// Mode DEFAULT will use LINEAR interpolation.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Mediapipe.ImageTransformationCalculatorOptions.Types.InterpolationMode InterpolationMode {
+      get { if ((_hasBits0 & 128) != 0) { return interpolationMode_; } else { return InterpolationModeDefaultValue; } }
+      set {
+        _hasBits0 |= 128;
+        interpolationMode_ = value;
+      }
+    }
+    /// <summary>Gets whether the "interpolation_mode" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasInterpolationMode {
+      get { return (_hasBits0 & 128) != 0; }
+    }
+    /// <summary>Clears the value of the "interpolation_mode" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearInterpolationMode() {
+      _hasBits0 &= ~128;
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -353,6 +389,7 @@ namespace Mediapipe {
       if (ScaleMode != other.ScaleMode) return false;
       if (ConstantPadding != other.ConstantPadding) return false;
       if (!object.Equals(PaddingColor, other.PaddingColor)) return false;
+      if (InterpolationMode != other.InterpolationMode) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -368,6 +405,7 @@ namespace Mediapipe {
       if (HasScaleMode) hash ^= ScaleMode.GetHashCode();
       if (HasConstantPadding) hash ^= ConstantPadding.GetHashCode();
       if (paddingColor_ != null) hash ^= PaddingColor.GetHashCode();
+      if (HasInterpolationMode) hash ^= InterpolationMode.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -418,6 +456,10 @@ namespace Mediapipe {
         output.WriteRawTag(66);
         output.WriteMessage(PaddingColor);
       }
+      if (HasInterpolationMode) {
+        output.WriteRawTag(72);
+        output.WriteEnum((int) InterpolationMode);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -460,6 +502,10 @@ namespace Mediapipe {
         output.WriteRawTag(66);
         output.WriteMessage(PaddingColor);
       }
+      if (HasInterpolationMode) {
+        output.WriteRawTag(72);
+        output.WriteEnum((int) InterpolationMode);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -493,6 +539,9 @@ namespace Mediapipe {
       }
       if (paddingColor_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(PaddingColor);
+      }
+      if (HasInterpolationMode) {
+        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) InterpolationMode);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -532,6 +581,9 @@ namespace Mediapipe {
           PaddingColor = new global::Mediapipe.ImageTransformationCalculatorOptions.Types.Color();
         }
         PaddingColor.MergeFrom(other.PaddingColor);
+      }
+      if (other.HasInterpolationMode) {
+        InterpolationMode = other.InterpolationMode;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -581,6 +633,10 @@ namespace Mediapipe {
               PaddingColor = new global::Mediapipe.ImageTransformationCalculatorOptions.Types.Color();
             }
             input.ReadMessage(PaddingColor);
+            break;
+          }
+          case 72: {
+            InterpolationMode = (global::Mediapipe.ImageTransformationCalculatorOptions.Types.InterpolationMode) input.ReadEnum();
             break;
           }
         }
@@ -633,6 +689,10 @@ namespace Mediapipe {
             input.ReadMessage(PaddingColor);
             break;
           }
+          case 72: {
+            InterpolationMode = (global::Mediapipe.ImageTransformationCalculatorOptions.Types.InterpolationMode) input.ReadEnum();
+            break;
+          }
         }
       }
     }
@@ -643,6 +703,16 @@ namespace Mediapipe {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static partial class Types {
+      /// <summary>
+      /// Interpolation method to use. Note that on CPU when LINEAR is specified,
+      /// INTER_LINEAR is used for upscaling and INTER_AREA is used for downscaling.
+      /// </summary>
+      public enum InterpolationMode {
+        [pbr::OriginalName("DEFAULT")] Default = 0,
+        [pbr::OriginalName("LINEAR")] Linear = 1,
+        [pbr::OriginalName("NEAREST")] Nearest = 2,
+      }
+
       /// <summary>
       /// RGB values in range of 0 - 255
       /// </summary>

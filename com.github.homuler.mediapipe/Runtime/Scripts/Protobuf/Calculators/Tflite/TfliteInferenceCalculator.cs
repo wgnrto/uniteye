@@ -26,37 +26,37 @@ namespace Mediapipe {
           string.Concat(
             "Cj5tZWRpYXBpcGUvY2FsY3VsYXRvcnMvdGZsaXRlL3RmbGl0ZV9pbmZlcmVu",
             "Y2VfY2FsY3VsYXRvci5wcm90bxIJbWVkaWFwaXBlGiRtZWRpYXBpcGUvZnJh",
-            "bWV3b3JrL2NhbGN1bGF0b3IucHJvdG8i+wgKIFRmTGl0ZUluZmVyZW5jZUNh",
-            "bGN1bGF0b3JPcHRpb25zEhIKCm1vZGVsX3BhdGgYASABKAkSGgoHdXNlX2dw",
-            "dRgCIAEoCDoFZmFsc2VCAhgBEhwKCXVzZV9ubmFwaRgDIAEoCDoFZmFsc2VC",
-            "AhgBEhoKDmNwdV9udW1fdGhyZWFkGAQgASgFOgItMRJGCghkZWxlZ2F0ZRgF",
-            "IAEoCzI0Lm1lZGlhcGlwZS5UZkxpdGVJbmZlcmVuY2VDYWxjdWxhdG9yT3B0",
-            "aW9ucy5EZWxlZ2F0ZRrJBgoIRGVsZWdhdGUSTQoGdGZsaXRlGAEgASgLMjsu",
-            "bWVkaWFwaXBlLlRmTGl0ZUluZmVyZW5jZUNhbGN1bGF0b3JPcHRpb25zLkRl",
-            "bGVnYXRlLlRmTGl0ZUgAEkcKA2dwdRgCIAEoCzI4Lm1lZGlhcGlwZS5UZkxp",
-            "dGVJbmZlcmVuY2VDYWxjdWxhdG9yT3B0aW9ucy5EZWxlZ2F0ZS5HcHVIABJL",
-            "CgVubmFwaRgDIAEoCzI6Lm1lZGlhcGlwZS5UZkxpdGVJbmZlcmVuY2VDYWxj",
-            "dWxhdG9yT3B0aW9ucy5EZWxlZ2F0ZS5ObmFwaUgAEk8KB3hubnBhY2sYBCAB",
-            "KAsyPC5tZWRpYXBpcGUuVGZMaXRlSW5mZXJlbmNlQ2FsY3VsYXRvck9wdGlv",
-            "bnMuRGVsZWdhdGUuWG5ucGFja0gAGggKBlRmTGl0ZRqbAwoDR3B1EiMKFHVz",
-            "ZV9hZHZhbmNlZF9ncHVfYXBpGAEgASgIOgVmYWxzZRJOCgNhcGkYBCABKA4y",
-            "PC5tZWRpYXBpcGUuVGZMaXRlSW5mZXJlbmNlQ2FsY3VsYXRvck9wdGlvbnMu",
-            "RGVsZWdhdGUuR3B1LkFwaToDQU5ZEiIKFGFsbG93X3ByZWNpc2lvbl9sb3Nz",
-            "GAMgASgIOgR0cnVlEhoKEmNhY2hlZF9rZXJuZWxfcGF0aBgCIAEoCRJnCgV1",
-            "c2FnZRgFIAEoDjJHLm1lZGlhcGlwZS5UZkxpdGVJbmZlcmVuY2VDYWxjdWxh",
-            "dG9yT3B0aW9ucy5EZWxlZ2F0ZS5HcHUuSW5mZXJlbmNlVXNhZ2U6D1NVU1RB",
-            "SU5FRF9TUEVFRCImCgNBcGkSBwoDQU5ZEAASCgoGT1BFTkdMEAESCgoGT1BF",
-            "TkNMEAIiTgoOSW5mZXJlbmNlVXNhZ2USDwoLVU5TUEVDSUZJRUQQABIWChJG",
-            "QVNUX1NJTkdMRV9BTlNXRVIQARITCg9TVVNUQUlORURfU1BFRUQQAhovCgVO",
-            "bmFwaRIRCgljYWNoZV9kaXIYASABKAkSEwoLbW9kZWxfdG9rZW4YAiABKAka",
-            "IgoHWG5ucGFjaxIXCgtudW1fdGhyZWFkcxgBIAEoBToCLTFCCgoIZGVsZWdh",
-            "dGUyWQoDZXh0EhwubWVkaWFwaXBlLkNhbGN1bGF0b3JPcHRpb25zGM2Pwm8g",
-            "ASgLMisubWVkaWFwaXBlLlRmTGl0ZUluZmVyZW5jZUNhbGN1bGF0b3JPcHRp",
-            "b25z"));
+            "bWV3b3JrL2NhbGN1bGF0b3IucHJvdG8ikwkKIFRmTGl0ZUluZmVyZW5jZUNh",
+            "bGN1bGF0b3JPcHRpb25zEhIKCm1vZGVsX3BhdGgYASABKAkSFgoOdHJ5X21t",
+            "YXBfbW9kZWwYBiABKAgSGgoHdXNlX2dwdRgCIAEoCDoFZmFsc2VCAhgBEhwK",
+            "CXVzZV9ubmFwaRgDIAEoCDoFZmFsc2VCAhgBEhoKDmNwdV9udW1fdGhyZWFk",
+            "GAQgASgFOgItMRJGCghkZWxlZ2F0ZRgFIAEoCzI0Lm1lZGlhcGlwZS5UZkxp",
+            "dGVJbmZlcmVuY2VDYWxjdWxhdG9yT3B0aW9ucy5EZWxlZ2F0ZRrJBgoIRGVs",
+            "ZWdhdGUSTQoGdGZsaXRlGAEgASgLMjsubWVkaWFwaXBlLlRmTGl0ZUluZmVy",
+            "ZW5jZUNhbGN1bGF0b3JPcHRpb25zLkRlbGVnYXRlLlRmTGl0ZUgAEkcKA2dw",
+            "dRgCIAEoCzI4Lm1lZGlhcGlwZS5UZkxpdGVJbmZlcmVuY2VDYWxjdWxhdG9y",
+            "T3B0aW9ucy5EZWxlZ2F0ZS5HcHVIABJLCgVubmFwaRgDIAEoCzI6Lm1lZGlh",
+            "cGlwZS5UZkxpdGVJbmZlcmVuY2VDYWxjdWxhdG9yT3B0aW9ucy5EZWxlZ2F0",
+            "ZS5ObmFwaUgAEk8KB3hubnBhY2sYBCABKAsyPC5tZWRpYXBpcGUuVGZMaXRl",
+            "SW5mZXJlbmNlQ2FsY3VsYXRvck9wdGlvbnMuRGVsZWdhdGUuWG5ucGFja0gA",
+            "GggKBlRmTGl0ZRqbAwoDR3B1EiMKFHVzZV9hZHZhbmNlZF9ncHVfYXBpGAEg",
+            "ASgIOgVmYWxzZRJOCgNhcGkYBCABKA4yPC5tZWRpYXBpcGUuVGZMaXRlSW5m",
+            "ZXJlbmNlQ2FsY3VsYXRvck9wdGlvbnMuRGVsZWdhdGUuR3B1LkFwaToDQU5Z",
+            "EiIKFGFsbG93X3ByZWNpc2lvbl9sb3NzGAMgASgIOgR0cnVlEhoKEmNhY2hl",
+            "ZF9rZXJuZWxfcGF0aBgCIAEoCRJnCgV1c2FnZRgFIAEoDjJHLm1lZGlhcGlw",
+            "ZS5UZkxpdGVJbmZlcmVuY2VDYWxjdWxhdG9yT3B0aW9ucy5EZWxlZ2F0ZS5H",
+            "cHUuSW5mZXJlbmNlVXNhZ2U6D1NVU1RBSU5FRF9TUEVFRCImCgNBcGkSBwoD",
+            "QU5ZEAASCgoGT1BFTkdMEAESCgoGT1BFTkNMEAIiTgoOSW5mZXJlbmNlVXNh",
+            "Z2USDwoLVU5TUEVDSUZJRUQQABIWChJGQVNUX1NJTkdMRV9BTlNXRVIQARIT",
+            "Cg9TVVNUQUlORURfU1BFRUQQAhovCgVObmFwaRIRCgljYWNoZV9kaXIYASAB",
+            "KAkSEwoLbW9kZWxfdG9rZW4YAiABKAkaIgoHWG5ucGFjaxIXCgtudW1fdGhy",
+            "ZWFkcxgBIAEoBToCLTFCCgoIZGVsZWdhdGUyWQoDZXh0EhwubWVkaWFwaXBl",
+            "LkNhbGN1bGF0b3JPcHRpb25zGM2Pwm8gASgLMisubWVkaWFwaXBlLlRmTGl0",
+            "ZUluZmVyZW5jZUNhbGN1bGF0b3JPcHRpb25z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Mediapipe.CalculatorReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions), global::Mediapipe.TfLiteInferenceCalculatorOptions.Parser, new[]{ "ModelPath", "UseGpu", "UseNnapi", "CpuNumThread", "Delegate" }, null, null, new pb::Extension[] { global::Mediapipe.TfLiteInferenceCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate), global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Parser, new[]{ "Tflite", "Gpu", "Nnapi", "Xnnpack" }, new[]{ "Delegate" }, null, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.TfLite), global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.TfLite.Parser, null, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions), global::Mediapipe.TfLiteInferenceCalculatorOptions.Parser, new[]{ "ModelPath", "TryMmapModel", "UseGpu", "UseNnapi", "CpuNumThread", "Delegate" }, null, null, new pb::Extension[] { global::Mediapipe.TfLiteInferenceCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate), global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Parser, new[]{ "Tflite", "Gpu", "Nnapi", "Xnnpack" }, new[]{ "Delegate" }, null, null, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.TfLite), global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.TfLite.Parser, null, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.Gpu), global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.Gpu.Parser, new[]{ "UseAdvancedGpuApi", "Api", "AllowPrecisionLoss", "CachedKernelPath", "Usage" }, null, new[]{ typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.Api), typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.Gpu.Types.InferenceUsage) }, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.Nnapi), global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.Nnapi.Parser, new[]{ "CacheDir", "ModelToken" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.Xnnpack), global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate.Types.Xnnpack.Parser, new[]{ "NumThreads" }, null, null, null, null)})})
@@ -118,6 +118,7 @@ namespace Mediapipe {
     public TfLiteInferenceCalculatorOptions(TfLiteInferenceCalculatorOptions other) : this() {
       _hasBits0 = other._hasBits0;
       modelPath_ = other.modelPath_;
+      tryMmapModel_ = other.tryMmapModel_;
       useGpu_ = other.useGpu_;
       useNnapi_ = other.useNnapi_;
       cpuNumThread_ = other.cpuNumThread_;
@@ -159,6 +160,39 @@ namespace Mediapipe {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public void ClearModelPath() {
       modelPath_ = null;
+    }
+
+    /// <summary>Field number for the "try_mmap_model" field.</summary>
+    public const int TryMmapModelFieldNumber = 6;
+    private readonly static bool TryMmapModelDefaultValue = false;
+
+    private bool tryMmapModel_;
+    /// <summary>
+    /// If true, and model_path is specified, tries to load the model as memory
+    /// mapped file if available. This can be significantly faster that loading the
+    /// model into a buffer first. If memory mapping is not available or fails,
+    /// falls back to loading from buffer.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool TryMmapModel {
+      get { if ((_hasBits0 & 8) != 0) { return tryMmapModel_; } else { return TryMmapModelDefaultValue; } }
+      set {
+        _hasBits0 |= 8;
+        tryMmapModel_ = value;
+      }
+    }
+    /// <summary>Gets whether the "try_mmap_model" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasTryMmapModel {
+      get { return (_hasBits0 & 8) != 0; }
+    }
+    /// <summary>Clears the value of the "try_mmap_model" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearTryMmapModel() {
+      _hasBits0 &= ~8;
     }
 
     /// <summary>Field number for the "use_gpu" field.</summary>
@@ -301,6 +335,7 @@ namespace Mediapipe {
         return true;
       }
       if (ModelPath != other.ModelPath) return false;
+      if (TryMmapModel != other.TryMmapModel) return false;
       if (UseGpu != other.UseGpu) return false;
       if (UseNnapi != other.UseNnapi) return false;
       if (CpuNumThread != other.CpuNumThread) return false;
@@ -313,6 +348,7 @@ namespace Mediapipe {
     public override int GetHashCode() {
       int hash = 1;
       if (HasModelPath) hash ^= ModelPath.GetHashCode();
+      if (HasTryMmapModel) hash ^= TryMmapModel.GetHashCode();
       if (HasUseGpu) hash ^= UseGpu.GetHashCode();
       if (HasUseNnapi) hash ^= UseNnapi.GetHashCode();
       if (HasCpuNumThread) hash ^= CpuNumThread.GetHashCode();
@@ -355,6 +391,10 @@ namespace Mediapipe {
         output.WriteRawTag(42);
         output.WriteMessage(Delegate);
       }
+      if (HasTryMmapModel) {
+        output.WriteRawTag(48);
+        output.WriteBool(TryMmapModel);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -385,6 +425,10 @@ namespace Mediapipe {
         output.WriteRawTag(42);
         output.WriteMessage(Delegate);
       }
+      if (HasTryMmapModel) {
+        output.WriteRawTag(48);
+        output.WriteBool(TryMmapModel);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -397,6 +441,9 @@ namespace Mediapipe {
       int size = 0;
       if (HasModelPath) {
         size += 1 + pb::CodedOutputStream.ComputeStringSize(ModelPath);
+      }
+      if (HasTryMmapModel) {
+        size += 1 + 1;
       }
       if (HasUseGpu) {
         size += 1 + 1;
@@ -424,6 +471,9 @@ namespace Mediapipe {
       }
       if (other.HasModelPath) {
         ModelPath = other.ModelPath;
+      }
+      if (other.HasTryMmapModel) {
+        TryMmapModel = other.TryMmapModel;
       }
       if (other.HasUseGpu) {
         UseGpu = other.UseGpu;
@@ -478,6 +528,10 @@ namespace Mediapipe {
             input.ReadMessage(Delegate);
             break;
           }
+          case 48: {
+            TryMmapModel = input.ReadBool();
+            break;
+          }
         }
       }
     #endif
@@ -514,6 +568,10 @@ namespace Mediapipe {
               Delegate = new global::Mediapipe.TfLiteInferenceCalculatorOptions.Types.Delegate();
             }
             input.ReadMessage(Delegate);
+            break;
+          }
+          case 48: {
+            TryMmapModel = input.ReadBool();
             break;
           }
         }

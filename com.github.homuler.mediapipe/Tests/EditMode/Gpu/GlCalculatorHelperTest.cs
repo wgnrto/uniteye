@@ -49,7 +49,7 @@ namespace Mediapipe.Tests
       using (var glCalculatorHelper = new GlCalculatorHelper())
       {
         Assert.False(glCalculatorHelper.Initialized());
-        glCalculatorHelper.InitializeForTest(GpuResources.Create().Value());
+        glCalculatorHelper.InitializeForTest(GpuResources.Create());
         Assert.True(glCalculatorHelper.Initialized());
       }
     }
@@ -57,14 +57,13 @@ namespace Mediapipe.Tests
 
     #region #RunInGlContext
     [Test, GpuOnly]
-    public void RunInGlContext_ShouldReturnOk_When_FunctionReturnsOk()
+    public void RunInGlContext_ShouldNotThrow_When_FunctionReturnsOk()
     {
       using (var glCalculatorHelper = new GlCalculatorHelper())
       {
-        glCalculatorHelper.InitializeForTest(GpuResources.Create().Value());
+        glCalculatorHelper.InitializeForTest(GpuResources.Create());
 
-        var status = glCalculatorHelper.RunInGlContext(() => { });
-        Assert.True(status.Ok());
+        Assert.DoesNotThrow(() => glCalculatorHelper.RunInGlContext(() => { }));
       }
     }
 
@@ -73,10 +72,13 @@ namespace Mediapipe.Tests
     {
       using (var glCalculatorHelper = new GlCalculatorHelper())
       {
-        glCalculatorHelper.InitializeForTest(GpuResources.Create().Value());
+        glCalculatorHelper.InitializeForTest(GpuResources.Create());
 
-        var status = glCalculatorHelper.RunInGlContext((GlCalculatorHelper.GlFunction)(() => { throw new Exception("Function Throws"); }));
-        Assert.AreEqual(Status.StatusCode.Internal, status.Code());
+        var exception = Assert.Throws<BadStatusException>(() =>
+        {
+          glCalculatorHelper.RunInGlContext((GlCalculatorHelper.GlFunction)(() => { throw new Exception("Function Throws"); }));
+        });
+        Assert.AreEqual(StatusCode.Internal, exception.statusCode);
       }
     }
     #endregion
@@ -87,22 +89,22 @@ namespace Mediapipe.Tests
     {
       using (var glCalculatorHelper = new GlCalculatorHelper())
       {
-        glCalculatorHelper.InitializeForTest(GpuResources.Create().Value());
+        glCalculatorHelper.InitializeForTest(GpuResources.Create());
 
         using (var imageFrame = new ImageFrame(ImageFormat.Types.Format.Srgba, 32, 24))
         {
-          var status = glCalculatorHelper.RunInGlContext(() =>
+          Assert.DoesNotThrow(() =>
           {
-            var texture = glCalculatorHelper.CreateSourceTexture(imageFrame);
+            glCalculatorHelper.RunInGlContext(() =>
+            {
+              var texture = glCalculatorHelper.CreateSourceTexture(imageFrame);
 
-            Assert.AreEqual(32, texture.width);
-            Assert.AreEqual(24, texture.height);
+              Assert.AreEqual(32, texture.width);
+              Assert.AreEqual(24, texture.height);
 
-            texture.Dispose();
+              texture.Dispose();
+            });
           });
-          Assert.True(status.Ok());
-
-          status.Dispose();
         }
       }
     }
@@ -113,20 +115,21 @@ namespace Mediapipe.Tests
     {
       using (var glCalculatorHelper = new GlCalculatorHelper())
       {
-        glCalculatorHelper.InitializeForTest(GpuResources.Create().Value());
+        glCalculatorHelper.InitializeForTest(GpuResources.Create());
 
         using (var imageFrame = new ImageFrame(ImageFormat.Types.Format.Sbgra, 32, 24))
         {
-          var status = glCalculatorHelper.RunInGlContext(() =>
+          var exception = Assert.Throws<BadStatusException>(() =>
           {
-            using (var texture = glCalculatorHelper.CreateSourceTexture(imageFrame))
+            glCalculatorHelper.RunInGlContext(() =>
             {
-              texture.Release();
-            }
+              using (var texture = glCalculatorHelper.CreateSourceTexture(imageFrame))
+              {
+                texture.Release();
+              }
+            });
           });
-          Assert.AreEqual(Status.StatusCode.FailedPrecondition, status.Code());
-
-          status.Dispose();
+          Assert.AreEqual(StatusCode.FailedPrecondition, exception.statusCode);
         }
       }
     }
@@ -138,17 +141,18 @@ namespace Mediapipe.Tests
     {
       using (var glCalculatorHelper = new GlCalculatorHelper())
       {
-        glCalculatorHelper.InitializeForTest(GpuResources.Create().Value());
+        glCalculatorHelper.InitializeForTest(GpuResources.Create());
 
-        var status = glCalculatorHelper.RunInGlContext(() =>
+        Assert.DoesNotThrow(() =>
         {
-          var glTexture = glCalculatorHelper.CreateDestinationTexture(32, 24, GpuBufferFormat.kBGRA32);
+          glCalculatorHelper.RunInGlContext(() =>
+          {
+            var glTexture = glCalculatorHelper.CreateDestinationTexture(32, 24, GpuBufferFormat.kBGRA32);
 
-          Assert.AreEqual(32, glTexture.width);
-          Assert.AreEqual(24, glTexture.height);
+            Assert.AreEqual(32, glTexture.width);
+            Assert.AreEqual(24, glTexture.height);
+          });
         });
-
-        Assert.True(status.Ok());
       }
     }
     #endregion
@@ -159,7 +163,7 @@ namespace Mediapipe.Tests
     {
       using (var glCalculatorHelper = new GlCalculatorHelper())
       {
-        glCalculatorHelper.InitializeForTest(GpuResources.Create().Value());
+        glCalculatorHelper.InitializeForTest(GpuResources.Create());
 
         // default frame buffer
         Assert.AreEqual(0, glCalculatorHelper.framebuffer);
@@ -173,7 +177,7 @@ namespace Mediapipe.Tests
     {
       using (var glCalculatorHelper = new GlCalculatorHelper())
       {
-        glCalculatorHelper.InitializeForTest(GpuResources.Create().Value());
+        glCalculatorHelper.InitializeForTest(GpuResources.Create());
 
         using (var glContext = glCalculatorHelper.GetGlContext())
         {

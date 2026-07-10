@@ -26,7 +26,7 @@ namespace Mediapipe {
           string.Concat(
             "CkNtZWRpYXBpcGUvY2FsY3VsYXRvcnMvdGVuc29yL3RlbnNvcnNfdG9fZGV0",
             "ZWN0aW9uc19jYWxjdWxhdG9yLnByb3RvEgltZWRpYXBpcGUaJG1lZGlhcGlw",
-            "ZS9mcmFtZXdvcmsvY2FsY3VsYXRvci5wcm90byKVCgokVGVuc29yc1RvRGV0",
+            "ZS9mcmFtZXdvcmsvY2FsY3VsYXRvci5wcm90byK7CgokVGVuc29yc1RvRGV0",
             "ZWN0aW9uc0NhbGN1bGF0b3JPcHRpb25zEhMKC251bV9jbGFzc2VzGAEgASgF",
             "EhEKCW51bV9ib3hlcxgCIAEoBRISCgpudW1fY29vcmRzGAMgASgFEh0KFWtl",
             "eXBvaW50X2Nvb3JkX29mZnNldBgJIAEoBRIYCg1udW1fa2V5cG9pbnRzGAog",
@@ -39,27 +39,28 @@ namespace Mediapipe {
             "YXNzZXMYFSADKAVCAhABEhwKDXNpZ21vaWRfc2NvcmUYDyABKAg6BWZhbHNl",
             "Eh0KFXNjb3JlX2NsaXBwaW5nX3RocmVzaBgQIAEoAhIeCg9mbGlwX3ZlcnRp",
             "Y2FsbHkYEiABKAg6BWZhbHNlEhgKEG1pbl9zY29yZV90aHJlc2gYEyABKAIS",
-            "FwoLbWF4X3Jlc3VsdHMYFCABKAU6Ai0xElUKDnRlbnNvcl9tYXBwaW5nGBYg",
-            "ASgLMj0ubWVkaWFwaXBlLlRlbnNvcnNUb0RldGVjdGlvbnNDYWxjdWxhdG9y",
-            "T3B0aW9ucy5UZW5zb3JNYXBwaW5nEmYKFmJveF9ib3VuZGFyaWVzX2luZGlj",
-            "ZXMYFyABKAsyRC5tZWRpYXBpcGUuVGVuc29yc1RvRGV0ZWN0aW9uc0NhbGN1",
-            "bGF0b3JPcHRpb25zLkJveEJvdW5kYXJpZXNJbmRpY2VzSAASWgoKYm94X2Zv",
-            "cm1hdBgYIAEoDjI5Lm1lZGlhcGlwZS5UZW5zb3JzVG9EZXRlY3Rpb25zQ2Fs",
-            "Y3VsYXRvck9wdGlvbnMuQm94Rm9ybWF0OgtVTlNQRUNJRklFRBquAQoNVGVu",
-            "c29yTWFwcGluZxIfChdkZXRlY3Rpb25zX3RlbnNvcl9pbmRleBgBIAEoBRIc",
-            "ChRjbGFzc2VzX3RlbnNvcl9pbmRleBgCIAEoBRIbChNzY29yZXNfdGVuc29y",
-            "X2luZGV4GAMgASgFEiMKG251bV9kZXRlY3Rpb25zX3RlbnNvcl9pbmRleBgE",
-            "IAEoBRIcChRhbmNob3JzX3RlbnNvcl9pbmRleBgFIAEoBRpaChRCb3hCb3Vu",
-            "ZGFyaWVzSW5kaWNlcxIPCgR5bWluGAEgASgFOgEwEg8KBHhtaW4YAiABKAU6",
-            "ATESDwoEeW1heBgDIAEoBToBMhIPCgR4bWF4GAQgASgFOgEzIjoKCUJveEZv",
-            "cm1hdBIPCgtVTlNQRUNJRklFRBAAEggKBFlYSFcQARIICgRYWVdIEAISCAoE",
-            "WFlYWRADMl4KA2V4dBIcLm1lZGlhcGlwZS5DYWxjdWxhdG9yT3B0aW9ucxiv",
-            "jYygASABKAsyLy5tZWRpYXBpcGUuVGVuc29yc1RvRGV0ZWN0aW9uc0NhbGN1",
-            "bGF0b3JPcHRpb25zQg0KC2JveF9pbmRpY2Vz"));
+            "FwoLbWF4X3Jlc3VsdHMYFCABKAU6Ai0xEiQKGW1heF9jbGFzc2VzX3Blcl9k",
+            "ZXRlY3Rpb24YGSABKAU6ATESVQoOdGVuc29yX21hcHBpbmcYFiABKAsyPS5t",
+            "ZWRpYXBpcGUuVGVuc29yc1RvRGV0ZWN0aW9uc0NhbGN1bGF0b3JPcHRpb25z",
+            "LlRlbnNvck1hcHBpbmcSZgoWYm94X2JvdW5kYXJpZXNfaW5kaWNlcxgXIAEo",
+            "CzJELm1lZGlhcGlwZS5UZW5zb3JzVG9EZXRlY3Rpb25zQ2FsY3VsYXRvck9w",
+            "dGlvbnMuQm94Qm91bmRhcmllc0luZGljZXNIABJaCgpib3hfZm9ybWF0GBgg",
+            "ASgOMjkubWVkaWFwaXBlLlRlbnNvcnNUb0RldGVjdGlvbnNDYWxjdWxhdG9y",
+            "T3B0aW9ucy5Cb3hGb3JtYXQ6C1VOU1BFQ0lGSUVEGq4BCg1UZW5zb3JNYXBw",
+            "aW5nEh8KF2RldGVjdGlvbnNfdGVuc29yX2luZGV4GAEgASgFEhwKFGNsYXNz",
+            "ZXNfdGVuc29yX2luZGV4GAIgASgFEhsKE3Njb3Jlc190ZW5zb3JfaW5kZXgY",
+            "AyABKAUSIwobbnVtX2RldGVjdGlvbnNfdGVuc29yX2luZGV4GAQgASgFEhwK",
+            "FGFuY2hvcnNfdGVuc29yX2luZGV4GAUgASgFGloKFEJveEJvdW5kYXJpZXNJ",
+            "bmRpY2VzEg8KBHltaW4YASABKAU6ATASDwoEeG1pbhgCIAEoBToBMRIPCgR5",
+            "bWF4GAMgASgFOgEyEg8KBHhtYXgYBCABKAU6ATMiOgoJQm94Rm9ybWF0Eg8K",
+            "C1VOU1BFQ0lGSUVEEAASCAoEWVhIVxABEggKBFhZV0gQAhIICgRYWVhZEAMy",
+            "XgoDZXh0EhwubWVkaWFwaXBlLkNhbGN1bGF0b3JPcHRpb25zGK+NjKABIAEo",
+            "CzIvLm1lZGlhcGlwZS5UZW5zb3JzVG9EZXRlY3Rpb25zQ2FsY3VsYXRvck9w",
+            "dGlvbnNCDQoLYm94X2luZGljZXM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Mediapipe.CalculatorReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
-            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TensorsToDetectionsCalculatorOptions), global::Mediapipe.TensorsToDetectionsCalculatorOptions.Parser, new[]{ "NumClasses", "NumBoxes", "NumCoords", "KeypointCoordOffset", "NumKeypoints", "NumValuesPerKeypoint", "BoxCoordOffset", "XScale", "YScale", "WScale", "HScale", "ApplyExponentialOnBoxSize", "ReverseOutputOrder", "IgnoreClasses", "AllowClasses", "SigmoidScore", "ScoreClippingThresh", "FlipVertically", "MinScoreThresh", "MaxResults", "TensorMapping", "BoxBoundariesIndices", "BoxFormat" }, new[]{ "BoxIndices" }, new[]{ typeof(global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.BoxFormat) }, new pb::Extension[] { global::Mediapipe.TensorsToDetectionsCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.TensorMapping), global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.TensorMapping.Parser, new[]{ "DetectionsTensorIndex", "ClassesTensorIndex", "ScoresTensorIndex", "NumDetectionsTensorIndex", "AnchorsTensorIndex" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TensorsToDetectionsCalculatorOptions), global::Mediapipe.TensorsToDetectionsCalculatorOptions.Parser, new[]{ "NumClasses", "NumBoxes", "NumCoords", "KeypointCoordOffset", "NumKeypoints", "NumValuesPerKeypoint", "BoxCoordOffset", "XScale", "YScale", "WScale", "HScale", "ApplyExponentialOnBoxSize", "ReverseOutputOrder", "IgnoreClasses", "AllowClasses", "SigmoidScore", "ScoreClippingThresh", "FlipVertically", "MinScoreThresh", "MaxResults", "MaxClassesPerDetection", "TensorMapping", "BoxBoundariesIndices", "BoxFormat" }, new[]{ "BoxIndices" }, new[]{ typeof(global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.BoxFormat) }, new pb::Extension[] { global::Mediapipe.TensorsToDetectionsCalculatorOptions.Extensions.Ext }, new pbr::GeneratedClrTypeInfo[] { new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.TensorMapping), global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.TensorMapping.Parser, new[]{ "DetectionsTensorIndex", "ClassesTensorIndex", "ScoresTensorIndex", "NumDetectionsTensorIndex", "AnchorsTensorIndex" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.BoxBoundariesIndices), global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.BoxBoundariesIndices.Parser, new[]{ "Ymin", "Xmin", "Ymax", "Xmax" }, null, null, null, null)})
           }));
     }
@@ -123,6 +124,7 @@ namespace Mediapipe {
       flipVertically_ = other.flipVertically_;
       minScoreThresh_ = other.minScoreThresh_;
       maxResults_ = other.maxResults_;
+      maxClassesPerDetection_ = other.maxClassesPerDetection_;
       tensorMapping_ = other.tensorMapping_ != null ? other.tensorMapping_.Clone() : null;
       boxFormat_ = other.boxFormat_;
       switch (other.BoxIndicesCase) {
@@ -649,7 +651,7 @@ namespace Mediapipe {
 
     private float minScoreThresh_;
     /// <summary>
-    /// Score threshold for perserving decoded detections.
+    /// Score threshold for preserving decoded detections.
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -706,6 +708,36 @@ namespace Mediapipe {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public void ClearMaxResults() {
       _hasBits0 &= ~131072;
+    }
+
+    /// <summary>Field number for the "max_classes_per_detection" field.</summary>
+    public const int MaxClassesPerDetectionFieldNumber = 25;
+    private readonly static int MaxClassesPerDetectionDefaultValue = 1;
+
+    private int maxClassesPerDetection_;
+    /// <summary>
+    /// The maximum number of classes per detection.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int MaxClassesPerDetection {
+      get { if ((_hasBits0 & 524288) != 0) { return maxClassesPerDetection_; } else { return MaxClassesPerDetectionDefaultValue; } }
+      set {
+        _hasBits0 |= 524288;
+        maxClassesPerDetection_ = value;
+      }
+    }
+    /// <summary>Gets whether the "max_classes_per_detection" field is set</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasMaxClassesPerDetection {
+      get { return (_hasBits0 & 524288) != 0; }
+    }
+    /// <summary>Clears the value of the "max_classes_per_detection" field</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void ClearMaxClassesPerDetection() {
+      _hasBits0 &= ~524288;
     }
 
     /// <summary>Field number for the "tensor_mapping" field.</summary>
@@ -814,6 +846,7 @@ namespace Mediapipe {
       if (FlipVertically != other.FlipVertically) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MinScoreThresh, other.MinScoreThresh)) return false;
       if (MaxResults != other.MaxResults) return false;
+      if (MaxClassesPerDetection != other.MaxClassesPerDetection) return false;
       if (!object.Equals(TensorMapping, other.TensorMapping)) return false;
       if (!object.Equals(BoxBoundariesIndices, other.BoxBoundariesIndices)) return false;
       if (BoxFormat != other.BoxFormat) return false;
@@ -845,6 +878,7 @@ namespace Mediapipe {
       if (HasFlipVertically) hash ^= FlipVertically.GetHashCode();
       if (HasMinScoreThresh) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MinScoreThresh);
       if (HasMaxResults) hash ^= MaxResults.GetHashCode();
+      if (HasMaxClassesPerDetection) hash ^= MaxClassesPerDetection.GetHashCode();
       if (tensorMapping_ != null) hash ^= TensorMapping.GetHashCode();
       if (boxIndicesCase_ == BoxIndicesOneofCase.BoxBoundariesIndices) hash ^= BoxBoundariesIndices.GetHashCode();
       if (HasBoxFormat) hash ^= BoxFormat.GetHashCode();
@@ -953,6 +987,10 @@ namespace Mediapipe {
         output.WriteRawTag(192, 1);
         output.WriteEnum((int) BoxFormat);
       }
+      if (HasMaxClassesPerDetection) {
+        output.WriteRawTag(200, 1);
+        output.WriteInt32(MaxClassesPerDetection);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -1049,6 +1087,10 @@ namespace Mediapipe {
         output.WriteRawTag(192, 1);
         output.WriteEnum((int) BoxFormat);
       }
+      if (HasMaxClassesPerDetection) {
+        output.WriteRawTag(200, 1);
+        output.WriteInt32(MaxClassesPerDetection);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -1114,6 +1156,9 @@ namespace Mediapipe {
       }
       if (HasMaxResults) {
         size += 2 + pb::CodedOutputStream.ComputeInt32Size(MaxResults);
+      }
+      if (HasMaxClassesPerDetection) {
+        size += 2 + pb::CodedOutputStream.ComputeInt32Size(MaxClassesPerDetection);
       }
       if (tensorMapping_ != null) {
         size += 2 + pb::CodedOutputStream.ComputeMessageSize(TensorMapping);
@@ -1191,6 +1236,9 @@ namespace Mediapipe {
       }
       if (other.HasMaxResults) {
         MaxResults = other.MaxResults;
+      }
+      if (other.HasMaxClassesPerDetection) {
+        MaxClassesPerDetection = other.MaxClassesPerDetection;
       }
       if (other.tensorMapping_ != null) {
         if (tensorMapping_ == null) {
@@ -1327,6 +1375,10 @@ namespace Mediapipe {
             BoxFormat = (global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.BoxFormat) input.ReadEnum();
             break;
           }
+          case 200: {
+            MaxClassesPerDetection = input.ReadInt32();
+            break;
+          }
         }
       }
     #endif
@@ -1442,6 +1494,10 @@ namespace Mediapipe {
           }
           case 192: {
             BoxFormat = (global::Mediapipe.TensorsToDetectionsCalculatorOptions.Types.BoxFormat) input.ReadEnum();
+            break;
+          }
+          case 200: {
+            MaxClassesPerDetection = input.ReadInt32();
             break;
           }
         }

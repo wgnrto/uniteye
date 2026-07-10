@@ -605,7 +605,7 @@ namespace Mediapipe {
 
     private float minScoreThresh_;
     /// <summary>
-    /// Score threshold for perserving decoded detections.
+    /// Score threshold for preserving decoded detections.
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
