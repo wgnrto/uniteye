@@ -22,11 +22,15 @@ namespace UnitEye
             }
         }
 
+        private WebCamSource _webCamSource;
+
         public Vector2 ScreenSize
         {
             get
             {
-                var resolution = _faceMesh.gameObject.GetComponent<WebCamSource>().resolution;
+                if (_webCamSource == null)
+                    _webCamSource = _faceMesh.gameObject.GetComponent<WebCamSource>();
+                var resolution = _webCamSource.resolution;
                 return new Vector2(resolution.width, resolution.height);
             }
         }
@@ -42,8 +46,10 @@ namespace UnitEye
             if (_pointGO == null)
                 _pointGO = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 
-            _pointGO.transform.position = new Vector3(Position.x * ScreenSize.x, Position.y * ScreenSize.y, 0);
-            Debug.Log(_pointGO.transform.position);
+            //Cache Position/ScreenSize (each read hits the face mesh / a GetComponent); no per-frame log.
+            var pos = Position;
+            var size = ScreenSize;
+            _pointGO.transform.position = new Vector3(pos.x * size.x, pos.y * size.y, 0);
         }
     }
 }

@@ -78,6 +78,7 @@ namespace UnitEye
         public Vector3 HeadPoseEuler => Vector3.zero;  // TODO: head pose from FaceLandmarker if needed
         public RenderTexture LeftEyeTexture => null;
         public RenderTexture RightEyeTexture => null;
+        public bool AnnotateFaceMesh { get => false; set { } }  // browser owns rendering on WebGL
 
         public bool IsCalibratingDrowsy => false;
         public int DrowsyCalibrationCount => 0;

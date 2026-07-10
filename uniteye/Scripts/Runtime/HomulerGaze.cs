@@ -86,6 +86,9 @@ namespace UnitEye
         public bool showEyes = true;
         public bool visualizeAOI = false;
         public bool showGazeUI = false;
+        //Debug MediaPipe face-mesh landmark overlay (the 468 points on the face). Off = a small perf win
+        //(no per-frame point draw). Toggleable from the Gaze UI; honoured across calibration restores.
+        public bool showFaceMesh = true;
 
         [System.NonSerialized]
         public bool gazeUIActivated;
@@ -149,7 +152,9 @@ namespace UnitEye
                 var solution = _mediaPipeGO.GetComponent<FaceMeshSolution>();
                 if (solution != null)
                 {
-                    solution.Annotate = _isRendering;
+                    //Respect the user's showFaceMesh choice when rendering resumes (calibration turns
+                    //everything off, but must not force the mesh overlay back on afterwards).
+                    solution.Annotate = _isRendering && showFaceMesh;
                     solution.IsRendering = _isRendering;
                 }
     #endif
@@ -169,6 +174,9 @@ namespace UnitEye
     #else
             _provider = new NativeGazeProvider(_mediaPipeGO);
     #endif
+
+            //Apply the initial face-mesh overlay preference
+            _provider.AnnotateFaceMesh = showFaceMesh;
 
             _modelStore.Load(_calibrations);
 
@@ -644,7 +652,7 @@ namespace UnitEye
 
             GUI.Box(new Rect(0, 0, width * 0.48f, height * 0.08f), "Toggle UI Overlays", gazeUIStyleBox);
 
-            if (GUI.Button(new Rect(width * 0.025f, height * 0.025f, width * 0.12f, height * 0.05f), $"{(visualizeAOI ? "Hide" : "Show")} AOIs", gazeUIStyleButton))
+            if (GUI.Button(new Rect(width * 0.02f, height * 0.025f, width * 0.105f, height * 0.05f), $"{(visualizeAOI ? "Hide" : "Show")} AOIs", gazeUIStyleButton))
                 if (_aoiManager != null)
                 {
                     visualizeAOI = !visualizeAOI;
@@ -654,11 +662,18 @@ namespace UnitEye
                         _aoiManager.DisableVisualize();
                 }
 
-            if (GUI.Button(new Rect(width * 0.18f, height * 0.025f, width * 0.12f, height * 0.05f), $"{(drawDot ? "Hide" : "Show")} GazeDot", gazeUIStyleButton))
+            if (GUI.Button(new Rect(width * 0.135f, height * 0.025f, width * 0.105f, height * 0.05f), $"{(drawDot ? "Hide" : "Show")} GazeDot", gazeUIStyleButton))
                 drawDot = !drawDot;
 
-            if (GUI.Button(new Rect(width * 0.335f, height * 0.025f, width * 0.12f, height * 0.05f), $"{(showEyes ? "Hide" : "Show")} Eyecrops", gazeUIStyleButton))
+            if (GUI.Button(new Rect(width * 0.25f, height * 0.025f, width * 0.105f, height * 0.05f), $"{(showEyes ? "Hide" : "Show")} Eyecrops", gazeUIStyleButton))
                 showEyes = !showEyes;
+
+            if (GUI.Button(new Rect(width * 0.365f, height * 0.025f, width * 0.105f, height * 0.05f), $"{(showFaceMesh ? "Hide" : "Show")} FaceMesh", gazeUIStyleButton))
+            {
+                showFaceMesh = !showFaceMesh;
+                if (_provider != null)
+                    _provider.AnnotateFaceMesh = showFaceMesh;
+            }
 
             GUI.EndGroup();
 

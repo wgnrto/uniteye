@@ -63,6 +63,12 @@ namespace UnitEye
         public RenderTexture LeftEyeTexture => _runner.LeftEyeTexture;
         public RenderTexture RightEyeTexture => _runner.RightEyeTexture;
 
+        public bool AnnotateFaceMesh
+        {
+            get => _faceMesh != null && _faceMesh.Annotate;
+            set { if (_faceMesh != null) _faceMesh.Annotate = value; }
+        }
+
         public bool IsCalibratingDrowsy => _eyeHelper.Calibrating;
         public int DrowsyCalibrationCount => _eyeHelper.CalibrationCount;
         public void CalibrateDistance() => _eyeHelper.CalibrateFocalLength();
