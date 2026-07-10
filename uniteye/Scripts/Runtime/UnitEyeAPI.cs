@@ -10,18 +10,19 @@ namespace UnitEye
     /// </summary>
     public class UnitEyeAPI
     {
-        public static Gaze s_gazeScript;
+        // Migrated to the Barracuda-free HomulerGaze pipeline (native MediaPipe landmarks + Inference Engine).
+        public static HomulerGaze s_gazeScript;
 
         /// <summary>
-        /// Checks if an instance of the Gaze script is in the scene and activated.
+        /// Checks if an instance of the HomulerGaze script is in the scene and activated.
         /// </summary>
-        /// <exception cref="InvalidOperationException">If no Gaze script is found</exception>
+        /// <exception cref="InvalidOperationException">If no HomulerGaze script is found</exception>
         private static void CheckIsInitialized()
         {
-            // Search for the Gaze script when this is first called
+            // Search for the HomulerGaze script when this is first called
             if (s_gazeScript == null)
             {
-                s_gazeScript = UnityEngine.Object.FindObjectOfType<Gaze>();
+                s_gazeScript = UnityEngine.Object.FindObjectOfType<HomulerGaze>();
             }
             if (s_gazeScript == null)
             {
@@ -59,15 +60,15 @@ namespace UnitEye
         }
 
         /// <summary>
-        /// Checks if a user is present by comparing the face detection score to a threshold.
+        /// Checks if a user is present (face landmarks are currently available).
         /// </summary>
-        /// <param name="faceDetectionScoreThreshold">Threshold to use, default is 0.5f</param>
+        /// <param name="faceDetectionScoreThreshold">Unused on the native MediaPipe pipeline (kept for source compatibility)</param>
         /// <returns>true if user present, false if absent</returns>
         public static bool IsUserPresent(float faceDetectionScoreThreshold = 0.5f)
         {
             CheckIsInitialized();
 
-            return s_gazeScript.HolisticPipeline.faceDetectionScore >= faceDetectionScoreThreshold;
+            return s_gazeScript.IsUserPresent;
         }
 
         /// <summary>
@@ -219,10 +220,10 @@ namespace UnitEye
         }
 
         /// <summary>
-        /// Returns the reference to the Gaze script in the scene.
+        /// Returns the reference to the HomulerGaze script in the scene.
         /// </summary>
-        /// <returns>Gaze instance</returns>
-        public static Gaze GetGazeReference()
+        /// <returns>HomulerGaze instance</returns>
+        public static HomulerGaze GetGazeReference()
         {
             CheckIsInitialized();
 
@@ -281,8 +282,8 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
-            var runner = s_gazeScript.ModelRunner;
-            return Quaternion.Euler(runner.HeadPitch, runner.HeadYaw, runner.HeadRoll);
+            var pose = s_gazeScript.Provider.HeadPoseEuler;
+            return Quaternion.Euler(pose.x, pose.y, pose.z);
         }
 
         /// <summary>
@@ -293,7 +294,7 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
-            return s_gazeScript.ModelRunner.LeftEyeTexture;
+            return s_gazeScript.Provider.LeftEyeTexture;
         }
 
         /// <summary>
@@ -304,7 +305,7 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
-            return s_gazeScript.ModelRunner.RightEyeTexture;
+            return s_gazeScript.Provider.RightEyeTexture;
         }
 
         /// <summary>

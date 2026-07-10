@@ -1,8 +1,10 @@
 /// Code based on <see cref="Gaze"/>.
 /// Updated by Tobias Wagner 07/2023 to integrate <see cref="Mediapipe.Unity"/> package.
 
+#if !UNITY_WEBGL || UNITY_EDITOR
 using Mediapipe.Unity;
 using Mediapipe.Unity.FaceMesh;
+#endif
 using System.Collections.Generic;
 using UnitEye;
 using UnityEngine;
@@ -26,14 +28,12 @@ public class HomulerGaze : MonoBehaviour
 
     private GUIStyle style = new GUIStyle();
 
-    public HomulerEyeHelper _eyeHelper;
-    public WebCamSource _webcam;
-
     private AOIBox _offscreenAOI;
 
     private RidgeRegression _xModel, _yModel;
     private MLP _mlp;
-    private HomulerEyeMURunner _modelRunner;
+    //Platform seam: native MediaPipe+Inference Engine on desktop, or a browser-JS provider on WebGL.
+    private IGazeProvider _provider;
     private KalmanFilter kalmanFilter;
     private EaseSmoothing easeSmoothing;
     private OneEuroFilter<Vector2> oneEuroFilter;
@@ -50,8 +50,10 @@ public class HomulerGaze : MonoBehaviour
     #endregion
 
     #region Public accessors
-    public HomulerEyeMURunner ModelRunner { get => _modelRunner; }
-    public HomulerEyeHelper EyeHelper { get => _eyeHelper; }
+    //The platform-specific gaze producer (CV). Consumers (calibration, API) go through this, not the concrete runner.
+    public IGazeProvider Provider => _provider;
+    //A user is considered present while the provider is tracking a face
+    public bool IsUserPresent => _provider != null && _provider.IsFacePresent;
     public AOIManager AOIManager { get => _aoiManager; }
     public AOI OffscreenAOI { get => _offscreenAOI; }
     public CSVLogger CSVLogger { get => _csvLogger; }
@@ -78,7 +80,7 @@ public class HomulerGaze : MonoBehaviour
     public bool gazeUIActivated;
 
     [SerializeField]
-    private Calibrations _calibrations = Calibrations.MLCalibration;
+    private Calibrations _calibrations = Calibrations.RidgeRegression;
     public Calibrations Calibrations
     {
         get => _calibrations;
@@ -89,14 +91,16 @@ public class HomulerGaze : MonoBehaviour
                 _csvLogger.AppendNote($"Changed calibration type to {_calibrations}");
 
             _calibrations = value;
+            //Load calibration files, suppress exceptions as they are handled internally
             switch (_calibrations)
             {
                 case Calibrations.RidgeRegression:
-                    _xModel = RidgeRegression.LoadX("Reg_X.json");
-                    _yModel = RidgeRegression.LoadY("Reg_Y.json");
+                    try { _xModel = RidgeRegression.LoadX("Reg_X.json"); } catch { }
+                    try { _yModel = RidgeRegression.LoadY("Reg_Y.json"); } catch { }
                     break;
                 case Calibrations.MLCalibration:
-                    MLP.Load("MLP.json");
+                    //Fix: the loaded model was previously discarded (never assigned to _mlp)
+                    try { _mlp = MLP.Load("MLP.json"); } catch { }
                     break;
             }
         }
@@ -127,6 +131,11 @@ public class HomulerGaze : MonoBehaviour
     [SerializeField, Range(1e-10f, 1.0f)] public float mincutoff = 0.001f;
     [SerializeField, Range(1e-10f, 10.0f)] public float dcutoff = 1.0f;
 
+    //Hold the last gaze location while blinking instead of feeding unreliable eye crops through calibration/filtering
+    [SerializeField] public bool holdGazeDuringBlink = true;
+    [SerializeField, Range(0.1f, 2.0f)] public float maxBlinkHoldSeconds = 0.5f;
+    private float _blinkHoldStartedAt = -1f;
+
     [SerializeField, Range(30, 120)] private int _frameRate = 30;
 
     private bool _isRendering;
@@ -135,9 +144,15 @@ public class HomulerGaze : MonoBehaviour
         private set
         {
             _isRendering = value;
+#if !UNITY_WEBGL || UNITY_EDITOR
+            //FaceMeshSolution only exists on non-WebGL players (native MediaPipe); on WebGL the browser owns rendering
             var solution = _mediaPipeGO.GetComponent<FaceMeshSolution>();
-            solution.Annotate = _isRendering;
-            solution.IsRendering = _isRendering;
+            if (solution != null)
+            {
+                solution.Annotate = _isRendering;
+                solution.IsRendering = _isRendering;
+            }
+#endif
         }
     }
 
@@ -147,15 +162,13 @@ public class HomulerGaze : MonoBehaviour
     {
         Application.targetFrameRate = _frameRate;
 
-        _webcam = _mediaPipeGO.GetComponent<WebCamSource>();
-        //FaceMeshSolution instance
-        FaceMeshSolution faceMesh = _mediaPipeGO.GetComponent<FaceMeshSolution>();
-
-        //Create new EyeHelper
-        _eyeHelper = new HomulerEyeHelper(faceMesh, _webcam.name);
-
-        //Create new EyeMURunner
-        _modelRunner = new HomulerEyeMURunner(faceMesh);
+        //Create the platform gaze provider. The seam keeps everything below (calibration/filter/AOI/CSV)
+        //identical across platforms; only the webcam->raw-gaze producer differs.
+#if UNITY_WEBGL && !UNITY_EDITOR
+        _provider = new WebGLGazeProvider();
+#else
+        _provider = new NativeGazeProvider(_mediaPipeGO);
+#endif
 
         //Load calibration files, suppress exceptions as they are handled internally
         switch (_calibrations)
@@ -225,19 +238,47 @@ public class HomulerGaze : MonoBehaviour
     public virtual void LateUpdate()
     {
         //Peform neural network inference through entire eye tracking pipeline
-        if (!_modelRunner.PerformInference(_webcam)) 
+        if (!_provider.Tick())
             return;
 
-        //Get gaze location from network output
-        gazeLocation.x = _modelRunner.NetworkOutput[0];
-        gazeLocation.y = _modelRunner.NetworkOutput[1];
+        //Drowsy, blinking and distance
+        _drowsy = _provider.IsDrowsy;
+        _blinking = _provider.IsBlinking;
+        _distance = _provider.DistanceMm;
 
-        //Apply calibration
-        gazeLocation = RefineGazeLocation(gazeLocation, _calibrations);
+        //While blinking the eye crops are unreliable, so optionally hold the last gaze location
+        //instead of feeding the resulting spike through calibration and filtering. Capped so a
+        //miscalibrated blinking threshold cannot freeze the gaze location.
+        bool holdGaze = false;
+        if (holdGazeDuringBlink && _blinking)
+        {
+            if (_blinkHoldStartedAt < 0f)
+                _blinkHoldStartedAt = Time.unscaledTime;
+            holdGaze = Time.unscaledTime - _blinkHoldStartedAt <= maxBlinkHoldSeconds;
+        }
+        else
+        {
+            _blinkHoldStartedAt = -1f;
+        }
 
-        //Apply filtering
-        Vector2 unfilteredGaze = gazeLocation;
-        gazeLocation = SmoothGazeLocation(gazeLocation, _filtering);
+        Vector2 unfilteredGaze;
+        if (holdGaze)
+        {
+            unfilteredGaze = gazeLocation;
+        }
+        else
+        {
+            //Get raw gaze location from the provider
+            gazeLocation.x = _provider.RawGaze.x;
+            gazeLocation.y = _provider.RawGaze.y;
+
+            //Apply calibration
+            gazeLocation = RefineGazeLocation(gazeLocation, _calibrations);
+
+            //Apply filtering
+            unfilteredGaze = gazeLocation;
+            gazeLocation = SmoothGazeLocation(gazeLocation, _filtering);
+        }
 
         //Update last gaze location timestamp
         var now = System.DateTime.Now;
@@ -246,25 +287,20 @@ public class HomulerGaze : MonoBehaviour
         //AOI updating
         aoiNameList = _aoiManager.CheckAOIList(new Vector2(gazeLocation.x / Screen.width, gazeLocation.y / Screen.height));
 
-        //Drowsy, blinking and distance
-        _drowsy = _eyeHelper.IsDrowsy();
-        _blinking = _eyeHelper.IsBlinking();
-        _distance = _eyeHelper.CalculateCamDistanceFocal();
-
         //CSV Logging
         if (!PauseCSVLogging && _csvLogger != null && _csvLogger.isActiveAndEnabled)
-            _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _eyeHelper.EyeFeature(), _blinking, now, aoiNameList));
+            _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _provider.EyeFeature, _blinking, now, aoiNameList));
 
         //Drowsy calibration
-        if (_eyeHelper.Calibrating)
-            _eyeHelper.CalibrateDrowsyStats(false);
+        if (_provider.IsCalibratingDrowsy)
+            _provider.CalibrateDrowsy(false);
 
         //Unload Calibration if calibration is done
         if (_calibrationScript != null && _calibrationScript.Returned)
         {
             //Add one entry for the note because PauseCSVLogging is currently true
             if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
-                _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _eyeHelper.EyeFeature(), _blinking, now, aoiNameList));
+                _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _provider.EyeFeature, _blinking, now, aoiNameList));
             UnloadCalibration();
         }
 
@@ -276,11 +312,11 @@ public class HomulerGaze : MonoBehaviour
     public virtual void OnGUI()
     {
         //Draw eye textures on the GUI if they exist
-        if (showEyes && _modelRunner?.LeftEyeTexture != null && _modelRunner?.RightEyeTexture != null)
+        if (showEyes && _provider?.LeftEyeTexture != null && _provider?.RightEyeTexture != null)
         {
-            GUI.DrawTexture(new Rect(Screen.width - 10, 10, -IMG_SIZE, IMG_SIZE), _modelRunner.LeftEyeTexture);
+            GUI.DrawTexture(new Rect(Screen.width - 10, 10, -IMG_SIZE, IMG_SIZE), _provider.LeftEyeTexture);
 
-            GUI.DrawTexture(new Rect(10, 10, IMG_SIZE, IMG_SIZE), _modelRunner.RightEyeTexture);
+            GUI.DrawTexture(new Rect(10, 10, IMG_SIZE, IMG_SIZE), _provider.RightEyeTexture);
         }
 
         //Draw crosshair on the GUI if one is selected
@@ -302,8 +338,8 @@ public class HomulerGaze : MonoBehaviour
     public virtual void OnDestroy()
     {
         // Must call Dispose method when no longer in use.
-        _modelRunner?.Dispose();
-        _modelRunner = null;
+        _provider?.Dispose();
+        _provider = null;
     }
 
     /// <summary>
@@ -313,8 +349,13 @@ public class HomulerGaze : MonoBehaviour
     /// <returns>The calibrated gaze location</returns>
     public Vector2 RefineGazeLocation(Vector2 rawGaze, Calibrations calibrations)
     {
-        var features = _modelRunner.Features.ToArray();
+        var features = _provider.GetFeatures();
         Vector2 refinedGaze = Vector2.zero;
+
+        //No feature vector (e.g. a browser provider streaming only raw gaze) -> calibration cannot
+        //apply, use the raw gaze location directly
+        if (features == null || features.Length == 0)
+            return rawGaze;
 
         //Switch by calibration type
         switch (calibrations)
@@ -323,8 +364,12 @@ public class HomulerGaze : MonoBehaviour
                 refinedGaze = rawGaze;
                 break;
             case Calibrations.RidgeRegression:
+                //Fall back to the raw gaze location if no calibration model is loaded
                 if (_xModel == null || _yModel == null)
+                {
+                    refinedGaze = rawGaze;
                     break;
+                }
                 refinedGaze.x = _xModel.Predict(features);
                 refinedGaze.y = _yModel.Predict(features);
 
@@ -332,12 +377,18 @@ public class HomulerGaze : MonoBehaviour
                 refinedGaze.y *= Screen.height;
                 break;
             case Calibrations.MLCalibration:
+                //Fall back to the raw gaze location if no calibration model is loaded
+                if (_mlp == null)
+                {
+                    refinedGaze = rawGaze;
+                    break;
+                }
                 refinedGaze = _mlp.Predict(features);
                 break;
         }
-        //Default if calibration fails
-        if (float.IsNaN(refinedGaze.x)) refinedGaze.x = 0.0f;
-        if (float.IsNaN(refinedGaze.y)) refinedGaze.y = 0.0f;
+        //If calibration produced no usable value (NaN, e.g. model/feature mismatch), fall back to raw gaze
+        if (float.IsNaN(refinedGaze.x) || float.IsNaN(refinedGaze.y))
+            return rawGaze;
 
         return refinedGaze;
     }
@@ -566,16 +617,14 @@ public class HomulerGaze : MonoBehaviour
 
         if (GUI.Button(new Rect(width * 0.025f, height * 0.025f, width * 0.12f, height * 0.05f), $"Previous Webcam", gazeUIStyleButton))
         {
-            _webcam.SelectSource(_webcam.GetCameraIndex() + 1);
-            _eyeHelper.CameraChanged(_webcam.sourceName);
+            _provider.NextCamera();
         }
 
-        GUI.Label(new Rect(width * 0.18f, height * 0.025f, width * 0.12f, height * 0.05f), $"Current Webcam: {_webcam.sourceName}", gazeUIStyleLabel);
+        GUI.Label(new Rect(width * 0.18f, height * 0.025f, width * 0.12f, height * 0.05f), $"Current Webcam: {_provider.CurrentCameraName}", gazeUIStyleLabel);
 
         if (GUI.Button(new Rect(width * 0.335f, height * 0.025f, width * 0.12f, height * 0.05f), $"Next Webcam", gazeUIStyleButton))
         {
-            _webcam.SelectSource(_webcam.GetCameraIndex() - 1);
-            _eyeHelper.CameraChanged(_webcam.sourceName);
+            _provider.PreviousCamera();
         }
 
         GUI.EndGroup();
@@ -611,7 +660,7 @@ public class HomulerGaze : MonoBehaviour
         GUI.Label(new Rect(width * 0.025f, height * 0.025f, width * 0.455f, height * 0.05f), "Calibrate Distance to Camera by pressing the button when your eyes are 50cm away from the camera. After calibration the calculated distance should match the real life distance. This value is saved between runs.", gazeUIStyleLabel);
 
         if (GUI.Button(new Rect(width * 0.025f, height * 0.07f, width * 0.2f, height * 0.05f), $"Calibrate Distance to Camera", gazeUIStyleButton))
-            _eyeHelper.CalibrateFocalLength();
+            _provider.CalibrateDistance();
 
         GUI.Label(new Rect(width * 0.26f, height * 0.085f, width * 0.195f, height * 0.05f), $"Calculated distance: {_distance:F1} mm", gazeUIStyleLabel);
 
@@ -625,12 +674,12 @@ public class HomulerGaze : MonoBehaviour
         GUI.Label(new Rect(width * 0.025f, height * 0.025f, width * 0.455f, height * 0.05f), "Calibrate blinking and drowsiness thresholds based on the eye aspect ratio. These values are saved between runs.", gazeUIStyleLabel);
 
         if (GUI.Button(new Rect(width * 0.025f, height * 0.07f, width * 0.1f, height * 0.05f), $"Calibrate Blinking Threshold", gazeUIStyleButton))
-            _eyeHelper.CalibrateBlinking();
+            _provider.CalibrateBlinking();
 
         GUI.Label(new Rect(width * 0.15f, height * 0.085f, width * 0.08f, height * 0.05f), $"{(_blinking ? "Eyes are closed" : "Eyes are open")}", gazeUIStyleLabel);
 
-        if (GUI.Button(new Rect(width * 0.255f, height * 0.07f, width * 0.1f, height * 0.05f), $"{(_eyeHelper.Calibrating ? $"Calibrating Drowsiness based on {_eyeHelper.CalibrationCount} values" : "Calibrate Drowsiness Baseline")}", gazeUIStyleButton))
-            _eyeHelper.CalibrateDrowsyStats(true);
+        if (GUI.Button(new Rect(width * 0.255f, height * 0.07f, width * 0.1f, height * 0.05f), $"{(_provider.IsCalibratingDrowsy ? $"Calibrating Drowsiness based on {_provider.DrowsyCalibrationCount} values" : "Calibrate Drowsiness Baseline")}", gazeUIStyleButton))
+            _provider.CalibrateDrowsy(true);
 
         GUI.Label(new Rect(width * 0.38f, height * 0.085f, width * 0.08f, height * 0.05f), $"{(_drowsy ? "Drowsy" : "Alert")}", gazeUIStyleLabel);
 

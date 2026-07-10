@@ -116,7 +116,9 @@ namespace Mediapipe.Unity.FaceMesh
             get
             {
                 var l6 = FaceLandmarks[6];
-                var l151 = FaceLandmarks[6];
+                //Fix: previously read FaceLandmarks[6] twice (copy-paste), making roll a constant -PI/2.
+                //Landmark 151 (forehead midline) vs 6 (nose bridge) gives the actual head roll.
+                var l151 = FaceLandmarks[151];
                 float roll = Mathf.Atan2(l151.X - l6.X, l6.Y - l151.Y);
 
                 //Divide by 2 to lessen roll impact

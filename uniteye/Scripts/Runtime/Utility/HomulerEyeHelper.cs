@@ -1,3 +1,6 @@
+// Excluded from WebGL player builds: depends on the native MediaPipe plugin (Mediapipe.Runtime
+// has no wasm library, so IL2CPP linking fails). Kept for the Editor regardless of build target.
+#if !UNITY_WEBGL || UNITY_EDITOR
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
@@ -348,7 +351,7 @@ namespace UnitEye
         public float GetIrisBigger(float camFOV = -1.0f, bool undistort = false)
         {
             float lSize = GetIrisSize(_faceMesh.LeftIrisLandmarks, camFOV, undistort);
-            float rSize = GetIrisSize(_faceMesh.LeftIrisLandmarks, camFOV, undistort);
+            float rSize = GetIrisSize(_faceMesh.RightIrisLandmarks, camFOV, undistort);
 
             return lSize >= rSize ? lSize : rSize;
         }
@@ -812,3 +815,4 @@ namespace UnitEye
         #endregion
     }
 }
+#endif

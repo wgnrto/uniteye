@@ -14,7 +14,7 @@ public class GazeGame : MonoBehaviour /*Gaze*/
     bool moving;
 
     //When inheriting, remove gaze reference
-    public Gaze gaze;
+    public HomulerGaze gaze;
 
     RaycastHit hitObject = new RaycastHit();
 
