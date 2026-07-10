@@ -36,6 +36,7 @@ namespace UnitEye
         // and two Enum.GetValues arrays on every OnGUI pass.
         private static readonly Calibrations[] _calibrationValues = (Calibrations[])System.Enum.GetValues(typeof(Calibrations));
         private static readonly Filtering[] _filteringValues = (Filtering[])System.Enum.GetValues(typeof(Filtering));
+        private static readonly GazeBackbone[] _backboneValues = (GazeBackbone[])System.Enum.GetValues(typeof(GazeBackbone));
         private GUIStyle _uiStyleBox, _uiStyleButton, _uiStyleLabel, _uiStyleHSThumb, _toggleStyle;
         private int _uiStyleW = -1, _uiStyleH = -1;
 
@@ -90,9 +91,24 @@ namespace UnitEye
         //(no per-frame point draw). Toggleable from the Gaze UI; honoured across calibration restores.
         public bool showFaceMesh = true;
 
-        //Which gaze model the native provider runs (EyeMU by default; GazeEstimation needs an added ONNX
-        //+ hand-test, see docs/GAZE-BACKBONES.md). Read at Start; change it before entering play mode.
+        //Which gaze model the native provider runs (EyeMU by default; the GazeEstimation models need an
+        //ONNX + hand-test, see docs/GAZE-BACKBONES.md). Read at Start; can also be switched at runtime via
+        //SetBackbone / the Gaze UI. The current value is kept in sync when switched.
         [SerializeField] private GazeBackbone _gazeBackbone = GazeBackbone.EyeMU;
+        public GazeBackbone GazeBackbone => _gazeBackbone;
+        //The direction-based backbones feed the model a FACE crop (shown as one thumbnail), not eye crops.
+        private bool UsesFaceCrop => _gazeBackbone != GazeBackbone.EyeMU;
+
+        /// <summary>
+        /// Switch the gaze model at runtime. Rebuilds the provider's backbone; the shared face-mesh /
+        /// blink / distance stack is unchanged. Calibration is per-backbone (the feature vector differs),
+        /// so gaze falls back to raw (uncalibrated) until you recalibrate for the new model.
+        /// </summary>
+        public void SetBackbone(GazeBackbone backbone)
+        {
+            _gazeBackbone = backbone;
+            _provider?.SetBackbone(backbone);
+        }
 
         [System.NonSerialized]
         public bool gazeUIActivated;
@@ -313,12 +329,20 @@ namespace UnitEye
 
         public virtual void OnGUI()
         {
-            //Draw eye textures on the GUI if they exist
+            //Draw the debug crop textures if they exist. EyeMU produces two eye crops (left drawn
+            //top-right mirrored, right top-left); the direction-based backbones produce a single FACE
+            //crop, so draw just one thumbnail for those instead of the same face twice.
             if (showEyes && _provider?.LeftEyeTexture != null && _provider?.RightEyeTexture != null)
             {
-                GUI.DrawTexture(new Rect(Screen.width - 10, 10, -IMG_SIZE, IMG_SIZE), _provider.LeftEyeTexture);
-
-                GUI.DrawTexture(new Rect(10, 10, IMG_SIZE, IMG_SIZE), _provider.RightEyeTexture);
+                if (UsesFaceCrop)
+                {
+                    GUI.DrawTexture(new Rect(10, 10, IMG_SIZE, IMG_SIZE), _provider.LeftEyeTexture);
+                }
+                else
+                {
+                    GUI.DrawTexture(new Rect(Screen.width - 10, 10, -IMG_SIZE, IMG_SIZE), _provider.LeftEyeTexture);
+                    GUI.DrawTexture(new Rect(10, 10, IMG_SIZE, IMG_SIZE), _provider.RightEyeTexture);
+                }
             }
 
             //Draw crosshair on the GUI if one is selected. The size scales with screen height (a fixed
@@ -630,23 +654,31 @@ namespace UnitEye
             //Make header draggable
             GUI.DragWindow(new Rect(0, 0, width, height * 0.02f));
 
-            //Webcam controls
+            //Webcam + model controls
             // This might be broken (TW 07/2023)
             // We may have to restart the new webcam if we change the source.
             GUI.BeginGroup(new Rect(width * 0.01f, height * 0.02f, width * 0.48f, height * 0.08f));
 
-            GUI.Box(new Rect(0, 0, width * 0.48f, height * 0.08f), "Webcam controls", gazeUIStyleBox);
+            GUI.Box(new Rect(0, 0, width * 0.48f, height * 0.08f), "Webcam & Model controls", gazeUIStyleBox);
 
-            if (GUI.Button(new Rect(width * 0.025f, height * 0.025f, width * 0.12f, height * 0.05f), $"Previous Webcam", gazeUIStyleButton))
+            if (GUI.Button(new Rect(width * 0.02f, height * 0.025f, width * 0.1f, height * 0.05f), $"Prev Cam", gazeUIStyleButton))
             {
                 _provider.PreviousCamera();
             }
 
-            GUI.Label(new Rect(width * 0.18f, height * 0.025f, width * 0.12f, height * 0.05f), $"Current Webcam: {_provider.CurrentCameraName}", gazeUIStyleLabel);
+            GUI.Label(new Rect(width * 0.125f, height * 0.025f, width * 0.11f, height * 0.05f), $"Cam: {_provider.CurrentCameraName}", gazeUIStyleLabel);
 
-            if (GUI.Button(new Rect(width * 0.335f, height * 0.025f, width * 0.12f, height * 0.05f), $"Next Webcam", gazeUIStyleButton))
+            if (GUI.Button(new Rect(width * 0.24f, height * 0.025f, width * 0.1f, height * 0.05f), $"Next Cam", gazeUIStyleButton))
             {
                 _provider.NextCamera();
+            }
+
+            //Switch the gaze model at runtime (cycles EyeMU -> MobileOne -> MobileNetV2). The pipeline
+            //falls back to raw gaze until you recalibrate for the newly selected model.
+            if (GUI.Button(new Rect(width * 0.35f, height * 0.025f, width * 0.12f, height * 0.05f), $"Model: {_gazeBackbone}", gazeUIStyleButton))
+            {
+                int i = System.Array.IndexOf(_backboneValues, _gazeBackbone);
+                SetBackbone(_backboneValues[(i + 1) % _backboneValues.Length]);
             }
 
             GUI.EndGroup();
@@ -669,7 +701,7 @@ namespace UnitEye
             if (GUI.Button(new Rect(width * 0.135f, height * 0.025f, width * 0.105f, height * 0.05f), $"{(drawDot ? "Hide" : "Show")} GazeDot", gazeUIStyleButton))
                 drawDot = !drawDot;
 
-            if (GUI.Button(new Rect(width * 0.25f, height * 0.025f, width * 0.105f, height * 0.05f), $"{(showEyes ? "Hide" : "Show")} Eyecrops", gazeUIStyleButton))
+            if (GUI.Button(new Rect(width * 0.25f, height * 0.025f, width * 0.105f, height * 0.05f), $"{(showEyes ? "Hide" : "Show")} {(UsesFaceCrop ? "FaceCrop" : "Eyecrops")}", gazeUIStyleButton))
                 showEyes = !showEyes;
 
             if (GUI.Button(new Rect(width * 0.365f, height * 0.025f, width * 0.105f, height * 0.05f), $"{(showFaceMesh ? "Hide" : "Show")} FaceMesh", gazeUIStyleButton))

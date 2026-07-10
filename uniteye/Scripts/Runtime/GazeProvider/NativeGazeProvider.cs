@@ -17,7 +17,7 @@ namespace UnitEye
     {
         private readonly FaceMeshSolution _faceMesh;
         private readonly WebCamSource _webcam;
-        private readonly IGazeBackbone _backbone;
+        private IGazeBackbone _backbone;   // not readonly: SetBackbone swaps it at runtime
         private readonly HomulerEyeHelper _eyeHelper;
 
         private Vector2 _rawGaze;
@@ -35,18 +35,29 @@ namespace UnitEye
             _eyeHelper = new HomulerEyeHelper(_faceMesh, _webcam.name);
 
             //Pick the gaze model behind the shared face-mesh/blink/distance stack.
+            _backbone = CreateBackbone(backbone);
+        }
+
+        private IGazeBackbone CreateBackbone(GazeBackbone backbone)
+        {
             switch (backbone)
             {
                 case GazeBackbone.GazeMobileOne:
-                    _backbone = new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobileone_s0_gaze");
-                    break;
+                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobileone_s0_gaze");
                 case GazeBackbone.GazeMobileNetV2:
-                    _backbone = new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobilenetv2_gaze");
-                    break;
+                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobilenetv2_gaze");
                 default:
-                    _backbone = new HomulerEyeMURunner(_faceMesh);
-                    break;
+                    return new HomulerEyeMURunner(_faceMesh);
             }
+        }
+
+        //Swap the gaze model at runtime: dispose the old backbone and build the new one. The shared
+        //face-mesh/blink/distance stack is unchanged. Calibration is per-backbone (different feature
+        //vector), so RefineGazeLocation falls back to raw gaze until the new backbone is recalibrated.
+        public void SetBackbone(GazeBackbone backbone)
+        {
+            _backbone?.Dispose();
+            _backbone = CreateBackbone(backbone);
         }
 
         public bool Tick()

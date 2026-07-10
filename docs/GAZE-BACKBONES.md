@@ -21,7 +21,11 @@ tested path.
 direction-based model from [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation). Both
 models the project ships (`Resources/ONNX/GazeEstimation/mobileone_s0_gaze.onnx` and
 `mobilenetv2_gaze.onnx`) are **already wired and selectable** — pick **GazeMobileOne** or
-**GazeMobileNetV2** on `HomulerGaze → Gaze Backbone (model)`.
+**GazeMobileNetV2** on `HomulerGaze → Gaze Backbone (model)` before play, **or switch at runtime** with
+the **Model:** button in the Gaze UI (Webcam & Model controls) / `HomulerGaze.SetBackbone(...)`. Switching
+rebuilds only the model (the shared face-mesh/blink/distance stack stays); calibration is per-backbone, so
+gaze falls back to raw until you recalibrate. With a direction model the debug crop is a **face** crop
+(one thumbnail), so the Gaze UI shows a **FaceCrop** toggle instead of Eyecrops.
 
 The I/O was introspected from the actual ONNX (menu **UnitEye ▸ Inspect Gaze Models**), so the runner is
 coded to the real contract, not a guess — both models are identical:

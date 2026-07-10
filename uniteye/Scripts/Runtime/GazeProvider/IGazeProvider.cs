@@ -50,6 +50,10 @@ namespace UnitEye
         /// <summary>Toggle the debug face-mesh landmark overlay (native MediaPipe only; WebGL no-ops).</summary>
         bool AnnotateFaceMesh { get; set; }
 
+        /// <summary>Swap the gaze model at runtime (native only; WebGL no-ops — the browser owns the CV).
+        /// The calibration is per-backbone, so the pipeline falls back to raw gaze until recalibrated.</summary>
+        void SetBackbone(GazeBackbone backbone);
+
         // Calibration of the auxiliary signals (blink / drowsy / distance). WebGL providers may no-op.
         bool IsCalibratingDrowsy { get; }
         int DrowsyCalibrationCount { get; }
