@@ -10,67 +10,11 @@ using UnityEngine;
 namespace UnitEye
 {
     public static class HomulerFunctions
-    { 
-        //Reusable buffer for FlipTexture. This runs every frame on the left eye crop; the old code
-        //allocated a `new Texture2D` per call and never Destroy()'d it, leaking native GPU memory every
-        //frame. It is a *separate* buffer from _getEyeTextureBuffer so a flip does not clobber the
-        //right-eye crop that GetEyeTexture leaves in that shared buffer.
-        private static Texture2D _flipTextureBuffer = new Texture2D(256, 256);
-        /// <summary>
-        /// Horizontally flips a Texture that can be converted into a Texture2D (not a RenderTexture)
-        /// </summary>
-        /// <param name="source">Texture to be flipped </param>
-        /// <returns>Flipped Texture (a shared reused buffer; do not cache the reference across frames)</returns>
-        public static Texture FlipTexture(Texture source)
-        {
-            //If source is size 0 return the reused buffer as a dummy texture
-            if (source.width == 0 || source.height == 0)
-                return _flipTextureBuffer;
-
-            //Reinitialize buffer Texture2D with new size, reusing the same native texture (no per-frame leak)
-            _flipTextureBuffer.Reinitialize(source.width, source.height);
-
-            //Write pixels to Color32[] array
-            var pixelArray = ((Texture2D)source).GetPixels32();
-
-            //Use System.Array.Reverse to reverse each horitontal pixel chunk in the pixelArray
-            for (int i = 0; i < source.height; i++)
-                Array.Reverse(pixelArray, i * source.width, source.width);
-
-            //Return a flipped Texture
-            _flipTextureBuffer.SetPixels32(pixelArray);
-            _flipTextureBuffer.Apply();
-            return _flipTextureBuffer;
-        }
-
-        //Buffer Texture2D to avoid memory leak
-        private static Texture2D _getEyeTextureBuffer = new Texture2D(256,256);
-        /// <summary>
-        /// Calculates EyeCrops similar to EyeMU and returns them as a Texture
-        /// </summary>
-        /// <param name="holisticPipeline">HolisticPipeline reference to access vertex data</param>
-        /// <param name="source">WebCamTexture to source from</param>
-        /// <param name="leftVertex">Left vertex index from face mesh</param>
-        /// <param name="rightVertex">Right vertex index from face mesh</param>
-        /// <param name="imageSize">Square image size to use, default 128x128</param>
-        /// <returns>EyeCrop Texture</returns>
-        public static Texture GetEyeTexture(IList<NormalizedLandmark> landmarks, WebCamTexture source, int leftVertex, int rightVertex)
-        {
-            var crop = GetEyeCropRect(landmarks, leftVertex, rightVertex, source.width, source.height);
-
-            //If crop is about to be size 0 skip SetPixels
-            if (source != null && crop.width > 0 && crop.x >= 0 && crop.x <= source.width - crop.width && crop.y >= 0 && crop.y <= source.height - crop.height)
-            {
-                //Reinitialize buffer Texture2D with new size, does not duplicate to avoid memory leak
-                _getEyeTextureBuffer.Reinitialize(crop.width, crop.height);
-
-                //Copy relevant pixels from source to croppedSource
-                _getEyeTextureBuffer.SetPixels(source.GetPixels(crop.x, crop.y, crop.width, crop.height));
-                _getEyeTextureBuffer.Apply();
-            }
-            //return croppedSource as Texture
-            return _getEyeTextureBuffer;
-        }
+    {
+        //Note: the CPU eye-crop path (GetEyeTexture's GetPixels readback + FlipTexture's GetPixels32
+        //round-trip, both run every frame) was replaced by a GPU Graphics.Blit crop in
+        //HomulerEyeMURunner.ComputeEyes/BlitEyeCrop, so those two methods and their Texture2D buffers
+        //were removed. GetEyeCropRect (below) still computes the crop rectangle used by the GPU blit.
 
         /// <summary>
         /// Computes the eye crop rectangle in source pixel coordinates (bottom-left origin, as used

@@ -84,10 +84,6 @@ public class HomulerEyeMURunner
     //Reused pose input buffer (was a fresh float[4] every inference)
     private readonly float[] _poseBuffer = new float[4];
 
-    //Textures to handle GetEyeTexture()
-    private Texture _leftEyeTexture;
-    private Texture _rightEyeTexture;
-
     public HomulerEyeMURunner(FaceMeshSolution faceMesh)
     {
         _faceMesh = faceMesh;
@@ -128,17 +124,18 @@ public class HomulerEyeMURunner
         _poseBuffer[3] = _faceMesh.HeadArea;
         var pose = new Tensor<float>(new TensorShape(1, 4), _poseBuffer);
 
-        //Preprocess eye crops into tensor-format RenderTextures, then convert to NHWC input tensors
-        //(shape 1x128x128x3) to match the model's declared image-input layout.
-        //HAND-TEST NOTE: shapes/names are now verified to match the model, but pixel normalization and
-        //channel order (RGB vs BGR) still ride on the preprocessing shader + TextureConverter and can only
-        //be confirmed by looking at live gaze. This is the remaining thing to verify at runtime.
-        Graphics.Blit(_leftEyeTexture, LeftEyeTexture);
+        //The eye crops were already cropped straight from the webcam texture into LeftEyeTexture/
+        //RightEyeTexture on the GPU in ComputeEyes (no CPU GetPixels readback). Preprocess them into
+        //tensor-format RenderTextures, then convert to NHWC input tensors (shape 1x128x128x3) to match
+        //the model's declared image-input layout.
+        //HAND-TEST NOTE: shapes/names are verified to match the model, but pixel normalization and channel
+        //order (RGB vs BGR) ride on the preprocessing shader + TextureConverter and can only be confirmed
+        //by looking at live gaze. The GPU crop geometry (bottom-left UV, left-eye horizontal flip) also
+        //wants a live check — the eye-crop thumbnails (Show Eyecrops) should look identical to before.
         _leftEyeTextureTensor = PreprocessImage(LeftEyeTexture, _leftEyeTextureTensor, _eyeMUResource.preprocessCompute);
         var leftTensor = new Tensor<float>(new TensorShape(1, IMG_SIZE, IMG_SIZE, 3));
         TextureConverter.ToTensor(_leftEyeTextureTensor, leftTensor, _nhwcTransform);
 
-        Graphics.Blit(_rightEyeTexture, RightEyeTexture);
         _rightEyeTextureTensor = PreprocessImage(RightEyeTexture, _rightEyeTextureTensor, _eyeMUResource.preprocessCompute);
         var rightTensor = new Tensor<float>(new TensorShape(1, IMG_SIZE, IMG_SIZE, 3));
         TextureConverter.ToTensor(_rightEyeTextureTensor, rightTensor, _nhwcTransform);
@@ -171,7 +168,9 @@ public class HomulerEyeMURunner
     }
 
     /// <summary>
-    /// Compute the left and right eye crop textures from the current face landmarks.
+    /// Crop the left and right eye regions from the webcam texture straight into the eye RenderTextures
+    /// on the GPU (no CPU GetPixels readback / Texture2D churn / per-frame texture allocation, which is
+    /// what the old GetEyeTexture + FlipTexture path did every frame).
     /// </summary>
     /// <param name="texture">webcam texture</param>
     /// <returns>true if landmarks were available, false if not</returns>
@@ -182,14 +181,42 @@ public class HomulerEyeMURunner
         if (landmarks == null)
             return false;
 
-        //Left Eye Texture needs to be flipped to match EyeMU
-        //263 and 362 are the mesh vertex indices for the eye corners of the left eye
-        _leftEyeTexture = FlipTexture(GetEyeTexture(landmarks, texture, 362, 263));
+        int srcW = texture.width, srcH = texture.height;
+        if (srcW <= 0 || srcH <= 0)
+            return false;
 
-        //133 and 33 are the mesh vertex indices for the eye corners of the right eye
-        _rightEyeTexture = GetEyeTexture(landmarks, texture, 33, 133);
+        //Left eye (mesh corners 362,263), horizontally flipped to match EyeMU's expected orientation.
+        BlitEyeCrop(texture, LeftEyeTexture, GetEyeCropRect(landmarks, 362, 263, srcW, srcH), srcW, srcH, flipX: true);
+
+        //Right eye (mesh corners 33,133), no flip.
+        BlitEyeCrop(texture, RightEyeTexture, GetEyeCropRect(landmarks, 33, 133, srcW, srcH), srcW, srcH, flipX: false);
 
         return true;
+    }
+
+    /// <summary>
+    /// GPU crop: samples the sub-rectangle <paramref name="crop"/> of <paramref name="source"/> into
+    /// <paramref name="dest"/> via Graphics.Blit scale/offset. Uses the same bottom-left origin the old
+    /// GetPixels path used; flipX negates the horizontal scale to mirror the left eye. If the crop is
+    /// (partly) off the source it is skipped, leaving the previous frame's crop — matching the old CPU
+    /// path, which skipped the copy on an out-of-bounds crop.
+    /// </summary>
+    private static void BlitEyeCrop(Texture source, RenderTexture dest, RectInt crop, int srcW, int srcH, bool flipX)
+    {
+        if (crop.width <= 0 || crop.height <= 0 ||
+            crop.x < 0 || crop.y < 0 || crop.x + crop.width > srcW || crop.y + crop.height > srcH)
+            return;
+
+        float cw = (float)crop.width / srcW;
+        float ch = (float)crop.height / srcH;
+        float cx = (float)crop.x / srcW;
+        float cy = (float)crop.y / srcH;
+
+        //Blit samples source at uv*scale + offset. For the horizontal flip, negate x and start from the
+        //crop's right edge.
+        Vector2 scale = flipX ? new Vector2(-cw, ch) : new Vector2(cw, ch);
+        Vector2 offset = flipX ? new Vector2(cx + cw, cy) : new Vector2(cx, cy);
+        Graphics.Blit(source, dest, scale, offset);
     }
 
     /// <summary>

@@ -4,8 +4,8 @@ namespace UnitEye
 {
     /// <summary>
     /// Shared, inference-backend-agnostic utility functions used across UnitEye.
-    /// The Holistic/Barracuda-specific GetEyeTexture(HolisticPipeline, ...) was removed with
-    /// the Barracuda pipeline; the homuler path uses HomulerFunctions.GetEyeTexture(landmarks, ...).
+    /// The Holistic/Barracuda-specific eye-crop helpers were removed with the Barracuda pipeline; the
+    /// homuler path crops on the GPU in HomulerEyeMURunner using HomulerFunctions.GetEyeCropRect(...).
     /// </summary>
     public class Functions
     {
