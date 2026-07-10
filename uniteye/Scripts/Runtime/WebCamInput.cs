@@ -171,15 +171,13 @@ public class WebCamInput : MonoBehaviour
     /// <returns>true if webCamName is valid, false if webCamName does not exist</returns>
     public static bool CheckValidWebCam(string webCamName)
     {
-        var valid = false;
-
         foreach (var device in WebCamTexture.devices)
         {
             if (device.name == webCamName)
-                valid = true;
+                return true;
         }
 
-        return valid;
+        return false;
     }
 
     /// <summary>
