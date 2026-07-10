@@ -333,16 +333,27 @@ public class HomulerGaze : MonoBehaviour
             GUI.DrawTexture(new Rect(dotX - half, dotY - half, crosshairSize, crosshairSize), dot);
         }
 
-        //Gaze UI
-        if (showGazeUI && GUI.Button(new Rect(Screen.height * 0.05f, Screen.height - Screen.height * 0.1f, Screen.width * 0.1f, Screen.height * 0.05f), $"{(gazeUIActivated ? "Hide" : "Show")} Gaze UI"))
-            gazeUIActivated = !gazeUIActivated;
+        //Font scale relative to a 1080p baseline (== 1.0 at 1920x1080). Fixed-pixel IMGUI text is a
+        //speck on high-DPI displays (e.g. 3200x2000), so scale it up; never shrink below the baseline.
+        float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
+
+        //Gaze UI. The toggle button used Unity's default built-in font, which is tiny at high DPI.
+        if (showGazeUI)
+        {
+            var toggleStyle = new GUIStyle(GUI.skin.button) { fontSize = Mathf.RoundToInt(14f * uiScale) };
+            if (GUI.Button(new Rect(Screen.height * 0.05f, Screen.height - Screen.height * 0.1f, Screen.width * 0.1f, Screen.height * 0.05f), $"{(gazeUIActivated ? "Hide" : "Show")} Gaze UI", toggleStyle))
+                gazeUIActivated = !gazeUIActivated;
+        }
 
         if (gazeUIActivated)
             gazeUI = GUI.Window(0, gazeUI, GazeUI, "");
 
         //Draw text
         if (visualizeAOI && aoiNameList != null && aoiNameList.Count > 0)
+        {
+            style.fontSize = Mathf.RoundToInt(30f * uiScale);
             GUI.Label(new Rect(200, 100, 500, 50), string.Join(", ", aoiNameList), style);
+        }
     }
 
     public virtual void OnDestroy()

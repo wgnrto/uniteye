@@ -326,10 +326,12 @@ public class HomulerGazeCalibration : MonoBehaviour
 
     private void OnGUI()
     {
-        //Show message on screen
+        //Show message on screen. Scale the font with resolution so the message (and the final RMSE)
+        //stays legible on high-DPI displays; == baseline at 1080p, larger above it.
         if (_showMessage)
         {
-            _guiStyle.fontSize = _finished ? 16 : 36;
+            float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
+            _guiStyle.fontSize = Mathf.RoundToInt((_finished ? 16 : 36) * uiScale);
             GUI.Label(new Rect(Screen.width / 2 - Screen.width * (_finished ? 0.15f : 0.1f), Screen.height / 2 - 20, 100, 60), $"{_guiMessage}", _guiStyle);
         }
 
