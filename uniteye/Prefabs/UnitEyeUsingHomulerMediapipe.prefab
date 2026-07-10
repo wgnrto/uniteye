@@ -54,7 +54,7 @@ MonoBehaviour:
   showEyes: 1
   visualizeAOI: 0
   showGazeUI: 1
-  _calibrations: 2
+  _calibrations: 1
   _filtering: 5
   easefactor: 0.4
   Q: 0.00001

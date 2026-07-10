@@ -367,7 +367,7 @@ MonoBehaviour:
   showEyes: 0
   visualizeAOI: 0
   showGazeUI: 0
-  _calibrations: 2
+  _calibrations: 1
   _filtering: 5
   easefactor: 0.4
   Q: 0.00001
@@ -411,7 +411,7 @@ MonoBehaviour:
   drawCheckpoints: 0
   currentRound: 0
   maxRoundsPerPreset: 2
-  calibrationType: 2
+  calibrationType: 1
   save: 1
   stopAfterPoints: 1
   quitAfterCalibration: 0

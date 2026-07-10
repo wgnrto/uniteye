@@ -15,7 +15,7 @@ public class HomulerGazeCalibration : MonoBehaviour
 {
     #region Private
 
-    private HomulerEyeMURunner _modelRunner;
+    private HomulerGaze _gaze;
 
     private List<float[]> _xData = new List<float[]>();
 
@@ -71,7 +71,7 @@ public class HomulerGazeCalibration : MonoBehaviour
 
     public int maxRoundsPerPreset = 2;
 
-    public Calibrations calibrationType = Calibrations.MLCalibration;
+    public Calibrations calibrationType = Calibrations.RidgeRegression;
     public bool save = true;
 
     public bool stopAfterPoints = true;
@@ -85,8 +85,8 @@ public class HomulerGazeCalibration : MonoBehaviour
 
     void Start()
     {
-        //Get ModelRunner reference
-        _modelRunner = GetComponent<HomulerGaze>().ModelRunner;
+        //Get HomulerGaze reference (features come from its platform gaze provider)
+        _gaze = GetComponent<HomulerGaze>();
 
         //If no crosshair is selected load the CalibrationDot Resource
         if (calibrationDot == null)
@@ -141,9 +141,9 @@ public class HomulerGazeCalibration : MonoBehaviour
 
     void Update()
     {
-        //If no ModelRunner get a new reference, this is in case of Start() racing conditions
-        if (_modelRunner == null)
-            _modelRunner = GetComponent<HomulerGaze>().ModelRunner;
+        //If no HomulerGaze reference yet, get one, this is in case of Start() racing conditions
+        if (_gaze == null)
+            _gaze = GetComponent<HomulerGaze>();
 
         //If finished and leftclick, signal Returned
         if (Input.GetKeyDown(KeyCode.Mouse0) && returnAfter && _finished)
@@ -280,7 +280,7 @@ public class HomulerGazeCalibration : MonoBehaviour
 
     private void CaptureNetworkOutput()
     {
-        _xData.Add(_modelRunner.Features.ToArray());
+        _xData.Add(_gaze.Provider.GetFeatures());
         _yXData.Add(_crossHairPos.x / Screen.width);
         _yYData.Add(_crossHairPos.y / Screen.height);
         _yData.Add(new Vector2(_crossHairPos.x /*/ Screen.width*/, _crossHairPos.y /*/ Screen.height*/));
@@ -306,89 +306,22 @@ public class HomulerGazeCalibration : MonoBehaviour
     {
         Debug.Log("Starting RidgeRegression training");
 
-        // Split data into training and test set
-        var testCount = Mathf.FloorToInt(_xData.Count * 0.2f);
-        Debug.Log($"Total Count: {_xData.Count}, Train Count: {_xData.Count - testCount}, Test Count: {testCount}");
+        var result = RidgeCalibrationTrainer.Train(
+            _xData, _yXData, _yYData,
+            rmseScaleX: Functions.PixelsToMm(Screen.width) * 0.1f,
+            rmseScaleY: Functions.PixelsToMm(Screen.height) * 0.1f);
 
-        var rand = new System.Random();
-        var randIndices = Enumerable.Range(0, testCount)
-                                     .Select(i => new Tuple<int, int>(rand.Next(testCount), i))
-                                     .OrderBy(i => i.Item1)
-                                     .Select(i => i.Item2);
-
-        var xTest = new List<float[]>(testCount);
-        var yXTest = new List<float>(testCount);
-        var yYTest = new List<float>(testCount);
-
-        // Extract test data
-        foreach (var index in randIndices)
-        {
-            xTest.Add(_xData[index]);
-            yXTest.Add(_yXData[index]);
-            yYTest.Add(_yYData[index]);
-        }
-
-        // Remove test data from full data
-        foreach (var index in randIndices.OrderByDescending(v => v))
-        {
-            _xData.RemoveAt(index);
-            _yXData.RemoveAt(index);
-            _yYData.RemoveAt(index);
-        }
-
-        float bestXRMSE = float.MaxValue, bestYRMSE = float.MaxValue;
-        RidgeRegression bestXModel = null, bestYModel = null;
-
-        float[] lambdas = { 0.01f, 0.05f, 0.1f, 1.0f, 5.0f, 10.0f };
-
-        var screenWidthToCm = Functions.PixelsToMm(Screen.width) * 0.1f;
-        var screenHeightToCm = Functions.PixelsToMm(Screen.height) * 0.1f;
-
-        // Find best x and y model
-        foreach (var lambda in lambdas)
-        {
-            var xModel = new RidgeRegression(lambda);
-            xModel.Train(_xData.ToArray(), _yXData.ToArray());
-            var xRMSE = CalculateRMSE(xModel, xTest.ToArray(), yXTest.ToArray(), screenWidthToCm);
-
-            var yModel = new RidgeRegression(lambda);
-            yModel.Train(_xData.ToArray(), _yYData.ToArray());
-            var yRMSE = CalculateRMSE(yModel, xTest.ToArray(), yYTest.ToArray(), screenHeightToCm);
-
-            Debug.Log($"Lambda: {lambda}, MSE X: {xRMSE}, MSE Y: {yRMSE}");
-
-            if (xRMSE < bestXRMSE)
-            {
-                bestXRMSE = xRMSE;
-                bestXModel = xModel;
-            }
-            if (yRMSE < bestYRMSE)
-            {
-                bestYRMSE = yRMSE;
-                bestYModel = yModel;
-            }
-        }
+        Debug.Log($"Total Count: {_xData.Count}, Train Count: {result.TrainCount}, Test Count: {result.TestCount}, " +
+                  $"Lambda X: {result.BestLambdaX}, Lambda Y: {result.BestLambdaY}");
 
         if (save)
         {
             Debug.Log("Saving best models");
-            bestXModel.Save("Reg_X.json");
-            bestYModel.Save("Reg_Y.json");
+            result.XModel.Save("Reg_X.json");
+            result.YModel.Save("Reg_Y.json");
         }
 
-        return $"RidgeRegression Training done. Best RMSE X: {bestXRMSE}cm | Best RMSE Y: {bestYRMSE}cm.";
-    }
-
-    private float CalculateRMSE(RidgeRegression model, float[][] X, float[] Y, float factor)
-    {
-        var error = 0.0f;
-        for (int i = 0; i < Y.Length; i++)
-        {
-            var yhat = model.Predict(X[i]);
-            error += MathF.Pow(Y[i] * factor - yhat * factor, 2);
-        }
-
-        return MathF.Sqrt(error / Y.Length);
+        return $"RidgeRegression Training done. Best RMSE X: {result.XRmse}cm | Best RMSE Y: {result.YRmse}cm.";
     }
 
     private void OnGUI()

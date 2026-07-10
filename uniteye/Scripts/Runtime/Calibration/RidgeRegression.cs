@@ -19,6 +19,8 @@ public class VectorConverter : JsonConverter
     public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer
     )
     {
+        if (reader.TokenType == JsonToken.Null) return null;
+
         JArray jArray = JArray.Load(reader);
         var target = Vector<float>.Build.Dense(jArray.ToObject<float[]>(serializer));
         serializer.Populate(jArray.CreateReader(), target);
@@ -51,6 +53,21 @@ public class RidgeRegression
 
     public bool Affine { get; set; }
 
+    //Per feature mean and standard deviation computed on the training data.
+    //When set, features are standardized before training and prediction so all features
+    //share one scale and the regularization treats them equally.
+    //Models saved by older versions do not contain these fields and are loaded with null,
+    //which skips standardization and keeps them fully backwards compatible.
+    [JsonConverter(typeof(VectorConverter))]
+    public Vector<float> FeatureMean { get; set; }
+
+    [JsonConverter(typeof(VectorConverter))]
+    public Vector<float> FeatureStd { get; set; }
+
+    //Tracks which default files we have already warned about, so the "no calibration" warning is
+    //logged once per session instead of on every OnValidate/Start reload (which spams the console).
+    private static readonly System.Collections.Generic.HashSet<string> _warnedDefaults = new System.Collections.Generic.HashSet<string>();
+
     public RidgeRegression(float lambda, bool affine = true)
     {
         Lambda = lambda;
@@ -74,8 +91,9 @@ public class RidgeRegression
         }
         catch
         {
-            //Default file fallback
-            Debug.LogWarning("Calibrated RidgeRegression files not found, using default files! Please run a RidgeRegression calibration!");
+            //Default file fallback (warn only once per default file per session)
+            if (_warnedDefaults.Add(defaultFilename))
+                Debug.LogWarning("Calibrated RidgeRegression files not found, using default files! Please run a RidgeRegression calibration!");
             var calibrations = Resources.Load<CalibrationResource>("CalibrationDefaultFiles");
             switch (defaultFilename)
             {
@@ -143,6 +161,9 @@ public class RidgeRegression
     {
         var input = Matrix<float>.Build.DenseOfRowArrays(x);
 
+        ComputeStandardization(input);
+        input = StandardizeMatrix(input);
+
         if (Affine)
         {
             input = input.InsertColumn(
@@ -165,6 +186,54 @@ public class RidgeRegression
     }
 
     /// <summary>
+    /// Computes per feature mean and standard deviation over the training data.
+    /// Constant features get a standard deviation of one so they become zero after
+    /// centering instead of causing a division by zero.
+    /// </summary>
+    /// <param name="input">Training data matrix, one sample per row</param>
+    private void ComputeStandardization(Matrix<float> input)
+    {
+        var mean = Vector<float>.Build.Dense(input.ColumnCount);
+        var std = Vector<float>.Build.Dense(input.ColumnCount);
+
+        for (int c = 0; c < input.ColumnCount; c++)
+        {
+            var column = input.Column(c);
+
+            double sum = 0.0;
+            for (int r = 0; r < column.Count; r++)
+                sum += column[r];
+            var columnMean = (float)(sum / column.Count);
+
+            double squaredSum = 0.0;
+            for (int r = 0; r < column.Count; r++)
+                squaredSum += (column[r] - columnMean) * (column[r] - columnMean);
+            var columnStd = (float)Math.Sqrt(squaredSum / column.Count);
+
+            mean[c] = columnMean;
+            std[c] = columnStd < 1e-6f ? 1.0f : columnStd;
+        }
+
+        FeatureMean = mean;
+        FeatureStd = std;
+    }
+
+    /// <summary>
+    /// Applies the stored standardization to a data matrix, one sample per row.
+    /// </summary>
+    private Matrix<float> StandardizeMatrix(Matrix<float> input)
+    {
+        if (FeatureMean == null || FeatureStd == null) return input;
+
+        var standardized = Matrix<float>.Build.Dense(input.RowCount, input.ColumnCount);
+        for (int r = 0; r < input.RowCount; r++)
+            for (int c = 0; c < input.ColumnCount; c++)
+                standardized[r, c] = (input[r, c] - FeatureMean[c]) / FeatureStd[c];
+
+        return standardized;
+    }
+
+    /// <summary>
     /// Predicts a value for a certain input.
     /// </summary>
     /// <param name="x">Input features</param>
@@ -176,7 +245,23 @@ public class RidgeRegression
         {
             xs.Add(1.0f);
         }
-        xs.AddRange(x);
+
+        // apply the stored standardization, models from older versions have none
+        if (FeatureMean != null && FeatureStd != null && FeatureMean.Count == x.Length && FeatureStd.Count == x.Length)
+        {
+            for (int i = 0; i < x.Length; i++)
+                xs.Add((x[i] - FeatureMean[i]) / FeatureStd[i]);
+        }
+        else
+        {
+            xs.AddRange(x);
+        }
+
+        //Never throw on a model/feature dimensionality mismatch (e.g. a provider that supplies no
+        //feature vector, or a calibration trained for a different feature set) — return NaN so the
+        //caller's NaN handling / raw-gaze fallback applies instead of a per-frame exception.
+        if (W == null || xs.Count != W.Count)
+            return float.NaN;
 
         var input = Vector<float>.Build.Dense(xs.ToArray());
         var y = W * input;

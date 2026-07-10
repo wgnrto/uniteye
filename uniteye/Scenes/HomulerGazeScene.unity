@@ -355,7 +355,7 @@ MonoBehaviour:
   drawCheckpoints: 0
   currentRound: 0
   maxRoundsPerPreset: 2
-  calibrationType: 2
+  calibrationType: 1
   save: 1
   stopAfterPoints: 1
   quitAfterCalibration: 0
