@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using UnitEye;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// This component is responsible for providing calibration to achieve better eye tracking performance.
@@ -172,20 +173,20 @@ public class HomulerGazeCalibration : MonoBehaviour
             _gaze = GetComponent<HomulerGaze>();
 
         //If finished and leftclick, signal Returned
-        if (Input.GetKeyDown(KeyCode.Mouse0) && returnAfter && _finished)
+        if (Mouse.current.leftButton.wasPressedThisFrame && returnAfter && _finished)
             Returned = true;
         //If rightclick, signal Returned
-        if (Input.GetKeyDown(KeyCode.Mouse1) && returnAfter)
+        if (Mouse.current.rightButton.wasPressedThisFrame && returnAfter)
             Returned = true;
         //Start on leftclick
-        if (Input.GetKeyDown(KeyCode.Mouse0) && !_finished)
+        if (Mouse.current.leftButton.wasPressedThisFrame && !_finished)
         {
             _started = true;
             _showMessage = false;
             _finishedRound = false;
         }
         //Stop calibration early when clicking S
-        if (Input.GetKeyDown(KeyCode.S) && _started && !_finished)
+        if (Keyboard.current[Key.S].wasPressedThisFrame && _started && !_finished)
         {
             _earlyStop = true;
         }
