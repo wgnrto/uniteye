@@ -22,6 +22,10 @@ namespace UnitEye
         public int layerMask;
         public QueryTriggerInteraction queryTriggerInteraction;
 
+        //Reused per-frame buffers for the xray raycast path (was a fresh RaycastHit[20] + List each call).
+        private RaycastHit[] _raycastBuffer;
+        private readonly List<RaycastHit> _hitListWithTag = new List<RaycastHit>();
+
         public AOITagList(string uID, bool xray = false, bool inverted = false, int layerMask = Physics.DefaultRaycastLayers, QueryTriggerInteraction queryTriggerInteraction = QueryTriggerInteraction.Ignore, bool enabled = true, bool visualized = true) : base(uID, inverted, enabled, visualized)
         {
             this.xray = xray;
@@ -107,10 +111,9 @@ namespace UnitEye
                 }
             }
 
-            if (hit.Equals(null))
-                return new RaycastHit();
-            else
-                return hit;
+            //(hit is default(RaycastHit) when nothing was hit; the old hit.Equals(null) branch was dead
+            //because RaycastHit is a struct and never equals null.)
+            return hit;
         }
 
         /// <summary>
@@ -121,30 +124,33 @@ namespace UnitEye
         /// <returns>List with all the found RaycastHit, is empty if nothing was found</returns>
         private List<RaycastHit> CheckRaycastXray(Vector3 point, out bool hitAOI)
         {
-            RaycastHit[] hitList = new RaycastHit[maxNumberOfRaycastHits];
-            List<RaycastHit> hitListWithTag = new List<RaycastHit>();
+            //Reuse the buffers instead of allocating a RaycastHit[] + List every frame. Resize the
+            //array only if maxNumberOfRaycastHits changed.
+            if (_raycastBuffer == null || _raycastBuffer.Length != maxNumberOfRaycastHits)
+                _raycastBuffer = new RaycastHit[maxNumberOfRaycastHits];
+            _hitListWithTag.Clear();
             Ray ray = camera.ViewportPointToRay(point);
 
             hitAOI = false;
 
             //Xray RaycastNonAlloc that puts all hit targets into an array
-            int hits = Physics.RaycastNonAlloc(ray, hitList, Mathf.Infinity, layerMask);
+            int hits = Physics.RaycastNonAlloc(ray, _raycastBuffer, Mathf.Infinity, layerMask);
 
-            //Go through hitList array and check if hitList[i] has a tag in _tagList
+            //Go through the hit array and check if _raycastBuffer[i] has a tag in _tagList
             for (int i = 0; i < hits; i++)
             {
-                var tag = hitList[i].collider.transform.tag;
+                var tag = _raycastBuffer[i].collider.transform.tag;
                 //If tag in _tagList
                 if (_tagList.Contains(tag))
                 {
                     //Add string to hitTagList and set tagFound to true
-                    hitNameList.Add($"({tag}/{hitList[i].collider.gameObject.name})");
+                    hitNameList.Add($"({tag}/{_raycastBuffer[i].collider.gameObject.name})");
                     hitAOI = true;
-                    hitListWithTag.Add(hitList[i]);
+                    _hitListWithTag.Add(_raycastBuffer[i]);
                 }
             }
 
-            return hitListWithTag;
+            return _hitListWithTag;
         }
 
         /// <summary>

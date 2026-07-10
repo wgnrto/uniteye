@@ -21,7 +21,11 @@ namespace UnitEye
         /// <summary>Raw (pre-calibration) gaze in pixels, (0,0) at the top-left.</summary>
         Vector2 RawGaze { get; }
 
-        /// <summary>Feature vector for the calibration model. May be empty if only a raw gaze point is available.</summary>
+        /// <summary>
+        /// Feature vector for the calibration model. May be empty if only a raw gaze point is available.
+        /// Implementations may return a reused per-frame buffer valid only until the next Tick(); callers
+        /// that retain the values (e.g. calibration sample capture) must copy it.
+        /// </summary>
         float[] GetFeatures();
 
         /// <summary>True while a face is currently being tracked.</summary>

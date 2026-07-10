@@ -10,7 +10,6 @@ namespace UnitEye
         SerializedProperty _baseFolderPath;
         SerializedProperty _baseFileName;
         SerializedProperty useDefaultFolder;
-        bool useDefaultFolderBool = true;
         SerializedProperty timeUntilWrite;
         SerializedProperty logsPerSecond;
 
@@ -19,7 +18,6 @@ namespace UnitEye
             _baseFileName = serializedObject.FindProperty("_baseFileName");
             _baseFolderPath = serializedObject.FindProperty("_baseFolderPath");
             useDefaultFolder = serializedObject.FindProperty("useDefaultFolder");
-            useDefaultFolderBool = useDefaultFolder.boolValue;
             timeUntilWrite = serializedObject.FindProperty("timeUntilWrite");
             logsPerSecond = serializedObject.FindProperty("logsPerSecond");
         }
@@ -38,10 +36,10 @@ namespace UnitEye
             if (!Directory.Exists(_baseFolderPath.stringValue)) _baseFolderPath.stringValue = "";
 
             EditorGUILayout.LabelField("Use Application.dataPath/CSVLogs folder?");
-            useDefaultFolderBool = EditorGUILayout.Toggle(" ", useDefaultFolderBool);
-            useDefaultFolder.boolValue = useDefaultFolderBool;
+            //Bind directly (was mirrored through a cached bool, breaking Undo/multi-object editing).
+            EditorGUILayout.PropertyField(useDefaultFolder, new GUIContent(" "));
 
-            if (!useDefaultFolderBool)
+            if (!useDefaultFolder.boolValue)
             {
                 //Default to Application.dataPath/CSVLogs/ folder
                 //For editor this is Assets/Logs, windows build is executablename_Data/CSVLogs/, Android uses persistentDataPath which points to /storage/emulated/0/Android/data/<packagename>/files/CSVLogs

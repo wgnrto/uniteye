@@ -303,10 +303,19 @@ namespace UnitEye
         /// <returns>true if blinking, false if not</returns>
         public bool IsBlinking(float threshold = -1.0f)
         {
+            return IsBlinkingFromFeature(EyeFeature(), threshold);
+        }
+
+        /// <summary>
+        /// IsBlinking using an already-computed EyeFeature() value, so callers that also need the
+        /// feature / drowsiness this frame don't recompute EyeFeature() (8 distance calcs + trig) 3x.
+        /// </summary>
+        public bool IsBlinkingFromFeature(float eyeFeature, float threshold = -1.0f)
+        {
             if (threshold < 0)
                 threshold = BlinkingThreshold;
 
-            return EyeFeature() < threshold;
+            return eyeFeature < threshold;
         }
 
         /// <summary>
@@ -316,8 +325,15 @@ namespace UnitEye
         /// <returns>true if drowsy, false if not</returns>
         public bool IsDrowsy(float threshold = -3f)
         {
-            var eyeFeature = EyeFeature();
+            return IsDrowsyFromFeature(EyeFeature(), threshold);
+        }
 
+        /// <summary>
+        /// IsDrowsy using an already-computed EyeFeature() value (see IsBlinkingFromFeature). Mutates the
+        /// smoothed EFSmooth state, so it should be called at most once per frame — as the provider does.
+        /// </summary>
+        public bool IsDrowsyFromFeature(float eyeFeature, float threshold = -3f)
+        {
             //If not calibrated or EyeFeauture() isNaN return false
             if (EFMean < 0 || EFStd < 0 || float.IsNaN(eyeFeature))
                 return false;

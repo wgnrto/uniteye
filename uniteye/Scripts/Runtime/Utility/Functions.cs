@@ -4,49 +4,14 @@ namespace UnitEye
 {
     /// <summary>
     /// Shared, inference-backend-agnostic utility functions used across UnitEye.
-    /// The Holistic/Barracuda-specific GetEyeTexture(HolisticPipeline, ...) was removed with
-    /// the Barracuda pipeline; the homuler path uses HomulerFunctions.GetEyeTexture(landmarks, ...).
+    /// The Holistic/Barracuda-specific eye-crop helpers were removed with the Barracuda pipeline; the
+    /// homuler path crops on the GPU in HomulerEyeMURunner using HomulerFunctions.GetEyeCropRect(...).
     /// </summary>
     public class Functions
     {
-        //Buffer Texture2D to avoid memory leak
-        private static Texture2D _flipTextureBuffer = new Texture2D(256, 256);
-        /// <summary>
-        /// Horizontally flips a Texture that can be converted into a Texture2D (not a RenderTexture)
-        /// </summary>
-        /// <param name="source">Texture to be flipped </param>
-        /// <returns>Flipped Texture</returns>
-        public static Texture FlipTexture(Texture source)
-        {
-            //If source is size 0 return 1x1 pixel dummy texture
-            if (source.width == 0 || source.height == 0)
-            {
-                //Reinitialize buffer as empty 1x1 texture
-                _flipTextureBuffer.Reinitialize(1, 1);
-                return (Texture)_flipTextureBuffer;
-            }
-
-            //Preset variables to not call methods in the for loop
-            var sourceWidth = source.width;
-            var sourceHeight = source.height;
-
-            //Reinitialize buffer Texture2D with new size, does not duplicate to avoid memory leak
-            _flipTextureBuffer.Reinitialize(source.width, source.height);
-
-            //Write pixels to Color32[] array
-            var pixelArray = ((Texture2D)source).GetPixels32();
-
-            //Use System.Array.Reverse to reverse each horitontal pixel chunk in the pixelArray
-            for (int i = 0; i < sourceHeight; i++)
-            {
-                System.Array.Reverse(pixelArray, i * sourceWidth, sourceWidth);
-            }
-
-            //Return a flipped Texture
-            _flipTextureBuffer.SetPixels32(pixelArray);
-            _flipTextureBuffer.Apply();
-            return (Texture)_flipTextureBuffer;
-        }
+        //Note: FlipTexture and PreprocessImage previously lived here too but were dead duplicates of the
+        //versions in HomulerFunctions (which the homuler inference path actually calls); removed to keep
+        //a single implementation of each. This class keeps the inference-agnostic helpers below.
 
         /// <summary>
         /// Converts pixels to mm using Unity Screen.dpi
@@ -66,25 +31,6 @@ namespace UnitEye
         public static float PixelsToMm(float pixels, float dpi)
         {
             return pixels * 25.4f / dpi;
-        }
-
-
-        /// <summary>
-        /// Preprocess Image using a shader to provide the correct image format for the model
-        /// </summary>
-        /// <param name="source">Source RenderTexture</param>
-        /// <param name="destination">Destination RenderTexture</param>
-        /// <param name="preprocessCS">Shader to use</param>
-        /// <param name="imageSize">Square image size to use, default 128x128</param>
-        /// <returns>Processed RenderTexture</returns>
-        public static RenderTexture PreprocessImage(RenderTexture source, RenderTexture destination, ComputeShader preprocessCS, int imageSize = 128)
-        {
-            preprocessCS.SetTexture(0, "_Texture", source);
-            preprocessCS.SetTexture(0, "_Tensor", destination);
-            preprocessCS.SetInt("_ImageSize", imageSize);
-            preprocessCS.Dispatch(0, imageSize, imageSize, 1);
-
-            return destination;
         }
 
         /// <summary>

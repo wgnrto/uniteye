@@ -11,7 +11,8 @@ namespace UnitEye
     public class UnitEyeAPI
     {
         // Migrated to the Barracuda-free HomulerGaze pipeline (native MediaPipe landmarks + Inference Engine).
-        public static HomulerGaze s_gazeScript;
+        // Private: this is internal caching state, not API surface. It is resolved lazily on first use.
+        private static HomulerGaze s_gazeScript;
 
         /// <summary>
         /// Checks if an instance of the HomulerGaze script is in the scene and activated.
@@ -19,10 +20,11 @@ namespace UnitEye
         /// <exception cref="InvalidOperationException">If no HomulerGaze script is found</exception>
         private static void CheckIsInitialized()
         {
-            // Search for the HomulerGaze script when this is first called
+            // Search for the HomulerGaze script when this is first called (FindFirstObjectByType:
+            // FindObjectOfType is obsolete in Unity 6).
             if (s_gazeScript == null)
             {
-                s_gazeScript = UnityEngine.Object.FindObjectOfType<HomulerGaze>();
+                s_gazeScript = UnityEngine.Object.FindFirstObjectByType<HomulerGaze>();
             }
             if (s_gazeScript == null)
             {
@@ -102,13 +104,14 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
+            var cam = Camera.main;
             if (depth == -1.0f)
-                depth = Camera.main.nearClipPlane;
+                depth = cam.nearClipPlane;
 
             var gazeScreen = new Vector3(s_gazeScript.gazeLocation.x,
                                             Screen.height - s_gazeScript.gazeLocation.y,
                                             depth);
-            return Camera.main.ScreenToWorldPoint(gazeScreen);
+            return cam.ScreenToWorldPoint(gazeScreen);
         }
 
         /// <summary>
@@ -282,7 +285,10 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
-            var pose = s_gazeScript.Provider.HeadPoseEuler;
+            //IGazeProvider.HeadPoseEuler is in RADIANS (native provider derives it via Mathf.Atan on
+            //the landmarks), but Quaternion.Euler expects DEGREES — convert, or the rotation is off by
+            //a ~57x factor and meaningless.
+            var pose = s_gazeScript.Provider.HeadPoseEuler * Mathf.Rad2Deg;
             return Quaternion.Euler(pose.x, pose.y, pose.z);
         }
 

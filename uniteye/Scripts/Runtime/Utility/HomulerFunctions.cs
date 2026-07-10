@@ -10,64 +10,11 @@ using UnityEngine;
 namespace UnitEye
 {
     public static class HomulerFunctions
-    { 
-        /// <summary>
-        /// Horizontally flips a Texture that can be converted into a Texture2D (not a RenderTexture)
-        /// </summary>
-        /// <param name="source">Texture to be flipped </param>
-        /// <returns>Flipped Texture</returns>
-        public static Texture FlipTexture(Texture source)
-        {
-            var buffer = new Texture2D(1, 1);
-
-            //If source is size 0 return 1x1 pixel dummy texture
-            if (source.width == 0 || source.height == 0)
-                return buffer;
-
-            //Reinitialize buffer Texture2D with new size, does not duplicate to avoid memory leak
-            buffer.Reinitialize(source.width, source.height);
-
-            //Write pixels to Color32[] array
-            var pixelArray = ((Texture2D)source).GetPixels32();
-
-            //Use System.Array.Reverse to reverse each horitontal pixel chunk in the pixelArray
-            for (int i = 0; i < source.height; i++)
-                Array.Reverse(pixelArray, i * source.width, source.width);
-
-            //Return a flipped Texture
-            buffer.SetPixels32(pixelArray);
-            buffer.Apply();
-            return buffer;
-        }
-
-        //Buffer Texture2D to avoid memory leak
-        private static Texture2D _getEyeTextureBuffer = new Texture2D(256,256);
-        /// <summary>
-        /// Calculates EyeCrops similar to EyeMU and returns them as a Texture
-        /// </summary>
-        /// <param name="holisticPipeline">HolisticPipeline reference to access vertex data</param>
-        /// <param name="source">WebCamTexture to source from</param>
-        /// <param name="leftVertex">Left vertex index from face mesh</param>
-        /// <param name="rightVertex">Right vertex index from face mesh</param>
-        /// <param name="imageSize">Square image size to use, default 128x128</param>
-        /// <returns>EyeCrop Texture</returns>
-        public static Texture GetEyeTexture(IList<NormalizedLandmark> landmarks, WebCamTexture source, int leftVertex, int rightVertex)
-        {
-            var crop = GetEyeCropRect(landmarks, leftVertex, rightVertex, source.width, source.height);
-
-            //If crop is about to be size 0 skip SetPixels
-            if (source != null && crop.width > 0 && crop.x >= 0 && crop.x <= source.width - crop.width && crop.y >= 0 && crop.y <= source.height - crop.height)
-            {
-                //Reinitialize buffer Texture2D with new size, does not duplicate to avoid memory leak
-                _getEyeTextureBuffer.Reinitialize(crop.width, crop.height);
-
-                //Copy relevant pixels from source to croppedSource
-                _getEyeTextureBuffer.SetPixels(source.GetPixels(crop.x, crop.y, crop.width, crop.height));
-                _getEyeTextureBuffer.Apply();
-            }
-            //return croppedSource as Texture
-            return _getEyeTextureBuffer;
-        }
+    {
+        //Note: the CPU eye-crop path (GetEyeTexture's GetPixels readback + FlipTexture's GetPixels32
+        //round-trip, both run every frame) was replaced by a GPU Graphics.Blit crop in
+        //HomulerEyeMURunner.ComputeEyes/BlitEyeCrop, so those two methods and their Texture2D buffers
+        //were removed. GetEyeCropRect (below) still computes the crop rectangle used by the GPU blit.
 
         /// <summary>
         /// Computes the eye crop rectangle in source pixel coordinates (bottom-left origin, as used
@@ -109,26 +56,8 @@ namespace UnitEye
             return new RectInt(leftPx, yBot, cropSize, cropSize);
         }
 
-        /// <summary>
-        /// Converts pixels to mm using Unity Screen.dpi
-        /// </summary>
-        /// <param name="pixels"></param>
-        /// <returns>mm in float</returns>
-        public static float PixelsToMm(float pixels)
-        {
-            return PixelsToMm(pixels, Screen.dpi);
-        }
-        /// <summary>
-        /// Converts pixels to mm using custom dpi
-        /// </summary>
-        /// <param name="pixels"></param>
-        /// <param name="dpi"></param>
-        /// <returns>mm in float</returns>
-        public static float PixelsToMm(float pixels, float dpi)
-        {
-            return pixels * 25.4f / dpi;
-        }
-
+        //Note: PixelsToMm and Quit were dead duplicates of the versions in Functions (which callers use)
+        //and were removed. This class keeps only the MediaPipe/inference-specific helpers.
 
         /// <summary>
         /// Preprocess Image using a shader to provide the correct image format for the model
@@ -146,20 +75,6 @@ namespace UnitEye
             preprocessCS.Dispatch(0, imageSize, imageSize, 1);
 
             return destination;
-        }
-
-        /// <summary>
-        /// Quits the application. If in Editor it just stops playing
-        /// </summary>
-        public static void Quit()
-        {
-            //If in editor stop the editor
-#if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-#else
-        //If in build just quit the Application
-        Application.Quit();
-#endif
         }
     }
 }
