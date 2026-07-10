@@ -15,42 +15,44 @@ Seam: [`IGazeBackbone`](../uniteye/Scripts/Runtime/GazeProvider/IGazeBackbone.cs
 + head geometry → a **screen point** directly (12-feature vector). Ships with the package; this is the
 tested path.
 
-## GazeEstimation (yakhyo/gaze-estimation — needs setup + hand-test)
+## GazeMobileOne / GazeMobileNetV2 (yakhyo/gaze-estimation — integrated; needs a webcam accuracy check)
 
-[`GazeEstimationRunner`](../uniteye/Scripts/Runtime/GazeProvider/GazeEstimationRunner.cs) integrates a
-direction-based model such as [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation)
-(ResNet / MobileNet / **MobileOne**). These take a **face crop** and output a gaze **direction**
-(pitch, yaw) rather than a screen point. The runner:
+[`GazeEstimationRunner`](../uniteye/Scripts/Runtime/GazeProvider/GazeEstimationRunner.cs) runs a
+direction-based model from [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation). Both
+models the project ships (`Resources/ONNX/GazeEstimation/mobileone_s0_gaze.onnx` and
+`mobilenetv2_gaze.onnx`) are **already wired and selectable** — pick **GazeMobileOne** or
+**GazeMobileNetV2** on `HomulerGaze → Gaze Backbone (model)`.
 
-1. crops the face on the GPU from the FaceMesh face rect (no separate face detector needed);
-2. runs the ONNX;
-3. decodes (pitch, yaw) and turns it into a rough on-screen `RawGaze`;
-4. exposes `Features = [pitch, yaw, headYaw, headPitch, headRoll, headArea, screenW, screenH]` so the
-   RidgeRegression / SimpleMLP calibration does the real, per-user angle→screen mapping (just as it
-   refines EyeMU's raw output — so the rough raw mapping doesn't need to be accurate).
+The I/O was introspected from the actual ONNX (menu **UnitEye ▸ Inspect Gaze Models**), so the runner is
+coded to the real contract, not a guess — both models are identical:
 
-**Why it's a scaffold, not turnkey:** I can't fetch the ONNX or webcam-test it here, and the exact I/O
-depends on which model/variant you export. The runner compiles and self-disables (logs once) if the
-model is absent, so the project keeps running on EyeMU.
+| | |
+|---|---|
+| input | `input` — `(1, 3, 448, 448)` NCHW, RGB, **ImageNet-normalized** |
+| outputs | `yaw`, `pitch` — each `(1, 90)` per-bin logits |
+| decode | softmax over bins → expectation → `index*4° − 180°` → radians (L2CS/Gaze360) |
 
-### Steps to enable it
+Per frame the runner: GPU-crops the face from the FaceMesh rect → ImageNet-normalizes via
+`PreprocessGazeEstimation.compute` into the `(1,3,448,448)` tensor → runs the model → decodes both heads
+→ maps to a rough on-screen `RawGaze` and emits `Features = [pitch, yaw, headYaw, headPitch, headRoll,
+headArea, screenW, screenH]` for calibration to refine (so the rough raw mapping needn't be accurate).
 
-1. **Export/obtain the ONNX** from yakhyo/gaze-estimation (or L2CS-Net). Prefer a MobileOne variant for
-   speed.
-2. **Place it** at `uniteye/Resources/ONNX/GazeEstimation.onnx` (Unity imports it as a `ModelAsset`).
-3. **Reconcile the model-specific constants** in `GazeEstimationRunner` against your export:
-   - `INPUT_SIZE` (448 for L2CS/most yakhyo models; smaller for some MobileOne variants).
-   - **Normalization**: if your ONNX does *not* bake in ImageNet mean/std, add it before `ToTensor`
-     (a preprocess compute shader like EyeMU's `PreprocessEyeMU.compute`), and confirm NCHW vs NHWC.
-   - **Output decoding**: the scaffold assumes one output whose first two values are `(pitch, yaw)` in
-     radians. L2CS-style exports instead emit per-bin **logits** needing softmax + expectation — decode
-     those if that's your export. Check units (radians vs degrees) and axis order.
-   - `ANGLE_TO_SCREEN_GAIN` only affects the pre-calibration `RawGaze`; leave it unless the uncalibrated
-     dot barely moves or flies off-screen.
-4. **Select** GazeBackbone = GazeEstimation on `HomulerGaze` and enter play mode.
-5. **Verify with a webcam**: the face-crop thumbnail (Show Eyecrops) should show your face; move your
-   gaze and confirm the raw dot tracks direction; then **run a calibration** (Ridge or ML) — accuracy
-   comes from calibration, not the raw output.
+**Verified headlessly** (smoke suite): both models import with exactly that I/O and execute on CPU, and
+the decode math is correct. **Not yet verified: runtime gaze accuracy** — the face-crop orientation, the
+end-to-end normalization, and whether the 90-bin convention matches these specific weights can only be
+confirmed with a webcam.
+
+### Hand-test
+
+1. Select **GazeMobileOne** (fastest) on `HomulerGaze` and enter play mode.
+2. **Show Eyecrops** → the thumbnail should show your **face**, upright.
+3. Move your gaze around and confirm the raw dot tracks the right direction (with `Calibration → None`).
+4. **Calibrate** (Ridge or ML) — accuracy comes from calibration, not the raw output. Each backbone has
+   its own feature vector, so **recalibrate after switching**.
+5. If the uncalibrated dot moves the wrong way or barely/too much: the knobs in `GazeEstimationRunner`
+   are `BIN_WIDTH_DEG` / `ANGLE_OFFSET_DEG` (if these weights use a different binning than Gaze360's
+   4°/180°) and `ANGLE_TO_SCREEN_GAIN` (pre-calibration travel only). If the face crop looks wrong,
+   check the FaceMesh face rect / the Blit UV in `PerformInference`.
 
 ### Trade-off
 
