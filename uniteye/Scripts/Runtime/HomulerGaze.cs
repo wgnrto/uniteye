@@ -319,9 +319,15 @@ public class HomulerGaze : MonoBehaviour
             GUI.DrawTexture(new Rect(10, 10, IMG_SIZE, IMG_SIZE), _provider.RightEyeTexture);
         }
 
-        //Draw crosshair on the GUI if one is selected
-        if (drawDot && dot != null)
-            GUI.DrawTexture(new Rect(gazeLocation.x - CROSSHAIR_SIZE / 2, gazeLocation.y - CROSSHAIR_SIZE / 2, CROSSHAIR_SIZE, CROSSHAIR_SIZE), dot);
+        //Draw crosshair on the GUI if one is selected. Clamped to the screen edges: an uncalibrated
+        //or badly calibrated gaze location can be far outside the window, and an invisible crosshair
+        //is indistinguishable from a broken pipeline.
+        if (drawDot && dot != null && !float.IsNaN(gazeLocation.x) && !float.IsNaN(gazeLocation.y))
+        {
+            var dotX = Mathf.Clamp(gazeLocation.x, 0f, Screen.width);
+            var dotY = Mathf.Clamp(gazeLocation.y, 0f, Screen.height);
+            GUI.DrawTexture(new Rect(dotX - CROSSHAIR_SIZE / 2, dotY - CROSSHAIR_SIZE / 2, CROSSHAIR_SIZE, CROSSHAIR_SIZE), dot);
+        }
 
         //Gaze UI
         if (showGazeUI && GUI.Button(new Rect(Screen.height * 0.05f, Screen.height - Screen.height * 0.1f, Screen.width * 0.1f, Screen.height * 0.05f), $"{(gazeUIActivated ? "Hide" : "Show")} Gaze UI"))

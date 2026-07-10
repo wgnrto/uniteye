@@ -349,7 +349,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   points: []
-  calibrationDot: {fileID: 2800000, guid: ca378a36629d8704086a50cf203f0558, type: 3}
+  calibrationDot: {fileID: 2800000, guid: dcf697a50e51baa4ea43260cf5f57a84, type: 3}
   speed: 6
   padding: 10
   drawCheckpoints: 0
@@ -373,7 +373,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a529880b541ae5c49a49f6632dfb75ab, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  evaluationDot: {fileID: 2800000, guid: ca378a36629d8704086a50cf203f0558, type: 3}
+  evaluationDot: {fileID: 2800000, guid: dcf697a50e51baa4ea43260cf5f57a84, type: 3}
   duration: 4
   padding: 40
   dotSize: 46

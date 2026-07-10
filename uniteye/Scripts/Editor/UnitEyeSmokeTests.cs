@@ -36,6 +36,7 @@ public static class UnitEyeSmokeTests
             TestSimpleMLP();
             TestGazeGridQuantizer();
             TestOneEuroFilter();
+            TestEyeCropRect();
             TestScenesAndPrefabsHaveNoMissingScripts();
             TestEyeMUModelLoadsAndRuns();
         }
@@ -379,6 +380,35 @@ public static class UnitEyeSmokeTests
 
         //Leave a fresh empty scene behind so no package scene stays open
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+    }
+
+    private static void TestEyeCropRect()
+    {
+        //Corners in MediaPipe convention (normalized, y-down): a 0.1-wide eye slightly above the
+        //vertical image center, 1280x720 source
+        var landmarks = new List<Mediapipe.NormalizedLandmark>
+        {
+            new Mediapipe.NormalizedLandmark { X = 0.45f, Y = 0.42f },
+            new Mediapipe.NormalizedLandmark { X = 0.55f, Y = 0.42f },
+        };
+
+        var rect = HomulerFunctions.GetEyeCropRect(landmarks, 0, 1, 1280, 720);
+        var rectAgain = HomulerFunctions.GetEyeCropRect(landmarks, 0, 1, 1280, 720);
+
+        //GetEyeCropRect must not modify the landmarks (the old in-place Y flip corrupted the
+        //EyeCorners model input and toggled the crop between eye and cheek on alternating frames)
+        CheckClose(landmarks[0].Y, 0.42f, 1e-6f, "GetEyeCropRect must not mutate landmark Y (left)");
+        CheckClose(landmarks[1].Y, 0.42f, 1e-6f, "GetEyeCropRect must not mutate landmark Y (right)");
+        Check(rect.Equals(rectAgain), "GetEyeCropRect must be deterministic across repeated calls");
+
+        //Pinned expected geometry: padded eyeLength 0.14 -> 179px square at (550, 316) bottom-left
+        Check(rect.width == 179 && rect.height == 179, $"Eye crop should be a 179px square, got {rect.width}x{rect.height}");
+        Check(rect.x == 550 && rect.y == 316, $"Eye crop origin should be (550, 316), got ({rect.x}, {rect.y})");
+
+        //The eye center (640, 417.6 in bottom-left pixels) must fall inside the crop, in its upper half
+        Check(rect.x <= 640 && 640 <= rect.x + rect.width, "Eye center X must be inside the crop");
+        Check(rect.y <= 417 && 418 <= rect.y + rect.height, "Eye center Y must be inside the crop");
+        Check(417.6f - rect.y > rect.height * 0.5f, "Eye center must sit above the crop's vertical midpoint");
     }
 
     private static int CountMissingScriptsRecursive(GameObject gameObject)

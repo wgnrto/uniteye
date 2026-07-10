@@ -53,40 +53,60 @@ namespace UnitEye
         /// <returns>EyeCrop Texture</returns>
         public static Texture GetEyeTexture(IList<NormalizedLandmark> landmarks, WebCamTexture source, int leftVertex, int rightVertex)
         {
-            //Get xy Coords of eye Vertices
+            var crop = GetEyeCropRect(landmarks, leftVertex, rightVertex, source.width, source.height);
+
+            //If crop is about to be size 0 skip SetPixels
+            if (source != null && crop.width > 0 && crop.x >= 0 && crop.x <= source.width - crop.width && crop.y >= 0 && crop.y <= source.height - crop.height)
+            {
+                //Reinitialize buffer Texture2D with new size, does not duplicate to avoid memory leak
+                _getEyeTextureBuffer.Reinitialize(crop.width, crop.height);
+
+                //Copy relevant pixels from source to croppedSource
+                _getEyeTextureBuffer.SetPixels(source.GetPixels(crop.x, crop.y, crop.width, crop.height));
+                _getEyeTextureBuffer.Apply();
+            }
+            //return croppedSource as Texture
+            return _getEyeTextureBuffer;
+        }
+
+        /// <summary>
+        /// Computes the eye crop rectangle in source pixel coordinates (bottom-left origin, as used
+        /// by GetPixels) from two eye-corner landmarks in MediaPipe convention (normalized, y-down).
+        /// Must not write to the landmarks: NormalizedLandmark is a protobuf reference type shared
+        /// with EyeCorners (an EyeMU model input) and the annotation layer, so an in-place Y flip
+        /// here corrupts those consumers and toggles the convention on every extra call per graph
+        /// output (the pre-2026 behavior).
+        /// </summary>
+        public static RectInt GetEyeCropRect(IList<NormalizedLandmark> landmarks, int leftVertex, int rightVertex, int sourceWidth, int sourceHeight)
+        {
             var leftCorner = landmarks[leftVertex];
-            leftCorner.Y = -(leftCorner.Y - 1f);
             var rightCorner = landmarks[rightVertex];
-            rightCorner.Y = -(rightCorner.Y - 1f);
+            return GetEyeCropRect(leftCorner.X, leftCorner.Y, rightCorner.X, rightCorner.Y, sourceWidth, sourceHeight);
+        }
+
+        public static RectInt GetEyeCropRect(float leftX, float leftY, float rightX, float rightY, int sourceWidth, int sourceHeight)
+        {
+            //Convert y-down (MediaPipe) to y-up (Unity texture space) on locals only
+            float leftYUp = 1f - leftY;
+            float rightYUp = 1f - rightY;
 
             //Calculation similar to EyeMU approach
-            float eyeLength = rightCorner.X - leftCorner.X;
+            float eyeLength = rightX - leftX;
             float xShift = eyeLength * 0.2f;
             eyeLength += 2f * xShift;
             float yShift = eyeLength * 0.5f;
-            float yRef = (leftCorner.Y + rightCorner.Y) * 0.5f;
+            float yRef = (leftYUp + rightYUp) * 0.5f;
             yRef -= 2f * yShift;
 
             //Clamp so that GetPixels doesn't throw a fit
             yRef = Mathf.Clamp(yRef, 0.0f, 1.0f);
 
             //Calculate coordinates and size
-            var cropSize = (int)(eyeLength * source.width);
-            var leftX = (int)((leftCorner.X - xShift) * source.width);
-            var yBot = (int)(yRef * source.height);
+            var cropSize = (int)(eyeLength * sourceWidth);
+            var leftPx = (int)((leftX - xShift) * sourceWidth);
+            var yBot = (int)(yRef * sourceHeight);
 
-            //If crop is about to be size 0 skip SetPixels
-            if (source != null && cropSize > 0 && leftX >= 0 && leftX <= source.width - cropSize && yBot >= 0 && yBot <= source.height - cropSize)
-            {
-                //Reinitialize buffer Texture2D with new size, does not duplicate to avoid memory leak
-                _getEyeTextureBuffer.Reinitialize((int)(eyeLength * (float)source.width), (int)(eyeLength * (float)source.width));
-
-                //Copy relevant pixels from source to croppedSource
-                _getEyeTextureBuffer.SetPixels(source.GetPixels(leftX, yBot, cropSize, cropSize));
-                _getEyeTextureBuffer.Apply();
-            }
-            //return croppedSource as Texture
-            return _getEyeTextureBuffer;
+            return new RectInt(leftPx, yBot, cropSize, cropSize);
         }
 
         /// <summary>
