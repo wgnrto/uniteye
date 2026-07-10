@@ -91,29 +91,34 @@ public class RidgeRegression
         }
         catch
         {
-            //Default file fallback (warn only once per default file per session)
+            //No personal calibration file for this user. Fall back to a shipped default if one exists,
+            //otherwise return null so the caller can fall back to raw (uncalibrated) gaze. We no longer
+            //ship a default fit: the old one-person defaults ignored the eye-gaze signal and extrapolated
+            //off-screen for anyone else (Reg_Y regularized to a near-constant top edge, Reg_X driven by
+            //that person's head geometry), so the crosshair corner-locked and looked broken before the
+            //first calibration.
+            var calibrations = Resources.Load<CalibrationResource>("CalibrationDefaultFiles");
+            TextAsset defaultAsset = null;
+            if (calibrations != null)
+            {
+                if (defaultFilename == "Reg_X.json") defaultAsset = calibrations.regXAsset;
+                else if (defaultFilename == "Reg_Y.json") defaultAsset = calibrations.regYAsset;
+            }
+
+            if (defaultAsset == null)
+            {
+                //Warn only once per default file per session
+                if (_warnedDefaults.Add(defaultFilename))
+                    Debug.LogWarning("No RidgeRegression calibration found; using raw (uncalibrated) gaze. Please run a RidgeRegression calibration for accurate results.");
+                return null;
+            }
+
             if (_warnedDefaults.Add(defaultFilename))
                 Debug.LogWarning("Calibrated RidgeRegression files not found, using default files! Please run a RidgeRegression calibration!");
-            var calibrations = Resources.Load<CalibrationResource>("CalibrationDefaultFiles");
-            switch (defaultFilename)
-            {
-                case "Reg_X.json":
-                    jsonString = calibrations.regXAsset.ToString();
-                    break;
-                case "Reg_Y.json":
-                    jsonString = calibrations.regYAsset.ToString();
-                    break;
-                default:
-                    jsonString = "";
-                    break;
-            }
+            jsonString = defaultAsset.ToString();
         }
 
-        RidgeRegression ridgeRegression = JsonConvert.DeserializeObject<RidgeRegression>(
-            jsonString
-        );
-
-        return ridgeRegression;
+        return JsonConvert.DeserializeObject<RidgeRegression>(jsonString);
     }
 
     /// <summary>

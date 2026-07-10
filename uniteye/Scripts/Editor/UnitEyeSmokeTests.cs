@@ -31,7 +31,7 @@ public static class UnitEyeSmokeTests
             TestRidgeStandardization();
             TestRidgeSerializationRoundTrip();
             TestRidgeOldFormatCompatibility();
-            TestShippedDefaultCalibrationFiles();
+            TestNoShippedDefaultCalibration();
             TestTrainerOnSyntheticData();
             TestSimpleMLP();
             TestGazeGridQuantizer();
@@ -169,22 +169,36 @@ public static class UnitEyeSmokeTests
         CheckClose(model.Predict(new float[] { 1f, 2f }), 0.9f, 1e-5f, "Old format prediction should be plain affine weights");
     }
 
-    private static void TestShippedDefaultCalibrationFiles()
+    private static void TestNoShippedDefaultCalibration()
     {
-        //The default files shipped in Resources must keep loading and predicting
-        var regXAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(
+        //We deliberately no longer ship a default ridge/MLP fit. The old one-person defaults ignored
+        //the eye-gaze signal and extrapolated off-screen for anyone else (Reg_Y regularized to a
+        //near-constant top edge, Reg_X driven by that person's head geometry), so the crosshair
+        //corner-locked and looked broken before the first calibration. A fresh user must instead get
+        //raw (uncalibrated) gaze via HomulerGaze's null-model fallback.
+        var defaults = Resources.Load<CalibrationResource>("CalibrationDefaultFiles");
+        Check(defaults != null, "CalibrationDefaultFiles asset should load from Resources");
+        if (defaults != null)
+        {
+            Check(defaults.regXAsset == null, "No shipped default Reg_X (raw gaze until the user calibrates)");
+            Check(defaults.regYAsset == null, "No shipped default Reg_Y (raw gaze until the user calibrates)");
+            Check(defaults.mlpAsset == null, "No shipped default MLP (raw gaze until the user calibrates)");
+        }
+
+        //The degenerate default JSON files must be gone from Resources
+        var oldX = AssetDatabase.LoadAssetAtPath<TextAsset>(
             "Packages/de.uniulm.uniteye/Resources/Calibration/Default/Reg_X.json");
-        Check(regXAsset != null, "Shipped default Reg_X.json should be loadable");
-        if (regXAsset == null) return;
+        var oldY = AssetDatabase.LoadAssetAtPath<TextAsset>(
+            "Packages/de.uniulm.uniteye/Resources/Calibration/Default/Reg_Y.json");
+        Check(oldX == null, "Old degenerate default Reg_X.json should be deleted");
+        Check(oldY == null, "Old degenerate default Reg_Y.json should be deleted");
 
-        var model = JsonConvert.DeserializeObject<RidgeRegression>(regXAsset.text);
-        Check(model != null && model.W != null, "Shipped default Reg_X.json should deserialize");
-
-        //The default model expects the 12 entry feature vector
+        //Fallback contract: a model with no weights predicts NaN, which HomulerGaze.RefineGazeLocation
+        //treats as 'use raw gaze'. (This is what a null default now resolves to.)
+        var empty = JsonConvert.DeserializeObject<RidgeRegression>("{\"W\":null,\"B\":0,\"Lambda\":1,\"Affine\":true}");
+        Check(empty != null, "RidgeRegression should still deserialize");
         var features = new float[12];
-        for (int i = 0; i < features.Length; i++) features[i] = 0.5f;
-        var prediction = model.Predict(features);
-        Check(!float.IsNaN(prediction) && !float.IsInfinity(prediction), "Shipped default model should predict a finite value");
+        Check(float.IsNaN(empty.Predict(features)), "A model with no weights must predict NaN (the raw-gaze fallback signal)");
     }
 
     private static void TestTrainerOnSyntheticData()
