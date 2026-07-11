@@ -8,7 +8,7 @@ Webcam-based eye-tracking for Unity.
 
 ## Features
 * Easy-to-use webcam-based eye tracker for Unity — no hardware other than a webcam
-* **Multiple gaze models (selectable at runtime):** [EyeMU](https://github.com/FIGLAB/EyeMU) (default) or the direction-based [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation) MobileOne / MobileNetV2 models — see [Gaze models](#gaze-models-backbones)
+* **Multiple gaze models (selectable at runtime):** [EyeMU](https://github.com/FIGLAB/EyeMU) (default) or the direction-based [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation) MobileOne / MobileNetV2 / ResNet-34 models — see [Gaze models](#gaze-models-backbones)
 * Per-user [calibration](#calibration) (Ridge Regression or a small MLP) and an [evaluation](#evaluation) sequence to measure accuracy
 * Gaze [filtering](#gaze) (Kalman, Easing, One Euro) for stable results
 * An [Area-of-Interest](#area-of-interest) system to track when objects/regions are looked at
@@ -22,7 +22,7 @@ Webcam-based eye-tracking for Unity.
 UnitEye runs a swappable **gaze model** ("backbone") fed by Google's MediaPipe FaceMesh, then refines and consumes the result through a platform-independent stack:
 
 ```
-webcam → MediaPipe FaceMesh landmarks → gaze backbone (EyeMU / MobileOne / MobileNetV2)
+webcam → MediaPipe FaceMesh landmarks → gaze backbone (EyeMU / MobileOne / MobileNetV2 / ResNet-34)
        → per-user calibration → filtering → AOI hit-testing → CSV logging
 ```
 
@@ -40,13 +40,15 @@ The gaze model is selectable on `HomulerGaze` → **Gaze Backbone (model)**, or 
 | Backbone | Model | Notes |
 |---|---|---|
 | `EyeMU` (default) | [EyeMU](https://github.com/FIGLAB/EyeMU) `.onnx` | eye crops + corners + head geometry → screen point. The verified default. |
-| `GazeMobileOne` | `mobileone_s0_gaze.onnx` | [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation); a face crop → gaze pitch/yaw, mapped to the screen. Fast. |
-| `GazeMobileNetV2` | `mobilenetv2_gaze.onnx` | same family, larger. |
+| `GazeMobileOne` | `mobileone_s0_gaze.onnx` | [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation) (a.k.a. [uniface](https://github.com/yakhyo/uniface) "MobileGaze"); a face crop → gaze pitch/yaw, mapped to the screen. Fastest. |
+| `GazeMobileNetV2` | `mobilenetv2_gaze.onnx` | same family. |
+| `GazeResNet34` | `resnet34_gaze.onnx` | same family, largest / most accurate (uniface's default). |
 
-Full details, the ONNX I/O, and the finish/hand-test steps are in [`docs/GAZE-BACKBONES.md`](docs/GAZE-BACKBONES.md). Two things to know:
+Full details, the ONNX I/O, and the finish/hand-test steps are in [`docs/GAZE-BACKBONES.md`](docs/GAZE-BACKBONES.md). Three things to know:
 
 * **Calibration is per-backbone.** Each model emits a different feature vector, so its calibration is saved and loaded under a backbone-specific filename ([`CalibrationModelStore.FileName`](uniteye/Scripts/Runtime/Calibration/CalibrationModelStore.cs)) — switching models never clobbers another's calibration, but you must **recalibrate once per model**.
 * The direction models feed the network a **face** crop (not eye crops), so the Gaze UI shows a **FaceCrop** thumbnail/toggle for them instead of **Eyecrops**.
+* The direction models emit a **polynomial expansion of the gaze angles** as their calibration features so the per-axis linear calibration can reach the screen corners (a direction→flat-screen map is non-linear); see [`docs/GAZE-BACKBONES.md`](docs/GAZE-BACKBONES.md).
 
 ## Used sources and libraries
 * [Unity Inference Engine](https://docs.unity3d.com/Packages/com.unity.ai.inference@latest) (`com.unity.ai.inference`, the successor to the deprecated Barracuda) — Unity's neural-network inference on [`.onnx`](https://onnx.ai/) models. UnitEye runs the gaze models on it. (Barracuda and the Inference Engine cannot coexist — both register an importer for `.onnx` — so Barracuda and the old HolisticBarracuda pipeline were removed.)
@@ -93,7 +95,7 @@ Select your webcam with the `Select` button, choose a target resolution (Unity p
 > The active native pipeline actually captures through the MediaPipe `WebCamSource` on the `Mediapipe` GameObject (its **Preferable Default Width** picks the capture resolution); `WebCamInput` is a lightweight helper kept for the display path.
 
 #### Face-mesh visualization (debug)
-The old HolisticBarracuda `Visualizer` (face/pose/hand) was removed with the rest of the Holistic path — the pipeline now tracks only the face mesh used for the crops. The **Gaze UI → Show/Hide FaceMesh** button, `HomulerGaze.showFaceMesh`, and `IGazeProvider.AnnotateFaceMesh` toggle `FaceMeshSolution.Annotate`. Note: the 0.16.3 Task-API rewrite does **not** yet reimplement the full 468-landmark + iris overlay the old Solution path drew, so this toggle currently only stores the preference (the wiring is kept so a future overlay can honor it). For a live visual of a single landmark's world position, [`LandmarkVisualizer.cs`](uniteye/Scripts/Runtime/LandmarkVisualizer.cs) still works and is a minimal example to extend.
+The old HolisticBarracuda `Visualizer` (face/pose/hand) was removed with the rest of the Holistic path — the pipeline now tracks only the face mesh used for the crops. The **Gaze UI → Show/Hide FaceMesh** button (also `HomulerGaze.showFaceMesh` / `IGazeProvider.AnnotateFaceMesh`) draws a debug preview: [`FaceMeshSolution`](uniteye/Scripts/Runtime/Mediapipe/FaceMeshSolution.cs) renders the live webcam full-screen in IMGUI with the 478 face-landmark points overlaid. The camera shows whenever the pipeline is rendering (it hides during calibration); the landmark dots additionally require the toggle. It's a points-only overlay (not the old connective mesh); if the view is upside-down or mirrored on your webcam, flip the serialized **Preview Flip Vertically** / **Preview Mirror** knobs on the `Mediapipe` GameObject's `FaceMeshSolution`. For a single landmark's world position, [`LandmarkVisualizer.cs`](uniteye/Scripts/Runtime/LandmarkVisualizer.cs) is a minimal example to extend.
 
 #### Gaze
 [`HomulerGaze`](uniteye/Scripts/Runtime/HomulerGaze.cs) drives the whole pipeline.
@@ -125,7 +127,7 @@ A built-in runtime overlay for tweaking settings without leaving play mode. Enab
 
 <img src="./uniteye/Documentation~/Images/GazeUI.png" width="500" height="495">
 
-The window is draggable by its top bar. **Webcam & Model controls** cycle through available webcams (`Prev Cam` / `Next Cam`) and switch the gaze model live (`Model:` button — cycles EyeMU → MobileOne → MobileNetV2; gaze falls back to raw until you recalibrate the new model). **Toggle UI Overlays** mirrors the inspector toggles plus a **FaceMesh** overlay toggle. Below that: `Distance to camera` calibration (sit ~50 cm away and click; saved to PlayerPrefs), `Blinking and Drowsiness` calibration (also PlayerPrefs), the runtime `Calibration type` / `Filtering type` selectors and filter sliders (slider values are not persisted), and buttons to start a [Calibration](#calibration) or [Evaluation](#evaluation) without loading a scene (right-click cancels).
+The window is draggable by its top bar. **Webcam & Model controls** cycle through available webcams (`Prev Cam` / `Next Cam`) and switch the gaze model live (`Model:` button — cycles EyeMU → MobileOne → MobileNetV2 → ResNet34; gaze falls back to raw until you recalibrate the new model). **Toggle UI Overlays** mirrors the inspector toggles plus a **FaceMesh** overlay toggle. Below that: `Distance to camera` calibration (sit ~50 cm away and click; saved to PlayerPrefs), `Blinking and Drowsiness` calibration (also PlayerPrefs), the runtime `Calibration type` / `Filtering type` selectors and filter sliders (slider values are not persisted), and buttons to start a [Calibration](#calibration) or [Evaluation](#evaluation) without loading a scene (right-click cancels).
 
 > **Blurry Gaze UI text in the editor on a high-DPI display?** The overlay uses IMGUI, which renders at the Game view resolution and is scaled up, so text can look soft on a high-DPI screen while editor chrome stays sharp. In the Game view, set **Free Aspect** and enable **"Low Resolution Aspect Ratios"** for crisp text; a standalone build is crisp regardless.
 
@@ -136,11 +138,11 @@ Every setup needs calibration for good accuracy; recalibrate if your seating or 
 
 ![](./uniteye/Documentation~/Images/GazeCalibrationInspector.png)
 
-Inspector settings include the calibration dot texture (a default `CalibrationDot` is included), dot speed, edge padding, and `Max Rounds Per Preset`. The active presets ([`HomulerGazeCalibration.cs`](uniteye/Scripts/Runtime/HomulerGazeCalibration.cs)) are a **zig-zag**, a **vertical wavy** and a **horizontal wavy** pattern (the corner presets are present but commented out); with `Max Rounds Per Preset = 2` that's 6 rounds total. You also choose the calibration type, whether to save (overwriting an existing file for that type+model), whether to pause between points, and whether to quit after calibrating.
+Inspector settings include the calibration dot texture (a default `CalibrationDot` is included), dot speed, edge padding, and `Max Rounds Per Preset`. The active presets ([`HomulerGazeCalibration.cs`](uniteye/Scripts/Runtime/HomulerGazeCalibration.cs)) are a **corner** pass — which dwells ~2 s at the four corners and edge midpoints so the screen extremes are well sampled (this is what lets calibration reach the corners) — followed by **zig-zag**, **vertical wavy** and **horizontal wavy** sweeps for full-screen coverage; with `Max Rounds Per Preset = 2` that's 8 rounds. You also choose the calibration type, whether to save (overwriting an existing file for that type+model), and whether to quit after calibrating.
 
 ![](./uniteye/Documentation~/Images/CalibrationScreen.png)
 
-Left-click to start, then follow the dot with your eyes; it pauses between rounds for another click. Blink only while the dot is stationary — frames during blinks, without a fresh webcam image, or without a detected face are excluded from the training data automatically. Press `S` to stop early but still train. Don't quit before training finishes (or the file isn't saved). The Root-Mean-Squared Error (in cm for your screen) is shown afterward and written to the CSV for runtime calibrations.
+Left-click to start, then follow the dot with your eyes; it pauses between rounds for another click. Frames without a detected face (or before the webcam has delivered a fresh image) are excluded from the training data automatically. Press `S` to stop early but still train. Don't quit before training finishes (or the file isn't saved). The Root-Mean-Squared Error (in cm for your screen) is shown afterward and written to the CSV for runtime calibrations.
 
 For **Ridge Regression** the reported RMSE is measured on a randomly held-out 20 % of samples, with the regularization strength chosen by 5-fold cross-validation on the training portion — an honest estimate that can read slightly higher than older UnitEye versions.
 
@@ -247,7 +249,7 @@ The pipeline runs the FaceMesh graph + gaze inference synchronously, so project 
 ## Troubleshooting
 If you get no gaze at all:
 1. **MediaPipe models not installed** — the most common cause on desktop. Run `UnitEye ▸ Install MediaPipe StreamingAssets` (see [Installation](#installation)).
-2. **A GazeEstimation backbone with no model** — MobileOne/MobileNetV2 need their ONNX under `uniteye/Resources/ONNX/GazeEstimation/` (shipped) and self-disable with a console error if missing; switch back to `EyeMU` or see [`docs/GAZE-BACKBONES.md`](docs/GAZE-BACKBONES.md).
+2. **A GazeEstimation backbone with no model** — MobileOne / MobileNetV2 / ResNet34 need their ONNX under `uniteye/Resources/ONNX/GazeEstimation/` (shipped) and self-disable with a console error if missing; switch back to `EyeMU` or see [`docs/GAZE-BACKBONES.md`](docs/GAZE-BACKBONES.md).
 3. **Not calibrated yet** — the dot tracks but is inaccurate until you [calibrate](#calibration); set the type to `None` to view the raw gaze.
 4. **GPU / graphics API** — the gaze model runs on the Inference Engine's GPU-compute backend and MediaPipe falls back to CPU if GPU inference is unsupported. If inference misbehaves, in `Edit ▸ Project Settings ▸ Player ▸ Other Settings` you can disable **Auto Graphics API** and put **Vulkan** or **OpenGLCore** above **Direct3D11** (a workaround inherited from the Barracuda era; test both for performance).
 
