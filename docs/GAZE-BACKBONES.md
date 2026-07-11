@@ -40,8 +40,32 @@ coded to the real contract, not a guess — both models are identical:
 
 Per frame the runner: GPU-crops the face from the FaceMesh rect → ImageNet-normalizes via
 `PreprocessGazeEstimation.compute` into the `(1,3,448,448)` tensor → runs the model → decodes both heads
-→ maps to a rough on-screen `RawGaze` and emits `Features = [pitch, yaw, headYaw, headPitch, headRoll,
-headArea, screenW, screenH]` for calibration to refine (so the rough raw mapping needn't be accurate).
+→ maps to a rough on-screen `RawGaze` and emits a **polynomial** calibration feature vector for the
+calibrator to refine (the rough raw mapping needn't be accurate).
+
+### Why the features are a polynomial (fixing "crosshair stuck in the centre, corners bad")
+
+A gaze *direction* maps to a flat screen non-linearly — `screen_x ≈ distance · tan(yaw + headYaw)`, with a
+genuine yaw–pitch coupling toward the corners. UnitEye's calibrators are **per-axis linear** (RidgeRegression
+fits X and Y separately; even the MLP trains best on a good basis), so feeding them the *raw* angles let them
+fit only the centre slope and **compress the corners inward** — the classic regression-to-the-centre symptom.
+The direction backbones therefore emit a low-order polynomial basis instead of the raw angles:
+
+`Features = [yaw, pitch, yaw², pitch², yaw·pitch, yaw³, pitch³, headYaw, headPitch, headRoll, headArea]`
+([`GazeEstimationRunner.FillGazeFeatures`](../uniteye/Scripts/Runtime/GazeProvider/GazeEstimationRunner.cs))
+
+The `yaw²/pitch²` + `yaw·pitch` terms are the standard 2nd-order eye-tracking calibration polynomial (they
+give the off-centre asymmetry and the diagonal coupling); the `yaw³/pitch³` terms are a pole-free stand-in for
+`tan` (`tan x ≈ x + x³/3`) that extends reach at the corners. The two old constant `screenW/screenH` features
+were dropped (they standardize to zero — no signal). Nothing in the calibration math changed: RidgeRegression
+sizes to the vector length and the MLP infers its input count, and both capture and inference read this same
+vector, so train and predict always agree. **This changes the direction backbones' feature length, so
+recalibrate them once after updating.**
+
+Sampling was rebalanced to match: the calibration now leads with a **CornerPreset that dwells** (~2 s) at the
+four corners + four edge midpoints so the extremes get sustained-fixation samples (previously two of three
+presets never left a central box and no point dwelled, so the fit had almost no corner leverage), and the
+capture no longer drops downward-gaze frames as false "blinks".
 
 **Verified headlessly** (smoke suite): both models import with exactly that I/O and execute on CPU, and
 the decode math is correct.

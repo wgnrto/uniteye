@@ -45,12 +45,15 @@ namespace UnitEye
         private List<CalibrationPreset> _presets;
         private int _currentPreset = 0;
 
+        //Seconds the dot dwells at a waypoint of a StopAtWaypoints preset (corners/edges), accumulating
+        //sustained-fixation samples there.
+        private const float DwellSeconds = 2f;
+
         private bool _started = false;
         private bool _finished = false;
         private bool _finishedRound = false;
         private bool _earlyStop = false;
         private bool _showMessage = true;
-        private bool _stop = false;
 
         private string _guiMessage = "Follow the dot with your eyes!\nClick to start calibration";
 
@@ -141,20 +144,21 @@ namespace UnitEye
             if (returnAfter)
                 _guiMessage += "\nRight click to cancel and return";
 
-            //Create new preset with all the wanted rounds
+            //Calibration presets. CornerPreset leads and DWELLS at the four corners + four edge midpoints
+            //(it's a StopAtWaypoints preset) so the extremes get sustained-fixation samples — without that
+            //the fit had almost no leverage at the corners and collapsed predictions toward the centre. The
+            //ZigZag + wavy presets follow as continuous sweeps for full-screen coverage (no dwell). Dwell is
+            //now decided per preset (StopAtWaypoints), not one global flag.
             _presets = new List<CalibrationPreset>
             {
+                new CornerPreset(padding),
                 new ZigZagPreset(padding, true, 4),
-                new VerticalWavyPreset(padding, out _stop),
-                new HorizontalWavyPreset(padding, out _stop)
-                //new CornerPreset(padding),
-                //new ZigZagPreset(padding, true, 4),
-                //new ZigZagPreset(padding, false, 4),
-                //new CornerPreset(padding, mirrored: true) 
+                new VerticalWavyPreset(padding),
+                new HorizontalWavyPreset(padding),
             };
 
-            //Reset for first point
-            stopAfterPoints = _stop;
+            //Master enable for dwelling; each preset's StopAtWaypoints then decides whether IT dwells.
+            stopAfterPoints = true;
             ResetPoints(0);
 
             path = Instantiate(path, new Vector3(Screen.width/2, -Screen.height/2), Quaternion.identity, screen.transform);
@@ -225,11 +229,13 @@ namespace UnitEye
                 {
                     _currentPoint++;
 
-                    if (_currentPoint > 1 && stopAfterPoints)
+                    //Dwell only for presets that mark their waypoints as fixation targets (corners/edges),
+                    //not the continuous sweeps whose ~150 path points would each pause 2s.
+                    if (_currentPoint > 1 && stopAfterPoints && _presets[_currentPreset].StopAtWaypoints)
                     {
-                        //Wait at the location for 2 seconds
+                        //Wait at the location so the eye settles and samples accumulate on the target
                         _isYielding = true;
-                        _currentTime = 2;
+                        _currentTime = DwellSeconds;
                     }
 
                     if (_currentPoint >= points.Count)
@@ -329,15 +335,23 @@ namespace UnitEye
         private void CaptureNetworkOutput()
         {
             //Only capture frames whose features are trustworthy. When the face is lost the provider's
-            //feature buffer freezes at the last successful frame, and during a blink the eye crops are
-            //unreliable (the runtime pipeline holds gaze then — holdGazeDuringBlink); the dot keeps
-            //moving either way, so capturing would pair stale/garbage features with a far-away label and
-            //contaminate the training set.
+            //feature buffer freezes at the last successful frame, so capturing would pair stale features
+            //with a far-away label and contaminate the training set — gate on IsFacePresent + non-empty
+            //features. NOTE: we deliberately do NOT gate on IsBlinking here: the blink test is an
+            //eye-aspect-ratio threshold that false-positives on DOWNWARD gaze (the upper lid lowers), so
+            //it was silently dropping bottom-edge / bottom-corner samples and starving exactly the region
+            //that needs data. A few genuine blink frames out of thousands are negligible noise the fit
+            //absorbs; systematically losing a screen region is not.
             var provider = _gaze != null ? _gaze.Provider : null;
-            if (provider == null || !provider.IsFacePresent || provider.IsBlinking)
+            if (provider == null || !provider.IsFacePresent)
                 return;
             var features = provider.GetFeatures();
             if (features == null || features.Length == 0)
+                return;
+
+            //During a dwell, skip the first ~0.3s: the dot just jumped to the waypoint and the eye is still
+            //saccading to it, so those frames would pair the new (corner) label with mid-flight gaze.
+            if (_isYielding && _currentTime > DwellSeconds - 0.3f)
                 return;
 
             //Clone: GetFeatures() returns the provider's reused per-frame buffer, so the retained training

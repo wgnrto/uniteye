@@ -54,7 +54,14 @@ namespace UnitEye
         private readonly RenderTexture _tensorTex = new RenderTexture(INPUT_SIZE, INPUT_SIZE, 0, RenderTextureFormat.ARGBHalf);
         private readonly TextureTransform _nchw = new TextureTransform().SetTensorLayout(TensorLayout.NCHW);
         private Tensor<float> _inputTensor;
-        private readonly float[] _features = new float[8];
+        // Calibration feature vector: a polynomial expansion of the gaze angles + linear head pose (see
+        // FillGazeFeatures). The direction model's angle->screen map is NON-LINEAR (x ~ D*tan(yaw)) with a
+        // yaw*pitch coupling, which a per-axis LINEAR ridge cannot represent — so without the polynomial
+        // terms the fit tracked the centre slope and compressed the corners inward ("crosshair stuck in
+        // the middle, corners bad"). The expansion gives ridge (and the MLP) the basis to reach the
+        // corners. Because both calibration capture and inference read this same vector via
+        // provider.GetFeatures(), train and predict always agree.
+        private readonly float[] _features = new float[FeatureCount];
         private Vector2 _rawGaze;
 
         public GazeEstimationRunner(FaceMeshSolution faceMesh, string modelResourcePath)
@@ -156,16 +163,40 @@ namespace UnitEye
             float ny = Mathf.Clamp01(0.5f - pitch * ANGLE_TO_SCREEN_GAIN);
             _rawGaze = new Vector2(nx * Screen.width, ny * Screen.height);
 
-            // Feature vector for calibration: gaze angles + head pose/geometry + screen size.
-            _features[0] = pitch;
-            _features[1] = yaw;
-            _features[2] = _faceMesh.HeadYaw;
-            _features[3] = _faceMesh.HeadPitch;
-            _features[4] = _faceMesh.HeadRoll;
-            _features[5] = _faceMesh.HeadArea;
-            _features[6] = Screen.width;
-            _features[7] = Screen.height;
+            // Polynomial feature vector for calibration (see FillGazeFeatures / the field comment).
+            FillGazeFeatures(_features, yaw, pitch,
+                _faceMesh.HeadYaw, _faceMesh.HeadPitch, _faceMesh.HeadRoll, _faceMesh.HeadArea);
             return true;
+        }
+
+        /// <summary>Length of the calibration feature vector FillGazeFeatures produces.</summary>
+        public const int FeatureCount = 11;
+
+        /// <summary>
+        /// Fills the calibration feature vector with a low-order polynomial of the gaze angles plus linear
+        /// head-pose context. The gaze-angle block [yaw, pitch, yaw², pitch², yaw·pitch, yaw³, pitch³] lets
+        /// a per-axis LINEAR model represent the non-linear angle→screen map: the even/cross terms handle
+        /// the off-centre asymmetry and the yaw–pitch coupling, and the odd cubic terms are a pole-free
+        /// stand-in for tan (tan x ≈ x + x³/3) that extends reach at the corners — the classic 2nd-order
+        /// eye-tracking calibration polynomial with a cubic reach term. Head pose stays linear (it shifts
+        /// the mapping but the eye angle is the dominant signal). The old constant Screen.width/height
+        /// features were dropped (they standardize to zero, i.e. carry no signal). Order is irrelevant to
+        /// the standardized ridge/MLP; keeping it fixed is what matters for train/predict agreement.
+        /// </summary>
+        public static void FillGazeFeatures(float[] f, float yaw, float pitch,
+            float headYaw, float headPitch, float headRoll, float headArea)
+        {
+            f[0] = yaw;
+            f[1] = pitch;
+            f[2] = yaw * yaw;
+            f[3] = pitch * pitch;
+            f[4] = yaw * pitch;
+            f[5] = yaw * yaw * yaw;
+            f[6] = pitch * pitch * pitch;
+            f[7] = headYaw;
+            f[8] = headPitch;
+            f[9] = headRoll;
+            f[10] = headArea;
         }
 
         /// <summary>

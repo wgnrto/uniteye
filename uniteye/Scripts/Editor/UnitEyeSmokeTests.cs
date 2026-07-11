@@ -42,6 +42,7 @@ public static class UnitEyeSmokeTests
             TestScenesAndPrefabsHaveNoMissingScripts();
             TestEyeMUModelLoadsAndRuns();
             TestGazeEstimationDecode();
+            TestGazeFeaturePolynomial();
             TestGazeModelsLoadAndRun();
             TestCalibrationFileNames();
         }
@@ -550,6 +551,27 @@ public static class UnitEyeSmokeTests
         CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(45)), 0f, 0.02f, "Gaze decode: center bin ~ 0 rad");
         CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(0)), -Mathf.PI, 0.02f, "Gaze decode: bin 0 ~ -pi rad");
         CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(89)), (89f * 4f - 180f) * Mathf.Deg2Rad, 0.02f, "Gaze decode: bin 89");
+    }
+
+    private static void TestGazeFeaturePolynomial()
+    {
+        //The direction backbone must emit the polynomial-expanded calibration feature vector so a per-axis
+        //LINEAR ridge can bend to the corners (raw [yaw,pitch] can't: the angle->screen map is nonlinear
+        //with a yaw*pitch coupling). Pin the length + exact term layout so the basis isn't silently
+        //changed and train/predict stay in lockstep (both read this same vector).
+        Check(GazeEstimationRunner.FeatureCount == 11, "Gaze calibration feature vector is the 11-term polynomial");
+        var f = new float[GazeEstimationRunner.FeatureCount];
+        float yaw = 0.3f, pitch = -0.2f;
+        GazeEstimationRunner.FillGazeFeatures(f, yaw, pitch, 0.11f, 0.12f, 0.13f, 0.14f);
+        CheckClose(f[0], yaw, 1e-6f, "feature[0] = yaw");
+        CheckClose(f[1], pitch, 1e-6f, "feature[1] = pitch");
+        CheckClose(f[2], yaw * yaw, 1e-6f, "feature[2] = yaw^2");
+        CheckClose(f[3], pitch * pitch, 1e-6f, "feature[3] = pitch^2");
+        CheckClose(f[4], yaw * pitch, 1e-6f, "feature[4] = yaw*pitch (the cross term the corners need)");
+        CheckClose(f[5], yaw * yaw * yaw, 1e-6f, "feature[5] = yaw^3 (tan-reach term)");
+        CheckClose(f[6], pitch * pitch * pitch, 1e-6f, "feature[6] = pitch^3");
+        CheckClose(f[7], 0.11f, 1e-6f, "feature[7] = headYaw (linear)");
+        CheckClose(f[10], 0.14f, 1e-6f, "feature[10] = headArea (linear)");
     }
 
     private static void TestGazeModelsLoadAndRun()

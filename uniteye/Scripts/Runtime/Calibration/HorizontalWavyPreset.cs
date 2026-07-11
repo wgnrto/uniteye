@@ -12,10 +12,10 @@ namespace UnitEye
         private float _radius = Screen.height / 8;
         private int _steps = 36;
 
-        public HorizontalWavyPreset(float padding, out bool stopAtWaypoint) : base(padding)
-        {
-            stopAtWaypoint = false;
-        }
+        //Continuous sweep: don't dwell at its ~150 path waypoints.
+        public override bool StopAtWaypoints => false;
+
+        public HorizontalWavyPreset(float padding) : base(padding) { }
 
         public override List<Vector2> GetPoints()
         {

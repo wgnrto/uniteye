@@ -24,5 +24,14 @@ namespace UnitEye
         /// Returns a list of points that will be moved between
         /// </summary>
         public abstract List<Vector2> GetPoints();
+
+        /// <summary>
+        /// Whether the calibration dot should DWELL (pause + keep capturing) at each waypoint of this
+        /// preset. True for discrete presets whose waypoints are meaningful fixation targets (corners,
+        /// grids) — sustained fixation there denoises the samples and, crucially, gives the fit real
+        /// leverage at the screen extremes. False for the continuous "wavy" sweeps, whose ~150 waypoints
+        /// are just a smooth path (dwelling at each would take minutes and pile samples mid-screen).
+        /// </summary>
+        public virtual bool StopAtWaypoints => true;
     }
 }

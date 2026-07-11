@@ -12,6 +12,9 @@ namespace UnitEye
 
         private int _numberOfZigs;
 
+        //Continuous full-screen sweep for coverage: don't dwell at each stroke waypoint.
+        public override bool StopAtWaypoints => false;
+
         public ZigZagPreset(float padding, bool vertical, int numberOfZigs) :
             base(padding)
         {
