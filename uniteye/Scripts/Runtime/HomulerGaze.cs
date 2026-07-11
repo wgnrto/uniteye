@@ -629,8 +629,11 @@ namespace UnitEye
             _uiStyleW = width;
             _uiStyleH = height;
 
-            //Font scale relative to a 1080p baseline (== 1.0 at 1920x1080)
-            float resolutionScale = Mathf.Sqrt((0.001f * width * height) / 2073.6f);
+            //Font scale relative to a 1080p baseline (== 1.0 at 1920x1080). Uses the LIMITING axis, not
+            //sqrt(w*h): the window's button rects scale with width/height directly, so a geometric-mean
+            //font scale outgrows the buttons on non-16:9 displays (e.g. 3200x2000: font x1.76 vs button
+            //width x1.67) and text that fit at 1080p starts spilling onto a second line.
+            float resolutionScale = Mathf.Min(width / 1920f, height / 1080f);
             int fontSize = (int)(14f * resolutionScale);
 
             _uiStyleBox = new GUIStyle(GUI.skin.box) { wordWrap = true, fontStyle = FontStyle.Bold, fontSize = fontSize };
@@ -643,6 +646,39 @@ namespace UnitEye
 
             //The "Show/Hide Gaze UI" toggle button never shrinks below the baseline (matches the old uiScale)
             _toggleStyle = new GUIStyle(GUI.skin.button) { fontSize = Mathf.RoundToInt(14f * Mathf.Max(1f, resolutionScale)) };
+        }
+
+        //Short display names for the Gaze UI's narrow buttons. The raw enum names are single long words
+        //("RidgeRegression", "KalmanEasing", "GazeMobileNetV2") that cannot word-wrap, so in a narrow
+        //button IMGUI breaks them mid-word and the tail characters spill onto a second line.
+        private static string DisplayName(Calibrations cal)
+        {
+            switch (cal)
+            {
+                case Calibrations.RidgeRegression: return "Ridge";
+                case Calibrations.MLCalibration: return "MLP";
+                default: return cal.ToString();
+            }
+        }
+
+        private static string DisplayName(Filtering filt)
+        {
+            switch (filt)
+            {
+                case Filtering.KalmanEasing: return "Kal+Ease";
+                case Filtering.EasingKalman: return "Ease+Kal";
+                default: return filt.ToString();
+            }
+        }
+
+        private static string DisplayName(GazeBackbone backbone)
+        {
+            switch (backbone)
+            {
+                case GazeBackbone.GazeMobileOne: return "MobileOne";
+                case GazeBackbone.GazeMobileNetV2: return "MobileNetV2";
+                default: return backbone.ToString();
+            }
         }
 
         void GazeUI(int windowID)
@@ -688,7 +724,12 @@ namespace UnitEye
                 _provider.PreviousCamera();
             }
 
-            GUI.Label(new Rect(width * 0.125f, height * 0.025f, width * 0.11f, height * 0.05f), $"Cam: {_provider.CurrentCameraName}", gazeUIStyleLabel);
+            //Truncate long device names ("Integrated Webcam FHD (04f2:b6d9)" etc.) — the label is narrow
+            //and long parenthesized IDs break mid-word onto extra lines over the controls below.
+            var camName = _provider.CurrentCameraName;
+            if (camName != null && camName.Length > 22)
+                camName = camName.Substring(0, 21) + "…";
+            GUI.Label(new Rect(width * 0.125f, height * 0.025f, width * 0.11f, height * 0.05f), $"Cam: {camName}", gazeUIStyleLabel);
 
             if (GUI.Button(new Rect(width * 0.24f, height * 0.025f, width * 0.1f, height * 0.05f), $"Next Cam", gazeUIStyleButton))
             {
@@ -697,7 +738,7 @@ namespace UnitEye
 
             //Switch the gaze model at runtime (cycles EyeMU -> MobileOne -> MobileNetV2). The pipeline
             //falls back to raw gaze until you recalibrate for the newly selected model.
-            if (GUI.Button(new Rect(width * 0.35f, height * 0.025f, width * 0.12f, height * 0.05f), $"Model: {_gazeBackbone}", gazeUIStyleButton))
+            if (GUI.Button(new Rect(width * 0.35f, height * 0.025f, width * 0.12f, height * 0.05f), $"Model: {DisplayName(_gazeBackbone)}", gazeUIStyleButton))
             {
                 int i = System.Array.IndexOf(_backboneValues, _gazeBackbone);
                 SetBackbone(_backboneValues[(i + 1) % _backboneValues.Length]);
@@ -761,7 +802,9 @@ namespace UnitEye
 
             GUI.Label(new Rect(width * 0.15f, height * 0.085f, width * 0.08f, height * 0.05f), $"{(_blinking ? "Eyes are closed" : "Eyes are open")}", gazeUIStyleLabel);
 
-            if (GUI.Button(new Rect(width * 0.255f, height * 0.07f, width * 0.1f, height * 0.05f), $"{(_provider.IsCalibratingDrowsy ? $"Calibrating Drowsiness based on {_provider.DrowsyCalibrationCount} values" : "Calibrate Drowsiness Baseline")}", gazeUIStyleButton))
+            //Short progress text: the old "Calibrating Drowsiness based on N values" needed 3+ wrapped
+            //lines and overflowed the button vertically while calibrating.
+            if (GUI.Button(new Rect(width * 0.255f, height * 0.07f, width * 0.1f, height * 0.05f), $"{(_provider.IsCalibratingDrowsy ? $"Calibrating… ({_provider.DrowsyCalibrationCount})" : "Calibrate Drowsiness Baseline")}", gazeUIStyleButton))
                 _provider.CalibrateDrowsy(true);
 
             GUI.Label(new Rect(width * 0.38f, height * 0.085f, width * 0.08f, height * 0.05f), $"{(_drowsy ? "Drowsy" : "Alert")}", gazeUIStyleLabel);
@@ -774,24 +817,26 @@ namespace UnitEye
 
             GUI.Box(new Rect(0, 0, width * 0.48f, height * 0.24f), "Used filtering and calibration type selection", gazeUIStyleBox);
 
-            //Unity doesn't have an easy way to create a Dropdownlist in OnGUI(), so we use loops
+            //Unity doesn't have an easy way to create a Dropdownlist in OnGUI(), so we use loops.
+            //Short display names throughout: the raw enum names are single unbreakable words that spill
+            //characters onto a second line in these narrow buttons.
             //Calibration types
-            GUI.Label(new Rect(width * 0.025f, height * 0.03f, width * 0.08f, height * 0.06f), $"Calibration type\n(current: {_calibrations})", gazeUIStyleLabel);
+            GUI.Label(new Rect(width * 0.025f, height * 0.03f, width * 0.08f, height * 0.06f), $"Calibration type\n(current: {DisplayName(_calibrations)})", gazeUIStyleLabel);
 
             for (int i = 0; i < _calibrationValues.Length; i++)
             {
                 var cal = _calibrationValues[i];
-                if (GUI.Button(new Rect(i * width * 0.06f + width * 0.11f, height * 0.025f, width * 0.05f, height * 0.05f), $"{cal}", gazeUIStyleButton))
+                if (GUI.Button(new Rect(i * width * 0.06f + width * 0.11f, height * 0.025f, width * 0.05f, height * 0.05f), DisplayName(cal), gazeUIStyleButton))
                     Calibrations = cal;
             }
 
             //Filtering types
-            GUI.Label(new Rect(width * 0.025f, height * 0.09f, width * 0.08f, height * 0.06f), $"Filtering type\n(current: {Filtering})", gazeUIStyleLabel);
+            GUI.Label(new Rect(width * 0.025f, height * 0.09f, width * 0.08f, height * 0.06f), $"Filtering type\n(current: {DisplayName(Filtering)})", gazeUIStyleLabel);
 
             for (int i = 0; i < _filteringValues.Length; i++)
             {
                 var filt = _filteringValues[i];
-                if (GUI.Button(new Rect(i * width * 0.06f + width * 0.11f, height * 0.080f, width * 0.05f, height * 0.05f), $"{filt}", gazeUIStyleButton))
+                if (GUI.Button(new Rect(i * width * 0.06f + width * 0.11f, height * 0.080f, width * 0.05f, height * 0.05f), DisplayName(filt), gazeUIStyleButton))
                     Filtering = filt;
             }
 
