@@ -557,7 +557,7 @@ public static class UnitEyeSmokeTests
         //Verifies both yakhyo/gaze-estimation ONNX models import and expose the I/O GazeEstimationRunner
         //codes against: one input (1,3,448,448) named "input", two outputs "yaw"+"pitch" of 90 bins each.
         //Runs once with a blank CPU input so it works under -nographics. Does NOT prove gaze accuracy.
-        foreach (var path in new[] { "ONNX/GazeEstimation/mobileone_s0_gaze", "ONNX/GazeEstimation/mobilenetv2_gaze" })
+        foreach (var path in new[] { "ONNX/GazeEstimation/mobileone_s0_gaze", "ONNX/GazeEstimation/mobilenetv2_gaze", "ONNX/GazeEstimation/resnet34_gaze" })
         {
             var asset = Resources.Load<ModelAsset>(path);
             Check(asset != null, $"Gaze model should load from Resources: {path}");

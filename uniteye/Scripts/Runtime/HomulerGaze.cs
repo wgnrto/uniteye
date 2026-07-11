@@ -677,6 +677,7 @@ namespace UnitEye
             {
                 case GazeBackbone.GazeMobileOne: return "MobileOne";
                 case GazeBackbone.GazeMobileNetV2: return "MobileNetV2";
+                case GazeBackbone.GazeResNet34: return "ResNet34";
                 default: return backbone.ToString();
             }
         }

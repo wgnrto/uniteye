@@ -46,6 +46,8 @@ namespace UnitEye
                     return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobileone_s0_gaze");
                 case GazeBackbone.GazeMobileNetV2:
                     return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobilenetv2_gaze");
+                case GazeBackbone.GazeResNet34:
+                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/resnet34_gaze");
                 default:
                     return new HomulerEyeMURunner(_faceMesh);
             }

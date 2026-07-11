@@ -16,5 +16,10 @@ namespace UnitEye
         /// <summary>yakhyo/gaze-estimation MobileNetV2: a face crop -> gaze pitch/yaw, mapped to the
         /// screen. Uses Resources/ONNX/GazeEstimation/mobilenetv2_gaze.onnx.</summary>
         GazeMobileNetV2,
+
+        /// <summary>yakhyo/gaze-estimation (uniface "MobileGaze") ResNet-34: a face crop -> gaze
+        /// pitch/yaw. Larger + more accurate than the mobile nets (uniface's default), same 448x448 /
+        /// 90-bin I/O. Uses Resources/ONNX/GazeEstimation/resnet34_gaze.onnx.</summary>
+        GazeResNet34,
     }
 }

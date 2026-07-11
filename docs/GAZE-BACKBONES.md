@@ -18,10 +18,12 @@ tested path.
 ## GazeMobileOne / GazeMobileNetV2 (yakhyo/gaze-estimation — integrated; needs a webcam accuracy check)
 
 [`GazeEstimationRunner`](../uniteye/Scripts/Runtime/GazeProvider/GazeEstimationRunner.cs) runs a
-direction-based model from [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation). Both
-models the project ships (`Resources/ONNX/GazeEstimation/mobileone_s0_gaze.onnx` and
-`mobilenetv2_gaze.onnx`) are **already wired and selectable** — pick **GazeMobileOne** or
-**GazeMobileNetV2** on `HomulerGaze → Gaze Backbone (model)` before play, **or switch at runtime** with
+direction-based model from [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation) (the same
+weights uniface serves as "MobileGaze"). Three models ship in
+`Resources/ONNX/GazeEstimation/` — `mobileone_s0_gaze.onnx` (fastest), `mobilenetv2_gaze.onnx`, and
+`resnet34_gaze.onnx` (largest / most accurate; uniface's default) — all **already wired and selectable**:
+pick **GazeMobileOne**, **GazeMobileNetV2**, or **GazeResNet34** on `HomulerGaze → Gaze Backbone (model)`
+before play, **or switch at runtime** with
 the **Model:** button in the Gaze UI (Webcam & Model controls) / `HomulerGaze.SetBackbone(...)`. Switching
 rebuilds only the model (the shared face-mesh/blink/distance stack stays); calibration is per-backbone, so
 gaze falls back to raw until you recalibrate. With a direction model the debug crop is a **face** crop
