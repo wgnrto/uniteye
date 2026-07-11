@@ -42,9 +42,25 @@ Per frame the runner: GPU-crops the face from the FaceMesh rect → ImageNet-nor
 headArea, screenW, screenH]` for calibration to refine (so the rough raw mapping needn't be accurate).
 
 **Verified headlessly** (smoke suite): both models import with exactly that I/O and execute on CPU, and
-the decode math is correct. **Not yet verified: runtime gaze accuracy** — the face-crop orientation, the
-end-to-end normalization, and whether the 90-bin convention matches these specific weights can only be
-confirmed with a webcam.
+the decode math is correct.
+
+**Verified against the reference implementation:** these releases live on as **"MobileGaze"** inside
+[yakhyo/uniface](https://github.com/yakhyo/uniface) — the author's successor library that consolidates
+the earlier repos and downloads the *same* ONNX files from the gaze-estimation releases. Its
+`uniface/gaze/models.py` pins the exact conventions this runner uses: 448×448 RGB, ImageNet mean/std,
+90 bins, softmax + soft-argmax `* 4° − 180°` → radians, pitch/yaw. So the preprocessing and decode are no
+longer guesses. Their demo passes the **raw rectangular detector bbox** (no padding or squaring — the
+resize stretch is tolerated); our squared `FACE_CROP_SCALE`-padded landmark bbox emulates that detector
+framing without the stretch, and remains the one webcam-tuning knob alongside crop orientation.
+
+uniface also lists **ResNet-18/34/50** gaze variants (larger, more accurate; ResNet-34 is uniface's
+default) served from the same releases page — they share this exact I/O contract, so adding one to
+UnitEye is only: drop the `.onnx` into `Resources/ONNX/GazeEstimation/`, add a `GazeBackbone` enum entry,
+and map it in `NativeGazeProvider.CreateBackbone`. Its other modules (RetinaFace detection, PIPNet
+landmarks, head pose) duplicate what MediaPipe FaceLandmarker already provides here, and the Python
+library itself is not consumable from Unity.
+
+**Not yet verified: runtime gaze accuracy** — the face-crop framing/orientation on a live webcam.
 
 ### Hand-test
 

@@ -21,9 +21,13 @@ namespace UnitEye
     ///   output "yaw"     (1, 90)  \  per-bin logits -> softmax + expectation * 4deg - 180deg -> radians
     ///   output "pitch"   (1, 90)  /  (L2CS-style Gaze360 binning)
     ///
-    /// Runtime gaze accuracy still needs a webcam to confirm (crop/normalization/bin convention); if the
-    /// uncalibrated dot moves the wrong way, the two knobs are BIN_WIDTH_DEG/ANGLE_OFFSET_DEG (decode) and
-    /// ANGLE_TO_SCREEN_GAIN (pre-calibration only). See docs/GAZE-BACKBONES.md.
+    /// The preprocessing + decode above are VERIFIED against the author's reference implementation
+    /// (yakhyo/uniface, uniface/gaze/models.py — the successor library that wraps these exact ONNX
+    /// releases as "MobileGaze"): 448x448 RGB, ImageNet mean/std, softmax + soft-argmax * 4 - 180 ->
+    /// radians, pitch/yaw. Their demo feeds the RAW rectangular detector bbox (no padding/squaring); our
+    /// squared FACE_CROP_SCALE-padded landmark bbox emulates that framing without aspect stretch —
+    /// FACE_CROP_SCALE stays the webcam-tuning knob. ANGLE_TO_SCREEN_GAIN affects the pre-calibration
+    /// RawGaze only. See docs/GAZE-BACKBONES.md.
     /// </summary>
     public class GazeEstimationRunner : IGazeBackbone
     {
