@@ -79,6 +79,7 @@ namespace UnitEye
         public RenderTexture LeftEyeTexture => null;
         public RenderTexture RightEyeTexture => null;
         public bool AnnotateFaceMesh { get => false; set { } }  // browser owns rendering on WebGL
+        public void SetRendering(bool rendering) { }            // browser owns rendering on WebGL
         public void SetBackbone(GazeBackbone backbone) { }      // browser owns the CV on WebGL
 
         public bool IsCalibratingDrowsy => false;

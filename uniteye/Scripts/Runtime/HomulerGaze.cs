@@ -106,6 +106,17 @@ namespace UnitEye
         /// </summary>
         public void SetBackbone(GazeBackbone backbone)
         {
+            //Refuse to swap the model while a calibration/evaluation is running: the backbones produce
+            //DIFFERENT feature-vector lengths (EyeMU 12 vs GazeEstimation 8), so a mid-run switch would mix
+            //jagged rows into the capture (training then throws inside the coroutine) and the result would
+            //be saved under the NEW backbone's calibration file, silently corrupting it.
+            if ((_calibrationScript != null && _calibrationScript.enabled) ||
+                (_evaluationScript != null && _evaluationScript.enabled))
+            {
+                UnitEyeLog.Warn("SetBackbone ignored: finish or cancel the running calibration/evaluation first.");
+                return;
+            }
+
             _gazeBackbone = backbone;
             _provider?.SetBackbone(backbone);
             //Load this backbone's own calibration (per-backbone files). If it hasn't been calibrated yet,
@@ -170,17 +181,16 @@ namespace UnitEye
             private set
             {
                 _isRendering = value;
-    #if !UNITY_WEBGL || UNITY_EDITOR
-                //FaceMeshSolution only exists on non-WebGL players (native MediaPipe); on WebGL the browser owns rendering
-                var solution = _mediaPipeGO.GetComponent<FaceMeshSolution>();
-                if (solution != null)
+                //Route through the provider seam (as AnnotateFaceMesh already does) instead of a direct
+                //GetComponent<FaceMeshSolution>: the native provider forwards to its cached solution and
+                //WebGL no-ops, so rendering + annotate state always reach the same object via one path.
+                if (_provider != null)
                 {
                     //Respect the user's showFaceMesh choice when rendering resumes (calibration turns
                     //everything off, but must not force the mesh overlay back on afterwards).
-                    solution.Annotate = _isRendering && showFaceMesh;
-                    solution.IsRendering = _isRendering;
+                    _provider.AnnotateFaceMesh = _isRendering && showFaceMesh;
+                    _provider.SetRendering(_isRendering);
                 }
-    #endif
             }
         }
 
@@ -305,12 +315,15 @@ namespace UnitEye
             var now = System.DateTime.Now;
             LastGazeLocationTimeUnix = ((System.DateTimeOffset)now).ToUnixTimeMilliseconds();
 
-            //AOI updating
-            aoiNameList = _aoiManager.CheckAOIList(new Vector2(gazeLocation.x / Screen.width, gazeLocation.y / Screen.height));
+            //AOI updating (refills the reused scratch list; no per-frame allocation)
+            _aoiManager.CheckAOIList(new Vector2(gazeLocation.x / Screen.width, gazeLocation.y / Screen.height), aoiNameList);
 
-            //CSV Logging
-            if (!PauseCSVLogging && _csvLogger != null && _csvLogger.isActiveAndEnabled)
-                _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _provider.EyeFeature, _blinking, now, aoiNameList));
+            //CSV Logging. ShouldLog is checked BEFORE building the row: with logsPerSecond below the frame
+            //rate the limiter drops most frames, so skipping the CSVData + AOI-list copy on those frames
+            //avoids steady per-frame garbage. CSVData retains its AOI list by reference until the queue is
+            //flushed, so accepted rows get their OWN copy (the scratch list is refilled every frame).
+            if (!PauseCSVLogging && _csvLogger != null && _csvLogger.isActiveAndEnabled && _csvLogger.ShouldLog)
+                _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _provider.EyeFeature, _blinking, now, new List<string>(aoiNameList)));
 
             //Drowsy calibration
             if (_provider.IsCalibratingDrowsy)
@@ -319,9 +332,10 @@ namespace UnitEye
             //Unload Calibration if calibration is done
             if (_calibrationScript != null && _calibrationScript.Returned)
             {
-                //Add one entry for the note because PauseCSVLogging is currently true
+                //Add one entry for the note because PauseCSVLogging is currently true (owned AOI copy:
+                //CSVData keeps the list reference until the queue flush)
                 if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
-                    _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _provider.EyeFeature, _blinking, now, aoiNameList));
+                    _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _provider.EyeFeature, _blinking, now, new List<string>(aoiNameList)));
                 UnloadCalibration();
             }
 
@@ -568,7 +582,9 @@ namespace UnitEye
         /// </summary>
         private void BackupSettings()
         {
-            //Only backup if not already backupped
+            //Only backup if not already backupped. _backupped MUST be set here: without it a second Load
+            //(e.g. LoadEvaluation while a calibration is still up) re-captured the already-hidden state —
+            //including _calibrations == None — and RestoreSettings then made that corruption permanent.
             if (!_backupped)
             {
                 _showEyesBackup = showEyes;
@@ -576,6 +592,7 @@ namespace UnitEye
                 _visualizeAOIBackup = visualizeAOI;
                 _drawDotBackup = drawDot;
                 _calibrationBackup = _calibrations;
+                _backupped = true;
             }
         }
 
@@ -590,6 +607,8 @@ namespace UnitEye
             visualizeAOI = _visualizeAOIBackup;
             drawDot = _drawDotBackup;
             _calibrations = _calibrationBackup;
+            //Allow the next Load to take a fresh backup
+            _backupped = false;
         }
 
         #region GazeUI GUI

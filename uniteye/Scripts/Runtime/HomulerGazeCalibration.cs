@@ -19,6 +19,9 @@ namespace UnitEye
     {
         #region Private
 
+        //Frame rate the pixels-per-frame `speed` tuning assumed (same reference EaseSmoothing/KalmanFilter use).
+        private const float ReferenceFrameRate = 30f;
+
         private HomulerGaze _gaze;
 
         private List<float[]> _xData = new List<float[]>();
@@ -106,6 +109,18 @@ namespace UnitEye
             Returned = false;
             currentRound = 0;
             _guiMessage = "Follow the dot with your eyes!\nClick to start calibration";
+            //Also reset the run-position state and DISCARD any samples from a previous (possibly
+            //cancelled) run. Without this, a mid-preset cancel left _currentPoint pointing into a longer
+            //preset (points[_currentPoint] then throws every frame once the short first preset is
+            //reloaded) and the old run's samples — possibly captured at a different seating position —
+            //were silently mixed into the next training set, contaminating the model and its RMSE.
+            _currentPoint = 0;
+            _isYielding = false;
+            _currentTime = 0f;
+            _xData.Clear();
+            _yXData.Clear();
+            _yYData.Clear();
+            _yData.Clear();
             if (_presets != null)
             {
                 _currentPreset = 0;
@@ -227,9 +242,12 @@ namespace UnitEye
 
                 if (!_isYielding)
                 {
-                    //Move dot on screen
+                    //Move dot on screen. Frame-rate independent: `speed` is tuned in pixels-per-frame at
+                    //the 30 fps reference (HomulerGaze sets targetFrameRate = 30, but vsync can override
+                    //it), so scale by real elapsed time — otherwise a 144 Hz monitor sweeps the dot ~5x
+                    //faster and each screen region contributes ~5x fewer training samples.
                     _crossHairPos =
-                        Vector2.MoveTowards(_crossHairPos, points[_currentPoint], speed);
+                        Vector2.MoveTowards(_crossHairPos, points[_currentPoint], speed * Time.deltaTime * ReferenceFrameRate);
                 }
             }
             else
@@ -310,9 +328,21 @@ namespace UnitEye
 
         private void CaptureNetworkOutput()
         {
+            //Only capture frames whose features are trustworthy. When the face is lost the provider's
+            //feature buffer freezes at the last successful frame, and during a blink the eye crops are
+            //unreliable (the runtime pipeline holds gaze then — holdGazeDuringBlink); the dot keeps
+            //moving either way, so capturing would pair stale/garbage features with a far-away label and
+            //contaminate the training set.
+            var provider = _gaze != null ? _gaze.Provider : null;
+            if (provider == null || !provider.IsFacePresent || provider.IsBlinking)
+                return;
+            var features = provider.GetFeatures();
+            if (features == null || features.Length == 0)
+                return;
+
             //Clone: GetFeatures() returns the provider's reused per-frame buffer, so the retained training
             //sample must be an owned copy (otherwise every captured sample would alias the latest frame).
-            _xData.Add((float[])_gaze.Provider.GetFeatures().Clone());
+            _xData.Add((float[])features.Clone());
             _yXData.Add(_crossHairPos.x / Screen.width);
             _yYData.Add(_crossHairPos.y / Screen.height);
             _yData.Add(new Vector2(_crossHairPos.x /*/ Screen.width*/, _crossHairPos.y /*/ Screen.height*/));

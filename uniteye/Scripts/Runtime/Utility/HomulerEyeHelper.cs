@@ -191,16 +191,33 @@ namespace UnitEye
             return Mathf.Sqrt(distance.x * distance.x + distance.y * distance.y);
         }
 
+        //Camera-frame pixel basis for landmark math. Landmarks are normalized in CAMERA-FRAME space;
+        //converting them with the game window's Screen dims made EAR (blink/drowsy) and iris size
+        //(distance-to-camera) depend on the window size and aspect — resizing the window or going
+        //fullscreen after calibrating silently shifted the calibrated thresholds. Falls back to the
+        //window size only while the camera has not delivered a frame yet (calibrate/use with the camera
+        //running and the values are consistent).
+        private float FrameWidth
+        {
+            get { float w = _faceMesh != null ? _faceMesh.FrameWidth : 0f; return w > 0f ? w : Screen.width; }
+        }
+        private float FrameHeight
+        {
+            get { float h = _faceMesh != null ? _faceMesh.FrameHeight : 0f; return h > 0f ? h : Screen.height; }
+        }
+        private float FrameMax => Mathf.Max(FrameWidth, FrameHeight);
+
         /// <summary>
-        /// Calculates 2D euclidean distance between two Vector2 points in pixels based on Screen size
+        /// Calculates 2D euclidean distance between two normalized landmark points in CAMERA-FRAME pixels
         /// </summary>
         /// <param name="pointA">First point</param>
         /// <param name="pointB">Second point</param>
         /// <returns>Distance in pixels as float</returns>
         public float DistanceFloat2Pixels(Vector2 pointA, Vector2 pointB)
         {
-            Vector2 pointAPixels = new Vector2(pointA.x * Screen.width, pointA.y * Screen.height);
-            Vector2 pointBPixels = new Vector2(pointB.x * Screen.width, pointB.y * Screen.height);
+            float w = FrameWidth, h = FrameHeight;
+            Vector2 pointAPixels = new Vector2(pointA.x * w, pointA.y * h);
+            Vector2 pointBPixels = new Vector2(pointB.x * w, pointB.y * h);
 
             Vector2 distancePixels = pointAPixels - pointBPixels;
 
@@ -229,7 +246,8 @@ namespace UnitEye
         /// <returns>Vector2 for accurate distance calculation</returns>
         public Vector2 RemoveAspectRatio(Vector2 point)
         {
-            float aspectRatio = (float)Screen.width / (float)Screen.height;
+            //Landmarks live in camera-frame space, so it is the FRAME aspect that distorts distances.
+            float aspectRatio = FrameWidth / FrameHeight;
 
             Vector2 factor;
 
@@ -470,7 +488,7 @@ namespace UnitEye
             if (camFOV < 0)
                 camFOV = _cameraFOV;
 
-            float sizeOnScreen = GetIrisBigger(camFOV, undistort) / Mathf.Max(Screen.width, Screen.height);
+            float sizeOnScreen = GetIrisBigger(camFOV, undistort) / FrameMax;
             float angleCovered = sizeOnScreen * camFOV * Mathf.Deg2Rad;
 
             _irisInMm = 2 * distanceInMm * Mathf.Tan(angleCovered / 2);
@@ -489,9 +507,9 @@ namespace UnitEye
         {
             Vector2 center;
 
-            float sizeOnScreen = GetIrisBigger(out center, camFOV, undistort) / Mathf.Max(Screen.width, Screen.height);
+            float sizeOnScreen = GetIrisBigger(out center, camFOV, undistort) / FrameMax;
 
-            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / Mathf.Max(Screen.width, Screen.height);
+            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / FrameMax;
             var x = Mathf.Sqrt(_focalLengthToFloat * _focalLengthToFloat + y * y);
 
             _irisInMm = distanceInMm * sizeOnScreen / x;
@@ -510,10 +528,10 @@ namespace UnitEye
         {
             Vector2 center;
 
-            float sizeOnScreen = GetIrisBigger(out center, camFOV, undistort) / Mathf.Max(Screen.width, Screen.height);
+            float sizeOnScreen = GetIrisBigger(out center, camFOV, undistort) / FrameMax;
 
             var x = distanceInMm / _irisInMm * sizeOnScreen;
-            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / Mathf.Max(Screen.width, Screen.height);
+            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / FrameMax;
             _focalLengthToFloat = Mathf.Sqrt(x * x + y * y);
 
             Debug.Log($"Focal Length Value: {_focalLengthToFloat}");
@@ -526,7 +544,7 @@ namespace UnitEye
         /// <param name="distanceInMm">Calibration distance in mm</param>
         public void CalibrateFOV(float distanceInMm = 500f)
         {
-            float sizeOnScreen = GetIrisBigger() / Mathf.Max(Screen.width, Screen.height);
+            float sizeOnScreen = GetIrisBigger() / FrameMax;
 
             float angleCovered = 2f * Mathf.Atan(_irisInMm / (2f * distanceInMm));
             float camFOV = angleCovered / (sizeOnScreen * Mathf.Deg2Rad);
@@ -595,7 +613,7 @@ namespace UnitEye
             if (camFOV < 0)
                 camFOV = _cameraFOV;
 
-            float sizeOnScreen = GetIrisBigger(camFOV, undistort) / Mathf.Max(Screen.width, Screen.height);
+            float sizeOnScreen = GetIrisBigger(camFOV, undistort) / FrameMax;
             float angleCovered = sizeOnScreen * camFOV * Mathf.Deg2Rad;
 
             float distanceInMm = (irisInMm / 2) / Mathf.Tan(angleCovered / 2);
@@ -622,9 +640,9 @@ namespace UnitEye
 
             Vector2 center;
 
-            float sizeOnScreen = GetIrisBigger(out center, camFOV, undistort) / Mathf.Max(Screen.width, Screen.height);
+            float sizeOnScreen = GetIrisBigger(out center, camFOV, undistort) / FrameMax;
 
-            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / Mathf.Max(Screen.width, Screen.height);
+            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / FrameMax;
             var x = Mathf.Sqrt(focalLengthToFloat * focalLengthToFloat + y * y);
 
             float distanceInMm = (irisInMm * x) / sizeOnScreen;
@@ -717,7 +735,7 @@ namespace UnitEye
 
             var fovRad = camFOV * Mathf.Deg2Rad;
 
-            var dist = DistanceFloat2Pixels(point, center) / Mathf.Max(Screen.width, Screen.height);
+            var dist = DistanceFloat2Pixels(point, center) / FrameMax;
             if (barrelDistortion)
             {
                 var barrelizedDist = (1 / fovRad) * Mathf.Atan(2 * dist * Mathf.Tan(fovRad * 0.5f));
@@ -758,7 +776,7 @@ namespace UnitEye
 
             var fovRad = camFOV * Mathf.Deg2Rad;
 
-            var dist = DistanceFloat2Pixels(point, center) / Mathf.Max(Screen.width, Screen.height);
+            var dist = DistanceFloat2Pixels(point, center) / FrameMax;
             if (barrelDistortion)
             {
                 var barrelizedDist = (1 / fovRad) * Mathf.Atan(2 * dist * Mathf.Tan(fovRad * 0.5f));

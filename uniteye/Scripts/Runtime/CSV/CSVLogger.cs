@@ -49,7 +49,8 @@ namespace UnitEye
         [SerializeField] float timeUntilWrite = 10f;
         [SerializeField] float logsPerSecond = 999f;
 
-        private float timeSinceLastLog = 0f;
+        //Timestamp of the last accepted row; negative infinity so the very first Append always logs.
+        private float _lastLogTime = float.NegativeInfinity;
 
         //Unity Event to handle path changes
         private UnityEvent _onPathChangeEvent;
@@ -175,19 +176,20 @@ namespace UnitEye
             }
         }
 
-        //Append csvdata to _queue
+        /// <summary>
+        /// True when the rate limiter would accept a row right now. Callers can check this BEFORE building
+        /// a CSVData (and copying its AOI list) to skip those allocations on frames the limiter would drop
+        /// anyway — with logsPerSecond below the frame rate that is most frames. Side-effect free.
+        /// </summary>
+        public bool ShouldLog => Time.time - _lastLogTime >= 1f / logsPerSecond;
+
+        //Append csvdata to _queue (rate-limited to logsPerSecond)
         public void Append(CSVData csvdata)
         {
-            //Add deltaTime from last to current frame to timeSinceLastLog
-            timeSinceLastLog += Time.deltaTime;
-
-            //Only log if enough time from the last log has elapsed, provided by 1 / logPerSecond
-            if (timeSinceLastLog >= 1 / logsPerSecond)
-            {
-                _queue.Add(csvdata);
-                //Reset timeSinceLastLog
-                timeSinceLastLog = 0f;
-            }
+            //Only log if enough time from the last accepted log has elapsed (1 / logsPerSecond)
+            if (!ShouldLog) return;
+            _queue.Add(csvdata);
+            _lastLogTime = Time.time;
         }
 
         /// <summary>

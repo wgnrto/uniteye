@@ -62,8 +62,13 @@ namespace Mediapipe.Unity.FaceMesh
 
         private FaceLandmarker _faceLandmarker;
         private TextureFramePool _textureFramePool;
+        private int _poolWidth, _poolHeight;
         private FaceLandmarkerResult _result;
         private readonly System.Diagnostics.Stopwatch _stopwatch = new System.Diagnostics.Stopwatch();
+        private bool _warnedRotation;
+        // Face landmark bbox, computed once per detected frame in CopyLandmarks (which already iterates
+        // all landmarks) instead of per HeadArea access — HeadArea is read 2-4x per frame downstream.
+        private float _bboxMinX, _bboxMinY, _bboxMaxX, _bboxMaxY;
 
         // Reusable Mediapipe.NormalizedLandmark objects so we expose the SAME type the consumers already
         // use (.X/.Y/.Z) without allocating 478 objects every frame — we mutate them in place.
@@ -120,22 +125,32 @@ namespace Mediapipe.Unity.FaceMesh
 
         // Head "area" from the face landmark bounding box (the old FaceRects source is gone in the Task
         // API). NOTE: the old pipeline's FaceRects was null in sync mode, so HeadArea used to be 0 — this
-        // is a nonzero value now, so recalibrate after the migration.
+        // is a nonzero value now, so recalibrate after the migration. The bbox is cached per detected
+        // frame in CopyLandmarks; consumers read it 2-4x per frame, so no per-access 468-point loop.
         public float HeadArea
         {
             get
             {
                 if (FaceLandmarks == null || FaceLandmarks.Count == 0) return 0f;
-                float minX = 1f, minY = 1f, maxX = 0f, maxY = 0f;
-                for (int i = 0; i < FaceLandmarkCount && i < FaceLandmarks.Count; i++)
-                {
-                    var l = FaceLandmarks[i];
-                    if (l.X < minX) minX = l.X;
-                    if (l.X > maxX) maxX = l.X;
-                    if (l.Y < minY) minY = l.Y;
-                    if (l.Y > maxY) maxY = l.Y;
-                }
-                return Mathf.Max(0f, maxX - minX) * Mathf.Max(0f, maxY - minY);
+                return Mathf.Max(0f, _bboxMaxX - _bboxMinX) * Mathf.Max(0f, _bboxMaxY - _bboxMinY);
+            }
+        }
+
+        /// <summary>Camera frame width in pixels (0 until the webcam delivers a real frame). Landmarks are
+        /// normalized in THIS space — consumers converting them to pixels must use these dims, not the
+        /// game window's Screen size.</summary>
+        public int FrameWidth => _webCamSource != null ? _webCamSource.textureWidth : 0;
+        /// <summary>Camera frame height in pixels (0 until the webcam delivers a real frame).</summary>
+        public int FrameHeight => _webCamSource != null ? _webCamSource.textureHeight : 0;
+
+        /// <summary>Face landmark (0..467) bounding box in normalized image coords (y-down), cached per
+        /// detected frame. Zero rect while no face is tracked.</summary>
+        public UnityEngine.Rect FaceBoundsNormalized
+        {
+            get
+            {
+                if (FaceLandmarks == null || FaceLandmarks.Count == 0) return default;
+                return UnityEngine.Rect.MinMaxRect(_bboxMinX, _bboxMinY, _bboxMaxX, _bboxMaxY);
             }
         }
 
@@ -150,6 +165,10 @@ namespace Mediapipe.Unity.FaceMesh
 
         private void Start()
         {
+            // OnGUI below is Repaint-only and uses no GUILayout; skipping the layout pass halves the
+            // IMGUI overhead of the preview.
+            useGUILayout = false;
+
             if (_webCamSource == null)
                 _webCamSource = GetComponent<WebCamSource>();
 
@@ -190,17 +209,54 @@ namespace Mediapipe.Unity.FaceMesh
             if (_faceLandmarker == null || _webCamSource == null || !_webCamSource.isPrepared)
                 return;
 
+            // Only run the (expensive) readback + inference when the camera actually delivered a new
+            // frame. Without this gate a 144 Hz display reprocesses the same 30 fps webcam frame ~5x,
+            // each time paying a full GPU->CPU ReadPixels stall plus blocking CPU inference for
+            // identical landmarks.
+            if (!_webCamSource.didUpdateThisFrame)
+                return;
+
             var texture = _webCamSource.GetCurrentTexture();
             if (texture == null)
                 return;
 
-            if (_textureFramePool == null)
+            // (Re)create the frame pool when the source resolution changes (Next/Previous Camera can
+            // switch to a device with a different resolution). A stale pool size makes ReadTextureOnCPU
+            // pad/crop the live frame inside an old-sized texture, so landmarks come back scaled/offset
+            // relative to the real frame while the crop math uses the real texture size.
+            if (_textureFramePool == null || _poolWidth != texture.width || _poolHeight != texture.height)
+            {
+                _textureFramePool?.Dispose();
                 _textureFramePool = new TextureFramePool(texture.width, texture.height, TextureFormat.RGBA32, 10);
+                _poolWidth = texture.width;
+                _poolHeight = texture.height;
+            }
 
             if (!_textureFramePool.TryGetTextureFrame(out var textureFrame))
                 return;
 
-            textureFrame.ReadTextureOnCPU(texture, _flipHorizontally, _flipVertically);
+            // Fold the camera's reported orientation into the base convention flips (the old GraphRunner
+            // emitted input_rotation/input_*_flipped side packets per device; the Task-API facade handles
+            // the flip cases here). videoVerticallyMirrored XORs into the vertical flip; a 180-degree
+            // rotation equals flipping both axes. 90/270 would swap the frame's w/h, which the whole
+            // downstream crop/preview pipeline does not support — warn once instead of silently
+            // producing rotated-garbage landmarks (README: camera-rotation rework is documented out of scope).
+            bool flipH = _flipHorizontally;
+            bool flipV = _flipVertically ^ _webCamSource.isVerticallyFlipped;
+            int rotation = _webCamSource.rotation;
+            if (rotation == 180)
+            {
+                flipH = !flipH;
+                flipV = !flipV;
+            }
+            else if ((rotation == 90 || rotation == 270) && !_warnedRotation)
+            {
+                _warnedRotation = true;
+                Debug.LogWarning($"FaceMeshSolution: camera '{_webCamSource.sourceName}' reports videoRotationAngle={rotation}. " +
+                                 "The crop pipeline assumes an unrotated frame, so gaze will be wrong on this device.");
+            }
+
+            textureFrame.ReadTextureOnCPU(texture, flipH, flipV);
             var image = textureFrame.BuildCPUImage();
             textureFrame.Release();
 
@@ -218,14 +274,25 @@ namespace Mediapipe.Unity.FaceMesh
             }
             else
             {
+                // Propagate face loss: null the landmark views so IsFacePresent turns false and the
+                // backbones stop cropping/inferring from a stale rect. Without this, walking away from
+                // the camera kept the whole pipeline running on frozen landmarks — fabricating gaze,
+                // blink, distance and CSV rows for the entire absence. (The lists themselves are reused;
+                // the next successful detection re-points these views at them.)
                 IsFaceDetected = false;
+                FaceLandmarks = null;
+                LeftIrisLandmarks = null;
+                RightIrisLandmarks = null;
             }
         }
 
         // Copy the Task-API landmarks (Tasks.Components.Containers.NormalizedLandmark, .x/.y/.z) into the
-        // reused protobuf Mediapipe.NormalizedLandmark objects (.X/.Y/.Z) the consumers read.
+        // reused protobuf Mediapipe.NormalizedLandmark objects (.X/.Y/.Z) the consumers read. Also computes
+        // the face (0..467) bounding box in the same pass — HeadArea/FaceBoundsNormalized read the cached
+        // values instead of re-looping per access.
         private void CopyLandmarks(List<Tasks.Components.Containers.NormalizedLandmark> src)
         {
+            float minX = 1f, minY = 1f, maxX = 0f, maxY = 0f;
             int n = Mathf.Min(src.Count, _mpLandmarks.Count);
             for (int i = 0; i < n; i++)
             {
@@ -234,7 +301,18 @@ namespace Mediapipe.Unity.FaceMesh
                 d.X = s.x;
                 d.Y = s.y;
                 d.Z = s.z;
+                if (i < FaceLandmarkCount)
+                {
+                    if (s.x < minX) minX = s.x;
+                    if (s.x > maxX) maxX = s.x;
+                    if (s.y < minY) minY = s.y;
+                    if (s.y > maxY) maxY = s.y;
+                }
             }
+            _bboxMinX = minX;
+            _bboxMinY = minY;
+            _bboxMaxX = maxX;
+            _bboxMaxY = maxY;
         }
 
         // Debug preview: full-screen webcam + facemesh landmark dots. The camera shows whenever IsRendering
@@ -243,6 +321,9 @@ namespace Mediapipe.Unity.FaceMesh
         // they stay registered on each other.
         private void OnGUI()
         {
+            // OnGUI runs multiple times per frame (Layout + Repaint + one pass per input event); only the
+            // Repaint pass actually draws, so skip the 478-iteration dot loop on all the others.
+            if (Event.current.type != EventType.Repaint) return;
             if (!_drawPreview || !IsRendering) return;
             var tex = _webCamSource != null ? _webCamSource.GetCurrentTexture() : null;
             if (tex == null) return;

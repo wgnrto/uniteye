@@ -72,7 +72,12 @@ namespace UnitEye
             preprocessCS.SetTexture(0, "_Texture", source);
             preprocessCS.SetTexture(0, "_Tensor", destination);
             preprocessCS.SetInt("_ImageSize", imageSize);
-            preprocessCS.Dispatch(0, imageSize, imageSize, 1);
+            //Dispatch counts THREAD GROUPS, and the kernel is [numthreads(8,8,1)] — dispatching
+            //imageSize x imageSize groups launched 64x more threads than pixels (~1M threads for a
+            //128x128 image, twice per frame). Ceil-divide so every pixel is still covered when
+            //imageSize is not a multiple of 8.
+            int groups = (imageSize + 7) / 8;
+            preprocessCS.Dispatch(0, groups, groups, 1);
 
             return destination;
         }

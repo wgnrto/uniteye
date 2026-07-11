@@ -184,6 +184,13 @@ namespace UnitEye
 
             Matrix<float> I = Matrix<float>.Build.DenseIdentity(A.RowCount, A.RowCount);
             I *= Lambda;
+            //Standard ridge does NOT penalize the intercept. With standardized (zero-mean) features the
+            //bias column is orthogonal to the rest, so penalizing it just shrinks the intercept from
+            //mean(y) to mean(y)*N/(N+lambda) — a systematic offset of every prediction toward screen
+            //coordinate 0 (worst on short early-stopped calibrations, where N is small), and it biases
+            //the k-fold lambda selection against larger lambdas for the wrong reason.
+            if (Affine)
+                I[0, 0] = 0f;
             A += I;
 
             W = A.QR().Solve(input.TransposeThisAndMultiply(output));

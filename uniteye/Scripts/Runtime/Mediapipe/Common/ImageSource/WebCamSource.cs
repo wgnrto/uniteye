@@ -30,6 +30,9 @@ namespace Mediapipe.Unity
 
         /// <summary>True once the webcam has delivered a real frame.</summary>
         public bool isPrepared => _webCamTexture != null && _webCamTexture.width > 16;
+        /// <summary>True only on frames where the camera delivered a NEW image. Lets consumers skip
+        /// reprocessing the same frame when the display refresh outruns the camera rate.</summary>
+        public bool didUpdateThisFrame => _webCamTexture != null && _webCamTexture.didUpdateThisFrame;
         public string sourceName => _webCamTexture != null ? _webCamTexture.deviceName : "";
         public bool isVerticallyFlipped => _webCamTexture != null && _webCamTexture.videoVerticallyMirrored;
         public bool isFrontFacing
@@ -47,7 +50,38 @@ namespace Mediapipe.Unity
 
         public Texture GetCurrentTexture() => _webCamTexture;
 
-        private void Start() => SelectSource(-1);
+        // On mobile, the camera permission must be granted BEFORE WebCamTexture.Play(); otherwise the
+        // texture silently stays at the 16x16 placeholder and the pipeline idles with no error (the old
+        // Solution-era WebCamSource had this flow; the migration dropped it). Desktop needs no prompt.
+        private System.Collections.IEnumerator Start()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
+            {
+                bool answered = false;
+                var callbacks = new UnityEngine.Android.PermissionCallbacks();
+                callbacks.PermissionGranted += _ => answered = true;
+                callbacks.PermissionDenied += _ => answered = true;
+                UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.Camera, callbacks);
+                yield return new WaitUntil(() => answered);
+                if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
+                {
+                    Debug.LogWarning("WebCamSource: camera permission denied; no webcam input available.");
+                    yield break;
+                }
+            }
+#elif UNITY_IOS && !UNITY_EDITOR
+            yield return Application.RequestUserAuthorization(UserAuthorization.WebCam);
+            if (!Application.HasUserAuthorization(UserAuthorization.WebCam))
+            {
+                Debug.LogWarning("WebCamSource: camera permission denied; no webcam input available.");
+                yield break;
+            }
+#endif
+            SelectSource(-1);
+            yield break;
+        }
+
         private void OnDestroy() => StopCamera();
 
         private void StopCamera()

@@ -39,6 +39,13 @@ namespace UnitEye
 
         private HomulerGaze _gaze;
 
+        //Evaluation-owned model store with BOTH calibration types loaded (HomulerGaze's store only holds
+        //the ACTIVE type, so evaluating "the other" model through it silently fell back to the input gaze
+        //and its RMSE row was mislabeled). Loaded fresh on each evaluation start.
+        private readonly CalibrationModelStore _evalStore = new CalibrationModelStore();
+        private bool _hasMlpModel;
+        private bool _hasRidgeModel;
+
         #endregion
 
         #region Public
@@ -67,6 +74,27 @@ namespace UnitEye
 
         #endregion
 
+        private void OnEnable()
+        {
+            //Reset per-session state so a repeat evaluation in the same play session starts fresh instead
+            //of inheriting the previous run's finished/returned flags (which made the first click return
+            //immediately) and its recorded samples (which would contaminate the new run's RMSE). Mirrors
+            //HomulerGazeCalibration.OnEnable, which was added for exactly this bug. On the very first
+            //enable this runs before Start(), which does the one-time setup.
+            _started = false;
+            _finished = false;
+            _earlyStop = false;
+            _showMessage = true;
+            Returned = false;
+            _isTimerRunning = false;
+            _timeRemaining = 0f;
+            _currentPoint = 0;
+            _predMLPData.Clear();
+            _predRidgeData.Clear();
+            _targetData.Clear();
+            _guiMessage = "Click to start evaluation" + (returnAfter ? "\nRight click to cancel and return" : "");
+        }
+
         void Start()
         {
             //Get Gaze reference
@@ -80,19 +108,28 @@ namespace UnitEye
             if (returnAfter)
                 _guiMessage += "\nRight click to cancel and return";
 
-            //Create new preset with padding, rows and columns
-            _presets = new List<CalibrationPreset> { new EvaluationPreset(padding, rows, columns) };
+            //Initial point grid (rebuilt on start-click, when rows/columns are final)
+            BuildPoints();
+        }
 
-            //Add points
+        /// <summary>
+        /// (Re)builds the evaluation dot grid from the CURRENT padding/rows/columns. Called on the
+        /// start-click rather than only in Start(): LoadEvaluation sets rows/columns AFTER enabling the
+        /// component, and Start() does not re-run on later enables, so building here is the only way those
+        /// values are honored on every run.
+        /// </summary>
+        private void BuildPoints()
+        {
+            _points.Clear();
+            _presets = new List<CalibrationPreset> { new EvaluationPreset(padding, rows, columns) };
             foreach (var preset in _presets)
-            {
                 _points.AddRange(preset.GetPoints());
-            }
 
             //Randomly shuffle list
             _points.Shuffle();
 
-            _targetLocation = new Vector2(_points[_currentPoint].x, _points[_currentPoint].y);
+            _currentPoint = 0;
+            _targetLocation = new Vector2(_points[0].x, _points[0].y);
         }
 
         void Update()
@@ -109,6 +146,16 @@ namespace UnitEye
             //Start on leftclick
             if (Mouse.current.leftButton.wasPressedThisFrame && !_started)
             {
+                //rows/columns/padding are final by now (LoadEvaluation sets them after enabling)
+                BuildPoints();
+                //Load BOTH calibration models for the active backbone into the evaluation's own store, so
+                //each RMSE row measures the model it claims to (HomulerGaze's store only holds the active
+                //type; the previous code silently evaluated the fallback for the other row).
+                _evalStore.Load(Calibrations.RidgeRegression, _gaze.GazeBackbone);
+                _evalStore.Load(Calibrations.MLCalibration, _gaze.GazeBackbone);
+                _hasRidgeModel = _evalStore.HasModel(Calibrations.RidgeRegression);
+                _hasMlpModel = _evalStore.HasModel(Calibrations.MLCalibration);
+
                 _started = true;
                 _showMessage = false;
                 _isTimerRunning = true;
@@ -133,11 +180,23 @@ namespace UnitEye
                     //Only take data between one and three quarter duration
                     if (_timeRemaining >= oneQuarterDuration && _timeRemaining <= threeQuarterDuration)
                     {
-                        // Calculate gaze for MLP and RidgeRegression and current filtering method
-                        var rawGaze = _gaze.gazeLocation;
-                        _predMLPData.Add(CalculateGaze(rawGaze, Calibrations.MLCalibration, _gaze.Filtering));
-                        _predRidgeData.Add(CalculateGaze(rawGaze, Calibrations.RidgeRegression, _gaze.Filtering));
-                        _targetData.Add(_targetLocation);
+                        //Evaluate each model on the provider's RAW gaze + features (what the models
+                        //actually run on), NOT on _gaze.gazeLocation — that is already calibrated by the
+                        //ACTIVE model and filtered, so it measured the live pipeline, not the model under
+                        //test. No SmoothGazeLocation here either: it mutated the SAME stateful filter
+                        //instances the live pipeline uses (three interleaved signals per frame corrupted
+                        //both the on-screen gaze and these numbers). Samples are gated like the
+                        //calibration capture: no face / blinking frames pair unreliable features with the
+                        //dot's position and skew the RMSE.
+                        var provider = _gaze.Provider;
+                        if (provider != null && provider.IsFacePresent && !provider.IsBlinking)
+                        {
+                            var features = provider.GetFeatures();
+                            var raw = provider.RawGaze;
+                            _predMLPData.Add(_evalStore.Refine(raw, Calibrations.MLCalibration, features, Screen.width, Screen.height));
+                            _predRidgeData.Add(_evalStore.Refine(raw, Calibrations.RidgeRegression, features, Screen.width, Screen.height));
+                            _targetData.Add(_targetLocation);
+                        }
                     }
                 }
                 else
@@ -173,29 +232,36 @@ namespace UnitEye
             }
         }
 
-        private Vector2 CalculateGaze(Vector2 gazeLocation, Calibrations calibrations, Filtering filtering)
-        {
-            var result = gazeLocation;
-            result = _gaze.RefineGazeLocation(result, calibrations);
-            result = _gaze.SmoothGazeLocation(result, filtering);
-
-            return result;
-        }
-
         private string Evaluate()
         {
-            var mlpError = CalculateRMSE(_predMLPData, _targetData);
-            var regError = CalculateRMSE(_predRidgeData, _targetData);
-
             string message = $"Evaluation done.\nScreen size: {Functions.PixelsToMm(Screen.width) * 0.1f}x{Functions.PixelsToMm(Screen.height) * 0.1f}cm. Unity's built in DPI value might be wrong!\n";
             ReturnMessage = "";
 
-            ReturnMessage += $"MLP Evaluation: RMSE X: {Functions.PixelsToMm(mlpError.x) * 0.1f}cm | RMSE Y: {Functions.PixelsToMm(mlpError.y) * 0.1f}cm. ";
-            message += $"MLP Evaluation: RMSE X: {Functions.PixelsToMm(mlpError.x) * 0.1f}cm | RMSE Y: {Functions.PixelsToMm(mlpError.y) * 0.1f}cm.\n";
-            ReturnMessage += $"RidgeRegression Evaluation: RMSE X: {Functions.PixelsToMm(regError.x) * 0.1f}cm | RMSE Y: {Functions.PixelsToMm(regError.y) * 0.1f}cm. ";
-            message += $"RidgeRegression Evaluation: RMSE X: {Functions.PixelsToMm(regError.x) * 0.1f}cm | RMSE Y: {Functions.PixelsToMm(regError.y) * 0.1f}cm.\n";
+            //All samples gated out (face never tracked / constant blinking) -> no data to score.
+            if (_targetData.Count == 0)
+            {
+                ReturnMessage = "Evaluation captured no valid samples (was the face tracked?). ";
+                return message + "No valid samples captured (was the face tracked?).\n";
+            }
+
+            //Only report an RMSE for models that were actually loaded — without a model, Refine falls
+            //back to the raw gaze and the number would be the RAW pipeline's error mislabeled as the model's.
+            string mlpLine = _hasMlpModel
+                ? FormatRmseLine("MLP", CalculateRMSE(_predMLPData, _targetData))
+                : $"MLP Evaluation: not calibrated for {_gaze.GazeBackbone} (no model file).";
+            string ridgeLine = _hasRidgeModel
+                ? FormatRmseLine("RidgeRegression", CalculateRMSE(_predRidgeData, _targetData))
+                : $"RidgeRegression Evaluation: not calibrated for {_gaze.GazeBackbone} (no model file).";
+
+            ReturnMessage += $"{mlpLine} {ridgeLine} ";
+            message += $"{mlpLine}\n{ridgeLine}\n";
 
             return message;
+        }
+
+        private static string FormatRmseLine(string label, (float x, float y) error)
+        {
+            return $"{label} Evaluation: RMSE X: {Functions.PixelsToMm(error.x) * 0.1f}cm | RMSE Y: {Functions.PixelsToMm(error.y) * 0.1f}cm.";
         }
 
         /// <summary>

@@ -31,11 +31,13 @@ public static class UnitEyeSmokeTests
             TestRidgeStandardization();
             TestRidgeSerializationRoundTrip();
             TestRidgeOldFormatCompatibility();
+            TestRidgeInterceptNotPenalized();
             TestNoShippedDefaultCalibration();
             TestTrainerOnSyntheticData();
             TestSimpleMLP();
             TestGazeGridQuantizer();
             TestOneEuroFilter();
+            TestOneEuroFilterVector2FastPath();
             TestEyeCropRect();
             TestScenesAndPrefabsHaveNoMissingScripts();
             TestEyeMUModelLoadsAndRuns();
@@ -170,6 +172,29 @@ public static class UnitEyeSmokeTests
         Check(model.FeatureMean == null && model.FeatureStd == null, "Old files should load without standardization stats");
         //0.1 * 1 + 0.2 * 1 + 0.3 * 2 = 0.9
         CheckClose(model.Predict(new float[] { 1f, 2f }), 0.9f, 1e-5f, "Old format prediction should be plain affine weights");
+    }
+
+    private static void TestRidgeInterceptNotPenalized()
+    {
+        //Ridge must NOT penalize the intercept: with standardized (zero-mean) features the intercept
+        //carries the whole target mean, so even a LARGE lambda must reproduce a constant target exactly.
+        //The old Train added lambda over the full identity (including the bias column), shrinking the
+        //intercept to mean(y) * N / (N + lambda) — for N=60, lambda=10 that is ~14% low, i.e. a
+        //systematic offset of every prediction toward screen coordinate 0.
+        const int n = 60;
+        var rng = new System.Random(7);
+        var x = new float[n][];
+        var y = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            x[i] = new float[] { (float)rng.NextDouble(), (float)rng.NextDouble() * 100f, (float)rng.NextDouble() };
+            y[i] = 0.7f;
+        }
+
+        var model = new RidgeRegression(10f);
+        model.Train(x, y);
+        CheckClose(model.Predict(x[0]), 0.7f, 1e-3f,
+            "Large-lambda ridge must still recover a constant target exactly (unpenalized intercept)");
     }
 
     private static void TestNoShippedDefaultCalibration()
@@ -601,6 +626,29 @@ public static class UnitEyeSmokeTests
             maxDeviation = Mathf.Max(maxDeviation, Mathf.Abs(filtered.x - 5f));
         }
         Check(maxDeviation < 0.5f, $"One Euro filter should attenuate alternating jitter, max deviation was {maxDeviation}");
+    }
+
+    private static void TestOneEuroFilterVector2FastPath()
+    {
+        //FilterVector2 (the fast path the gaze pipeline uses every frame) must stay numerically
+        //identical to the generic Filter<Vector2> AND keep the documented public currValue/prevValue
+        //state in sync — the original fast path skipped the state update, so currValue silently read
+        //(0,0) forever once callers switched to it.
+        var generic = new OneEuroFilter<Vector2>(60f, 1.0f, 0.01f, 1.0f);
+        var fast = new OneEuroFilter<Vector2>(60f, 1.0f, 0.01f, 1.0f);
+        Vector2 g = Vector2.zero, f = Vector2.zero, fPrev = Vector2.zero;
+        for (int i = 0; i < 50; i++)
+        {
+            var input = new Vector2(Mathf.Sin(i * 0.3f) * 100f, Mathf.Cos(i * 0.2f) * 50f);
+            g = generic.Filter(input, i / 60f);
+            fPrev = f;
+            f = fast.FilterVector2(input, i / 60f);
+        }
+        CheckClose(f.x, g.x, 1e-4f, "FilterVector2 must match the generic Vector2 path (x)");
+        CheckClose(f.y, g.y, 1e-4f, "FilterVector2 must match the generic Vector2 path (y)");
+        CheckClose(fast.currValue.x, f.x, 1e-6f, "FilterVector2 must update currValue (was stuck at zero)");
+        CheckClose(fast.currValue.y, f.y, 1e-6f, "FilterVector2 must update currValue (y)");
+        CheckClose(fast.prevValue.x, fPrev.x, 1e-6f, "FilterVector2 must update prevValue");
     }
 
     #endregion

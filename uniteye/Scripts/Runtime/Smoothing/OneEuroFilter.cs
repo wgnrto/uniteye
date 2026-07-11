@@ -172,15 +172,27 @@ namespace UnitEye
     	}
 
 
-    	// Allocation-free Vector2 fast path (the default gaze filter runs every frame). Numerically
+    	// Low-allocation Vector2 fast path (the default gaze filter runs every frame). Numerically
     	// identical to the Vector2 branch of Filter<U> below — it filters each component through the same
-    	// inner float filters — but skips the Convert.ChangeType struct boxing (which the generic path did
-    	// 3-4x per call). Requires this to be a OneEuroFilter<Vector2> (2 inner filters).
+    	// inner float filters — but avoids the Convert.ChangeType reflection boxing (which the generic
+    	// path did 3-4x per call). Requires this to be a OneEuroFilter<Vector2> (2 inner filters).
     	public Vector2 FilterVector2(Vector2 value, float timestamp = -1.0f)
     	{
-    		return new Vector2(
+    		var result = new Vector2(
     			oneEuroFilters[0].Filter(value.x, timestamp),
     			oneEuroFilters[1].Filter(value.y, timestamp));
+
+    		// Keep the documented public state (currValue/prevValue) in sync with the generic path —
+    		// otherwise external readers of currValue silently get (0,0) forever once callers switch to
+    		// this fast path. One unavoidable box per call for T == Vector2; still far cheaper than the
+    		// generic path's repeated Convert.ChangeType.
+    		if (type == typeof(Vector2))
+    		{
+    			prevValue = currValue;
+    			currValue = (T)(object)result;
+    		}
+
+    		return result;
     	}
 
     	// filters the provided _value and returns the result.

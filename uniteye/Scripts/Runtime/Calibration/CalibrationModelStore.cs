@@ -57,6 +57,21 @@ namespace UnitEye
         }
 
         /// <summary>
+        /// Whether a model for the given calibration type is currently loaded. Lets callers (e.g. the
+        /// evaluation) distinguish "Refine applied the model" from "Refine silently fell back to the raw
+        /// gaze because nothing is calibrated" instead of mislabeling the fallback as model output.
+        /// </summary>
+        public bool HasModel(Calibrations calibrations)
+        {
+            switch (calibrations)
+            {
+                case Calibrations.RidgeRegression: return _xModel != null && _yModel != null;
+                case Calibrations.MLCalibration: return _mlp != null;
+                default: return true;
+            }
+        }
+
+        /// <summary>
         /// Applies the calibration model for <paramref name="calibrations"/> to the raw gaze. Falls back to
         /// the raw gaze when there is no feature vector, no loaded model, or the model returns NaN (a
         /// model/feature dimensionality mismatch).

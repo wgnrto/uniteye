@@ -94,6 +94,13 @@ namespace UnitEye
             set { if (_faceMesh != null) _faceMesh.Annotate = value; }
         }
 
+        //Forwards to the cached FaceMeshSolution (no per-toggle GetComponent; HomulerGaze goes through
+        //the seam like it already does for AnnotateFaceMesh).
+        public void SetRendering(bool rendering)
+        {
+            if (_faceMesh != null) _faceMesh.IsRendering = rendering;
+        }
+
         public bool IsCalibratingDrowsy => _eyeHelper.Calibrating;
         public int DrowsyCalibrationCount => _eyeHelper.CalibrationCount;
         public void CalibrateDistance() => _eyeHelper.CalibrateFocalLength();

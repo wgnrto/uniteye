@@ -87,6 +87,19 @@ namespace UnitEye
         public List<string> CheckAOIList(Vector2 point)
         {
             List<string> list = new List<string>();
+            CheckAOIList(point, list);
+            return list;
+        }
+
+        /// <summary>
+        /// Allocation-free variant: clears and refills the caller-provided list instead of allocating a
+        /// new one per call (the gaze pipeline runs this every frame). Callers that RETAIN the result
+        /// (e.g. queueing it into a CSVData, which serializes later) must store their own copy — this
+        /// same list instance is refilled on the next call.
+        /// </summary>
+        public void CheckAOIList(Vector2 point, List<string> list)
+        {
+            list.Clear();
 
             foreach (AOI aoi in _aoiList)
             {
@@ -113,8 +126,6 @@ namespace UnitEye
                     if (aoi.focused) aoi.focused = false;
                 }
             }
-
-            return list;
         }
 
         /// <summary>

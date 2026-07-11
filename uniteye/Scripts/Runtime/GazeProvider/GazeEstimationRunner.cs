@@ -105,16 +105,10 @@ namespace UnitEye
             if (srcW <= 0 || srcH <= 0)
                 return false;
 
-            // Face landmark bounding box (normalized, y-down).
-            float minX = 1f, minY = 1f, maxX = 0f, maxY = 0f;
-            for (int i = 0; i < landmarks.Count; i++)
-            {
-                var l = landmarks[i];
-                if (l.X < minX) minX = l.X;
-                if (l.X > maxX) maxX = l.X;
-                if (l.Y < minY) minY = l.Y;
-                if (l.Y > maxY) maxY = l.Y;
-            }
+            // Face landmark bounding box (normalized, y-down), cached per frame by FaceMeshSolution —
+            // no need to re-loop the 468 landmarks here.
+            var bbox = _faceMesh.FaceBoundsNormalized;
+            float minX = bbox.xMin, minY = bbox.yMin, maxX = bbox.xMax, maxY = bbox.yMax;
 
             // Square crop in PIXELS (so the 448x448 input isn't stretched), centred on the face with
             // FACE_CROP_SCALE padding for context, expressed as a bottom-left-UV Graphics.Blit.
@@ -123,9 +117,17 @@ namespace UnitEye
             float sidePx = Mathf.Max((maxX - minX) * srcW, (maxY - minY) * srcH) * FACE_CROP_SCALE;
             if (sidePx <= 1f)
                 return false;
+            // Keep the crop inside the frame: with the 1.4x padding the square leaves the source whenever
+            // the face nears an edge, and out-of-range UVs sample wrap-around/clamp-smeared pixels — the
+            // model then sees the opposite frame edge inside the "face". Shrink to fit if the frame is
+            // smaller than the padded square, then shift the square fully inside (mirrors the bounds
+            // check BlitEyeCrop does for the eye crops).
+            sidePx = Mathf.Min(sidePx, Mathf.Min(srcW, srcH));
             float cyUpPx = srcH - cyPx;                                 // to y-up
+            float x0 = Mathf.Clamp(cxPx - sidePx * 0.5f, 0f, srcW - sidePx);
+            float y0 = Mathf.Clamp(cyUpPx - sidePx * 0.5f, 0f, srcH - sidePx);
             var scale = new Vector2(sidePx / srcW, sidePx / srcH);
-            var offset = new Vector2((cxPx - sidePx * 0.5f) / srcW, (cyUpPx - sidePx * 0.5f) / srcH);
+            var offset = new Vector2(x0 / srcW, y0 / srcH);
             Graphics.Blit(tex, _faceCrop, scale, offset);
 
             // ImageNet-normalize into the tensor texture, then convert to the (1,3,448,448) NCHW tensor.

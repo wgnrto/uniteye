@@ -86,6 +86,13 @@ namespace UnitEye
             if (staticInput != null) return;
             if (!webCamTexture.didUpdateThisFrame) return;
 
+            //Lazily (re)create inputRT once the camera's REAL resolution is known. The LoadCamera paths
+            //defer sizing to here: right after Play() a WebCamTexture still reports the 16x16 placeholder
+            //(the Start() path already worked around this — see its comment), so sizing there produced a
+            //16x16 RT the whole pipeline then silently ran on. didUpdateThisFrame guarantees real dims.
+            if (inputRT == null)
+                inputRT = new RenderTexture(webCamTexture.width, webCamTexture.height, 0);
+
             var aspect1 = (float)webCamTexture.width / webCamTexture.height;
             var aspect2 = (float)inputRT.width / inputRT.height;
             var aspectGap = aspect2 / aspect1;
@@ -231,7 +238,12 @@ namespace UnitEye
                     else
                         webCamTexture = new WebCamTexture(webCamDevices[i].name);
                     webCamTexture.Play();
-                    inputRT = new RenderTexture(webCamTexture.width, webCamTexture.height, 0);
+                    //inputRT sizing is deferred to Update(): right after Play() webCamTexture.width still
+                    //reports the 16x16 placeholder, which used to bake a 16x16 inputRT. With a requested
+                    //resolution we can size immediately (mirrors Start()).
+                    inputRT = requestedWidth > 0 && requestedHeight > 0
+                        ? new RenderTexture(requestedWidth, requestedHeight, 0)
+                        : null;
 
                     if (rawImage != null) rawImage.texture = webCamTexture;
                     webCamName = webCamDevices[i].name;
@@ -269,7 +281,11 @@ namespace UnitEye
                 else
                     webCamTexture = new WebCamTexture(webCamDevices[index].name);
                 webCamTexture.Play();
-                inputRT = new RenderTexture(webCamTexture.width, webCamTexture.height, 0);
+                //inputRT sizing deferred to Update() (see the front-facing overload above): right after
+                //Play() the WebCamTexture still reports the 16x16 placeholder.
+                inputRT = requestedWidth > 0 && requestedHeight > 0
+                    ? new RenderTexture(requestedWidth, requestedHeight, 0)
+                    : null;
 
                 webCamName = webCamDevices[index].name;
                 if (rawImage != null) rawImage.texture = webCamTexture;
@@ -288,7 +304,10 @@ namespace UnitEye
         /// <returns>true if found, false if not</returns>
         public bool NextCamera(int requestedWidth = -1, int requestedHeight = -1)
         {
-            return LoadCamera(_webcamIndex + 1, requestedWidth, requestedHeight);
+            //Wrap past the last device so repeated presses cycle (matches WebCamSource.SelectSource)
+            int count = WebCamTexture.devices.Length;
+            if (count == 0) return false;
+            return LoadCamera((_webcamIndex + 1) % count, requestedWidth, requestedHeight);
         }
 
         /// <summary>
@@ -299,7 +318,10 @@ namespace UnitEye
         /// <returns>true if found, false if not</returns>
         public bool PreviousCamera(int requestedWidth = -1, int requestedHeight = -1)
         {
-            return LoadCamera(_webcamIndex - 1, requestedWidth, requestedHeight);
+            //Wrap below the first device so repeated presses cycle (matches WebCamSource.SelectSource)
+            int count = WebCamTexture.devices.Length;
+            if (count == 0) return false;
+            return LoadCamera(((_webcamIndex - 1) % count + count) % count, requestedWidth, requestedHeight);
         }
 
         /// <summary>

@@ -17,7 +17,11 @@ namespace UnitEye
         {
             get
             {
-                var landmark = _faceMesh.FaceLandmarks[_landmark];
+                //FaceLandmarks is null while no face is tracked (face loss now propagates); hold zero.
+                var landmarks = _faceMesh.FaceLandmarks;
+                if (landmarks == null || _landmark < 0 || _landmark >= landmarks.Count)
+                    return Vector3.zero;
+                var landmark = landmarks[_landmark];
                 return new Vector3(landmark.X, landmark.Y, landmark.Z);
             }
         }
