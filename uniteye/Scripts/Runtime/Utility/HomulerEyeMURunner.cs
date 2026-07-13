@@ -205,8 +205,8 @@ namespace UnitEye
         /// GPU crop: samples the sub-rectangle <paramref name="crop"/> of <paramref name="source"/> into
         /// <paramref name="dest"/> via Graphics.Blit scale/offset. Uses the same bottom-left origin the old
         /// GetPixels path used; flipX negates the horizontal scale to mirror the left eye. If the crop is
-        /// (partly) off the source it is skipped, leaving the previous frame's crop — matching the old CPU
-        /// path, which skipped the copy on an out-of-bounds crop.
+        /// (partly) off the source it is skipped and false is returned so the caller rejects the sample
+        /// instead of reusing the previous frame's crop.
         /// </summary>
         private static bool BlitEyeCrop(Texture source, RenderTexture dest, RectInt crop, int srcW, int srcH, bool flipX)
         {
