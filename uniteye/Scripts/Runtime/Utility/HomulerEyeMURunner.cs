@@ -191,26 +191,28 @@ namespace UnitEye
                 return false;
 
             //Left eye (mesh corners 362,263), horizontally flipped to match EyeMU's expected orientation.
-            BlitEyeCrop(texture, LeftEyeTexture, GetEyeCropRect(landmarks, 362, 263, srcW, srcH), srcW, srcH, flipX: true);
+            bool leftValid = BlitEyeCrop(texture, LeftEyeTexture, GetEyeCropRect(landmarks, 362, 263, srcW, srcH), srcW, srcH, flipX: true);
 
             //Right eye (mesh corners 33,133), no flip.
-            BlitEyeCrop(texture, RightEyeTexture, GetEyeCropRect(landmarks, 33, 133, srcW, srcH), srcW, srcH, flipX: false);
+            bool rightValid = BlitEyeCrop(texture, RightEyeTexture, GetEyeCropRect(landmarks, 33, 133, srcW, srcH), srcW, srcH, flipX: false);
 
-            return true;
+            //Never infer from the previous frame's crop when a landmark moves a crop outside the image.
+            //A stale crop paired with current landmarks produces a plausible but wrong gaze estimate.
+            return leftValid && rightValid;
         }
 
         /// <summary>
         /// GPU crop: samples the sub-rectangle <paramref name="crop"/> of <paramref name="source"/> into
         /// <paramref name="dest"/> via Graphics.Blit scale/offset. Uses the same bottom-left origin the old
         /// GetPixels path used; flipX negates the horizontal scale to mirror the left eye. If the crop is
-        /// (partly) off the source it is skipped, leaving the previous frame's crop — matching the old CPU
-        /// path, which skipped the copy on an out-of-bounds crop.
+        /// (partly) off the source it is skipped and false is returned so the caller rejects the sample
+        /// instead of reusing the previous frame's crop.
         /// </summary>
-        private static void BlitEyeCrop(Texture source, RenderTexture dest, RectInt crop, int srcW, int srcH, bool flipX)
+        private static bool BlitEyeCrop(Texture source, RenderTexture dest, RectInt crop, int srcW, int srcH, bool flipX)
         {
             if (crop.width <= 0 || crop.height <= 0 ||
                 crop.x < 0 || crop.y < 0 || crop.x + crop.width > srcW || crop.y + crop.height > srcH)
-                return;
+                return false;
 
             float cw = (float)crop.width / srcW;
             float ch = (float)crop.height / srcH;
@@ -222,6 +224,7 @@ namespace UnitEye
             Vector2 scale = flipX ? new Vector2(-cw, ch) : new Vector2(cw, ch);
             Vector2 offset = flipX ? new Vector2(cx + cw, cy) : new Vector2(cx, cy);
             Graphics.Blit(source, dest, scale, offset);
+            return true;
         }
 
         /// <summary>

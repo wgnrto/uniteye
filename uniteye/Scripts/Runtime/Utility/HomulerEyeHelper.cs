@@ -311,7 +311,12 @@ namespace UnitEye
             float yaw = _faceMesh.HeadYaw;
             float pitch = _faceMesh.HeadPitch;
 
-            return ((EyeAspectRatioLeft() + EyeAspectRatioRight()) / 2) * Mathf.Abs(Mathf.Cos(yaw)) / Mathf.Abs(Mathf.Cos(pitch));
+            // Looking steeply up/down makes cos(pitch) approach zero. Keep the correction finite so an
+            // extreme pose cannot poison blink/drowsiness calibration or the smoothing state.
+            //0.05 caps the correction at 20x (within roughly 3° of ±90°), where face landmarks are
+            //already too foreshortened for a reliable eye-aspect-ratio correction.
+            float pitchCorrection = Mathf.Max(Mathf.Abs(Mathf.Cos(pitch)), 0.05f);
+            return ((EyeAspectRatioLeft() + EyeAspectRatioRight()) / 2) * Mathf.Abs(Mathf.Cos(yaw)) / pitchCorrection;
         }
 
         /// <summary>
@@ -353,7 +358,7 @@ namespace UnitEye
         public bool IsDrowsyFromFeature(float eyeFeature, float threshold = -3f)
         {
             //If not calibrated or EyeFeauture() isNaN return false
-            if (EFMean < 0 || EFStd < 0 || float.IsNaN(eyeFeature))
+            if (EFMean < 0 || EFStd < 0 || float.IsNaN(eyeFeature) || float.IsInfinity(eyeFeature))
                 return false;
 
             if (EFSmooth < -999f)
@@ -560,8 +565,10 @@ namespace UnitEye
         /// </summary>
         public void CalibrateBlinking()
         {
-            //Add 10% margin
-            BlinkingThreshold = EyeFeature() * 1.10f;
+            //Add 10% margin only when the current frame produced a usable feature.
+            float eyeFeature = EyeFeature();
+            if (!float.IsNaN(eyeFeature) && !float.IsInfinity(eyeFeature))
+                BlinkingThreshold = eyeFeature * 1.10f;
             SaveDrowsyBlinkingValues();
         }
 
@@ -583,8 +590,12 @@ namespace UnitEye
                 //Calibrating until CalibrationCount > 60 and calibrating is false
                 //Calibrationg can be ongoing after CalibrationCount > 60 if calibrating stays true
                 //_maxCalibrationCount to not calibrate forever
-                _eyeFeatures.Add(EyeFeature());
-                CalibrationCount++;
+                float eyeFeature = EyeFeature();
+                if (!float.IsNaN(eyeFeature) && !float.IsInfinity(eyeFeature))
+                {
+                    _eyeFeatures.Add(eyeFeature);
+                    CalibrationCount++;
+                }
             }
             else
             {

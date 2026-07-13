@@ -64,6 +64,12 @@ namespace UnitEye
 
         public bool Tick()
         {
+            // FaceMeshSolution only updates landmarks when the webcam provides a new image. Running the
+            // gaze model again between camera frames would turn one observation into several identical
+            // calibration/evaluation samples and make the filter appear more responsive than the camera.
+            if (_webcam == null || !_webcam.didUpdateThisFrame)
+                return false;
+
             if (!_backbone.PerformInference(_webcam))
                 return false;
 

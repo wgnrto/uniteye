@@ -142,7 +142,7 @@ Inspector settings include the calibration dot texture (a default `CalibrationDo
 
 ![](./uniteye/Documentation~/Images/CalibrationScreen.png)
 
-Left-click to start, then follow the dot with your eyes; it pauses between rounds for another click. Frames without a detected face (or before the webcam has delivered a fresh image) are excluded from the training data automatically. Press `S` to stop early but still train. Don't quit before training finishes (or the file isn't saved). The Root-Mean-Squared Error (in cm for your screen) is shown afterward and written to the CSV for runtime calibrations.
+Left-click to start, then follow the dot with your eyes; it pauses between rounds for another click. Frames without a detected face (or before the webcam has delivered a fresh image) are excluded from the training data automatically, so repeated render frames cannot overweight one camera image. Invalid eye crops are also rejected rather than reusing a prior crop. Press `S` to stop early but still train. Don't quit before training finishes (or the file isn't saved). The Root-Mean-Squared Error (in cm for your screen) is shown afterward and written to the CSV for runtime calibrations.
 
 For **Ridge Regression** the reported RMSE is measured on a randomly held-out 20 % of samples, with the regularization strength chosen by 5-fold cross-validation on the training portion — an honest estimate that can read slightly higher than older UnitEye versions.
 
@@ -157,7 +157,7 @@ Settings: the evaluation dot texture, the per-location `Duration` (only the midd
 
 ![](./uniteye/Documentation~/Images/EvaluationScreen.png)
 
-Left-click to start and look at each dot until it moves; press `S` to stop early. The RMSE per calibration type (cm) is shown and written to the CSV for runtime evaluations.
+Left-click to start and look at each dot until it moves; press `S` to stop early. Every grid target is sampled, using only fresh camera frames. The reported per-axis RMSE (cm) uses the same plain metric as calibration holdout evaluation and is independent of the visual dot size.
 
 ## Area Of Interest
 The AOI system tracks when regions/objects are looked at. [`AOIManager`](uniteye/Scripts/Runtime/AOI/AOIManager.cs) holds the tracked AOIs and offers add/remove/get; add AOIs via the [UnitEyeAPI](#uniteyeapi), by reference, or by inheritance (see [`GazeGameAPI.cs`](uniteye/Scripts/Runtime/GazeGameAPI.cs) / [`GazeGame.cs`](uniteye/Scripts/Runtime/GazeGame.cs)). [`ExampleAOIs.cs`](uniteye/Scripts/Runtime/AOI/ExampleAOIs.cs) shows every shape.
