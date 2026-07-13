@@ -10,8 +10,9 @@ namespace UnitEye
     /// This component is responsible for evaluating the UnitEye eye tracking.
     /// The user is supposed to look at each appearing dot.
     /// </summary>
-    // HomulerGaze consumes the provider sample in LateUpdate at the default order. Run afterwards so
-    // evaluation scores the fresh sample that corresponds to the displayed target.
+    // HomulerGaze has the default execution order (0). A small positive order (100) deliberately runs
+    // evaluation afterwards without imposing an order on unrelated host-game scripts, so it scores the
+    // fresh sample that corresponds to the displayed target.
     [DefaultExecutionOrder(100)]
     public class HomulerGazeEvaluation : MonoBehaviour
     {
@@ -222,7 +223,8 @@ namespace UnitEye
                 }
             }
 
-            //If done with all the points or if we want to stop early, finish evaluation
+            //Only finish after the final target's duration increments _currentPoint from Count - 1 to Count.
+            //The bounds guard above therefore protects the lookup after the final target; it does not skip it.
             if (_currentPoint >= _points.Count || _earlyStop)
             {
                 _isTimerRunning = false;

@@ -313,6 +313,8 @@ namespace UnitEye
 
             // Looking steeply up/down makes cos(pitch) approach zero. Keep the correction finite so an
             // extreme pose cannot poison blink/drowsiness calibration or the smoothing state.
+            //0.05 caps the correction at 20x (within roughly 3° of ±90°), where face landmarks are
+            //already too foreshortened for a reliable eye-aspect-ratio correction.
             float pitchCorrection = Mathf.Max(Mathf.Abs(Mathf.Cos(pitch)), 0.05f);
             return ((EyeAspectRatioLeft() + EyeAspectRatioRight()) / 2) * Mathf.Abs(Mathf.Cos(yaw)) / pitchCorrection;
         }
