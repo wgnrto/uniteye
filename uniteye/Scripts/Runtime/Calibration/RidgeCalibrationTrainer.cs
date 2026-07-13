@@ -12,6 +12,8 @@ namespace UnitEye
     public static class RidgeCalibrationTrainer
     {
         public static readonly float[] DefaultLambdas = { 0.01f, 0.05f, 0.1f, 1.0f, 5.0f, 10.0f };
+        public const int SpatialBalanceCells = 3;
+        public const int MaxSamplesPerSpatialCell = 250;
 
         public class Result
         {
@@ -42,6 +44,86 @@ namespace UnitEye
             }
 
             return permutation;
+        }
+
+        /// <summary>
+        /// Returns a shuffled, interleaved permutation of 3x3 target cells. This makes holdout folds
+        /// representative of the screen extremes instead of allowing a chronological sweep to dominate them.
+        /// </summary>
+        public static int[] StratifiedRandomPermutation(IReadOnlyList<float> targetsX,
+            IReadOnlyList<float> targetsY, Random rng)
+        {
+            if (targetsX == null || targetsY == null || targetsX.Count != targetsY.Count)
+                throw new ArgumentException("Target counts do not match.");
+
+            var buckets = CreateSpatialBuckets(targetsX, targetsY);
+            foreach (var bucket in buckets)
+                Shuffle(bucket, rng);
+
+            var permutation = new List<int>(targetsX.Count);
+            for (var offset = 0; permutation.Count < targetsX.Count; offset++)
+            {
+                foreach (var bucket in buckets)
+                {
+                    if (offset < bucket.Count)
+                        permutation.Add(bucket[offset]);
+                }
+            }
+            return permutation.ToArray();
+        }
+
+        /// <summary>
+        /// Selects an equal number of samples from each occupied 3x3 screen cell, with replacement for
+        /// sparse cells. Dense sweep data therefore cannot drown out deliberate corner fixations.
+        /// </summary>
+        public static int[] SpatiallyBalancedIndices(IReadOnlyList<float> targetsX,
+            IReadOnlyList<float> targetsY, Random rng, int maxSamplesPerCell = MaxSamplesPerSpatialCell)
+        {
+            if (targetsX == null || targetsY == null || targetsX.Count != targetsY.Count)
+                throw new ArgumentException("Target counts do not match.");
+
+            var buckets = CreateSpatialBuckets(targetsX, targetsY);
+            var targetCount = 0;
+            foreach (var bucket in buckets)
+                targetCount = Math.Max(targetCount, bucket.Count);
+            targetCount = Math.Min(Math.Max(1, maxSamplesPerCell), targetCount);
+
+            var indices = new List<int>(buckets.Count * targetCount);
+            foreach (var bucket in buckets)
+            {
+                if (bucket.Count == 0)
+                    continue;
+                Shuffle(bucket, rng);
+                for (var i = 0; i < targetCount; i++)
+                    indices.Add(bucket[i % bucket.Count]);
+            }
+            Shuffle(indices, rng);
+            return indices.ToArray();
+        }
+
+        private static List<int>[] CreateSpatialBuckets(IReadOnlyList<float> targetsX,
+            IReadOnlyList<float> targetsY)
+        {
+            var buckets = new List<int>[SpatialBalanceCells * SpatialBalanceCells];
+            for (var i = 0; i < buckets.Length; i++)
+                buckets[i] = new List<int>();
+
+            for (var i = 0; i < targetsX.Count; i++)
+            {
+                var x = Math.Max(0, Math.Min(SpatialBalanceCells - 1, (int)(targetsX[i] * SpatialBalanceCells)));
+                var y = Math.Max(0, Math.Min(SpatialBalanceCells - 1, (int)(targetsY[i] * SpatialBalanceCells)));
+                buckets[y * SpatialBalanceCells + x].Add(i);
+            }
+            return buckets;
+        }
+
+        private static void Shuffle<T>(IList<T> values, Random rng)
+        {
+            for (var i = values.Count - 1; i > 0; i--)
+            {
+                var j = rng.Next(i + 1);
+                (values[i], values[j]) = (values[j], values[i]);
+            }
         }
 
         /// <summary>
@@ -81,8 +163,8 @@ namespace UnitEye
             if (trainCount <= 0)
                 throw new ArgumentException("The test fraction leaves no training samples.");
 
-            //Random split, the first testCount permuted indices form the holdout set
-            var permutation = RandomPermutation(sampleCount, rng);
+            //Stratified split: corner/edge/centre targets appear in both train and holdout data.
+            var permutation = StratifiedRandomPermutation(targetsX, targetsY, rng);
 
             var xTrain = new float[trainCount][];
             var yXTrain = new float[trainCount];

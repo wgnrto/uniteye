@@ -9,23 +9,27 @@ namespace UnitEye
     public class EvaluationPreset : CalibrationPreset
     {
         private int _rows, _columns;
+        private readonly float _normalizedSafeMargin;
 
-        public EvaluationPreset(float padding, int rows, int columns) :
+        public EvaluationPreset(float padding, int rows, int columns, float normalizedSafeMargin = 0f) :
             base(padding)
         {
-            _rows = rows;
-            _columns = columns;
+            _rows = Mathf.Max(2, rows);
+            _columns = Mathf.Max(2, columns);
+            _normalizedSafeMargin = Mathf.Clamp(normalizedSafeMargin, 0f, 0.45f);
         }
 
         public override List<Vector2> GetPoints()
         {
             List<Vector2> points = new List<Vector2>();
 
-            var screenWidthPadded = Screen.width - 2 * padding;
-            var screenHeightPadded = Screen.height - 2 * padding;
+            var horizontalPadding = Mathf.Max(padding, Screen.width * _normalizedSafeMargin);
+            var verticalPadding = Mathf.Max(padding, Screen.height * _normalizedSafeMargin);
+            var screenWidthPadded = Screen.width - 2 * horizontalPadding;
+            var screenHeightPadded = Screen.height - 2 * verticalPadding;
 
-            float currentSegmentX = 2 * padding;
-            float currentSegmentY = padding;
+            float currentSegmentX = 2 * horizontalPadding;
+            float currentSegmentY = verticalPadding;
 
             var rowSegment = screenHeightPadded / (_rows - 1);
             var colSegment = screenWidthPadded / (_columns - 1);
@@ -34,10 +38,10 @@ namespace UnitEye
             {
                 for (int x = 0; x < _columns; x++)
                 {
-                    points.Add(new Vector2(currentSegmentX - padding, currentSegmentY));
+                    points.Add(new Vector2(currentSegmentX - horizontalPadding, currentSegmentY));
                     currentSegmentX += colSegment;
                 }
-                currentSegmentX = 2 * padding;
+                currentSegmentX = 2 * horizontalPadding;
                 currentSegmentY += rowSegment;
             }
 

@@ -33,5 +33,10 @@ namespace UnitEye
         /// are just a smooth path (dwelling at each would take minutes and pile samples mid-screen).
         /// </summary>
         public virtual bool StopAtWaypoints => true;
+
+        /// <summary>
+        /// Seconds to hold a fixation target. Continuous presets override StopAtWaypoints instead.
+        /// </summary>
+        public virtual float DwellSeconds => 2f;
     }
 }
