@@ -15,6 +15,7 @@ namespace UnitEye
     /// Therefore, uncalibrated gaze location is unprecise on desktop computers.
     /// Multiple calibration presets are used in this class to ensure as many areas as possible from the screen are used for training.
     /// </summary>
+    [DefaultExecutionOrder(100)]
     public class HomulerGazeCalibration : MonoBehaviour
     {
         #region Private
@@ -38,6 +39,7 @@ namespace UnitEye
 
         private bool _isYielding = false;
         private float _currentTime;
+        private long _lastCapturedGazeSample = -1;
 
         private GUIStyle _guiStyle = new GUIStyle();
         private GUIStyle _timerStyle = new GUIStyle();
@@ -120,6 +122,7 @@ namespace UnitEye
             _currentPoint = 0;
             _isYielding = false;
             _currentTime = 0f;
+            _lastCapturedGazeSample = -1;
             _xData.Clear();
             _yXData.Clear();
             _yYData.Clear();
@@ -345,6 +348,8 @@ namespace UnitEye
             var provider = _gaze != null ? _gaze.Provider : null;
             if (provider == null || !provider.IsFacePresent)
                 return;
+            if (_gaze.GazeSampleSequence <= 0 || _gaze.GazeSampleSequence == _lastCapturedGazeSample)
+                return;
             var features = provider.GetFeatures();
             if (features == null || features.Length == 0)
                 return;
@@ -360,6 +365,7 @@ namespace UnitEye
             _yXData.Add(_crossHairPos.x / Screen.width);
             _yYData.Add(_crossHairPos.y / Screen.height);
             _yData.Add(new Vector2(_crossHairPos.x /*/ Screen.width*/, _crossHairPos.y /*/ Screen.height*/));
+            _lastCapturedGazeSample = _gaze.GazeSampleSequence;
         }
 
         private string ProcessDataNeural()

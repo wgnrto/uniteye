@@ -51,6 +51,7 @@ export class UnitEyeWeb {
     // One-Euro tuned for coarse, stable output; adjust to taste
     this.filter = new C.OneEuro2D(60, opts.mincutoff ?? 0.5, opts.beta ?? 0.01, opts.dcutoff ?? 1.0);
     this._running = false;
+    this._lastVideoTime = -1;
     this._mouse = { x: this.screenW / 2, y: this.screenH / 2 };
     this._crop = document.createElement('canvas'); this._crop.width = 128; this._crop.height = 128;
     this._cropCtx = this._crop.getContext('2d', { willReadFrequently: true });
@@ -113,6 +114,12 @@ export class UnitEyeWeb {
 
   async _processFrame() {
     const now = performance.now();
+    // requestAnimationFrame often runs faster than the webcam. Do not turn a single camera frame into
+    // multiple identical observations: that distorts calibration/evaluation sample weighting and adds
+    // misleading filter updates without new visual evidence.
+    if (this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+        this.video.currentTime === this._lastVideoTime) return;
+    this._lastVideoTime = this.video.currentTime;
     const res = this.faceLandmarker.detectForVideo(this.video, now);
     if (!res || !res.faceLandmarks || res.faceLandmarks.length === 0) {
       this._emit(0, 0, null, false, false, now / 1000);

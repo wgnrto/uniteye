@@ -10,6 +10,7 @@ namespace UnitEye
     /// This component is responsible for evaluating the UnitEye eye tracking.
     /// The user is supposed to look at each appearing dot.
     /// </summary>
+    [DefaultExecutionOrder(100)]
     public class HomulerGazeEvaluation : MonoBehaviour
     {
         #region Private
@@ -29,6 +30,7 @@ namespace UnitEye
         private List<Vector2> _targetData = new List<Vector2>();
 
         private int _currentPoint;
+        private long _lastCapturedGazeSample = -1;
 
         private bool _started = false;
         private bool _finished = false;
@@ -89,6 +91,7 @@ namespace UnitEye
             _isTimerRunning = false;
             _timeRemaining = 0f;
             _currentPoint = 0;
+            _lastCapturedGazeSample = -1;
             _predMLPData.Clear();
             _predRidgeData.Clear();
             _targetData.Clear();
@@ -132,7 +135,7 @@ namespace UnitEye
             _targetLocation = new Vector2(_points[0].x, _points[0].y);
         }
 
-        void Update()
+        void LateUpdate()
         {
             //If finished and leftclick, signal Returned (new Input System, matching HomulerGazeCalibration)
             if (Mouse.current.leftButton.wasPressedThisFrame && returnAfter && _finished)
@@ -189,13 +192,16 @@ namespace UnitEye
                         //calibration capture: no face / blinking frames pair unreliable features with the
                         //dot's position and skew the RMSE.
                         var provider = _gaze.Provider;
-                        if (provider != null && provider.IsFacePresent && !provider.IsBlinking)
+                        if (provider != null && provider.IsFacePresent && !provider.IsBlinking &&
+                            _gaze.GazeSampleSequence > 0 &&
+                            _gaze.GazeSampleSequence != _lastCapturedGazeSample)
                         {
                             var features = provider.GetFeatures();
                             var raw = provider.RawGaze;
                             _predMLPData.Add(_evalStore.Refine(raw, Calibrations.MLCalibration, features, Screen.width, Screen.height));
                             _predRidgeData.Add(_evalStore.Refine(raw, Calibrations.RidgeRegression, features, Screen.width, Screen.height));
                             _targetData.Add(_targetLocation);
+                            _lastCapturedGazeSample = _gaze.GazeSampleSequence;
                         }
                     }
                 }

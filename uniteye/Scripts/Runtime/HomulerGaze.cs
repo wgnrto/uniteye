@@ -74,6 +74,8 @@ namespace UnitEye
         public float Distance { get => _distance; }
         public bool PauseCSVLogging { get; set; }
         public long LastGazeLocationTimeUnix { get; private set; }
+        /// <summary>Increments once for every fresh provider gaze sample consumed by this component.</summary>
+        public long GazeSampleSequence { get; private set; }
         #endregion
 
         #region Serialized values
@@ -271,6 +273,8 @@ namespace UnitEye
             //Peform neural network inference through entire eye tracking pipeline
             if (!_provider.Tick())
                 return;
+
+            GazeSampleSequence++;
 
             //Drowsy, blinking and distance
             _drowsy = _provider.IsDrowsy;
