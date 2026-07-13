@@ -25,6 +25,10 @@ namespace UnitEye
 
         //Frame rate the pixels-per-frame `speed` tuning assumed (same reference EaseSmoothing/KalmanFilter use).
         private const float ReferenceFrameRate = 30f;
+        //Prevents zero-variance fixation features from producing undefined z-scores.
+        private const double MinimumVarianceFloor = 1e-8;
+        //Keeps spatial resampling reproducible across the Ridge and MLP calibration paths.
+        private const int SpatialBalancingSeed = 12345;
 
         private HomulerGaze _gaze;
 
@@ -35,6 +39,8 @@ namespace UnitEye
         private List<float> _yYData = new List<float>();
 
         private List<Vector2> _yData = new List<Vector2>();
+        private List<Vector2> _sampleTargets = new List<Vector2>();
+        private List<bool> _sampleCapturedAtDwell = new List<bool>();
 
         private int _currentPoint = 0;
 
@@ -49,10 +55,6 @@ namespace UnitEye
 
         private List<CalibrationPreset> _presets;
         private int _currentPreset = 0;
-
-        //Seconds the dot dwells at a waypoint of a StopAtWaypoints preset (corners/edges), accumulating
-        //sustained-fixation samples there.
-        private const float DwellSeconds = 2f;
 
         private bool _started = false;
         private bool _finished = false;
@@ -83,6 +85,18 @@ namespace UnitEye
         public float speed = 6.0f;
 
         public float padding = 10.0f;
+        [Range(0f, 0.25f)]
+        public float normalizedSafeMargin = 0.08f;
+        [Range(1, 4)]
+        public int cornerVisits = 2;
+        [Range(1f, 6f)]
+        public float cornerDwellSeconds = 3f;
+        [Range(0.1f, 1f)]
+        public float settleSeconds = 0.5f;
+        [Range(5, 60)]
+        public int minimumCornerSamples = 15;
+        [Range(1f, 6f)]
+        public float cornerOutlierZScore = 3f;
 
         public bool drawCheckpoints;
 
@@ -130,6 +144,8 @@ namespace UnitEye
             _yXData.Clear();
             _yYData.Clear();
             _yData.Clear();
+            _sampleTargets.Clear();
+            _sampleCapturedAtDwell.Clear();
             if (_presets != null)
             {
                 _currentPreset = 0;
@@ -157,7 +173,7 @@ namespace UnitEye
             //now decided per preset (StopAtWaypoints), not one global flag.
             _presets = new List<CalibrationPreset>
             {
-                new CornerPreset(padding),
+                new CornerPreset(padding, cornerVisits, cornerDwellSeconds, normalizedSafeMargin),
                 new ZigZagPreset(padding, true, 4),
                 new VerticalWavyPreset(padding),
                 new HorizontalWavyPreset(padding),
@@ -241,7 +257,7 @@ namespace UnitEye
                     {
                         //Wait at the location so the eye settles and samples accumulate on the target
                         _isYielding = true;
-                        _currentTime = DwellSeconds;
+                        _currentTime = _presets[_currentPreset].DwellSeconds;
                     }
 
                     if (_currentPoint >= points.Count)
@@ -359,7 +375,7 @@ namespace UnitEye
 
             //During a dwell, skip the first ~0.3s: the dot just jumped to the waypoint and the eye is still
             //saccading to it, so those frames would pair the new (corner) label with mid-flight gaze.
-            if (_isYielding && _currentTime > DwellSeconds - 0.3f)
+            if (_isYielding && _currentTime > _presets[_currentPreset].DwellSeconds - settleSeconds)
                 return;
 
             //Clone: GetFeatures() returns the provider's reused per-frame buffer, so the retained training
@@ -368,6 +384,8 @@ namespace UnitEye
             _yXData.Add(_crossHairPos.x / Screen.width);
             _yYData.Add(_crossHairPos.y / Screen.height);
             _yData.Add(new Vector2(_crossHairPos.x /*/ Screen.width*/, _crossHairPos.y /*/ Screen.height*/));
+            _sampleTargets.Add(_crossHairPos);
+            _sampleCapturedAtDwell.Add(_isYielding);
             _lastCapturedGazeSample = _gaze.GazeSampleSequence;
         }
 
@@ -376,8 +394,9 @@ namespace UnitEye
             Debug.Log("Starting MLP training");
             Debug.Log($"Total Count: {_xData.Count}");
 
+            BuildBalancedTrainingData(out var features, out _, out _, out var targets);
             var mlp = new SimpleMLP();
-            string MLPstring = mlp.Train(_xData.ToArray(), _yData.ToArray());
+            string MLPstring = mlp.Train(features, targets);
 
             if (save)
             {
@@ -392,8 +411,9 @@ namespace UnitEye
         {
             Debug.Log("Starting RidgeRegression training");
 
+            BuildBalancedTrainingData(out var features, out var targetsX, out var targetsY, out _);
             var result = RidgeCalibrationTrainer.Train(
-                _xData, _yXData, _yYData,
+                features, targetsX, targetsY,
                 rmseScaleX: Functions.PixelsToMm(Screen.width) * 0.1f,
                 rmseScaleY: Functions.PixelsToMm(Screen.height) * 0.1f);
 
@@ -409,6 +429,109 @@ namespace UnitEye
             }
 
             return $"RidgeRegression Training done. Best RMSE X: {result.XRmse}cm | Best RMSE Y: {result.YRmse}cm.";
+        }
+
+        private void BuildBalancedTrainingData(out float[][] features, out float[] targetsX,
+            out float[] targetsY, out Vector2[] targets)
+        {
+            var keep = new bool[_xData.Count];
+            for (var i = 0; i < keep.Length; i++)
+                keep[i] = true;
+            var dwellGroups = new Dictionary<Vector2, List<int>>();
+            for (var i = 0; i < _xData.Count; i++)
+            {
+                if (!_sampleCapturedAtDwell[i] || !IsBoundaryTarget(_sampleTargets[i]))
+                    continue;
+                if (!dwellGroups.TryGetValue(_sampleTargets[i], out var group))
+                {
+                    group = new List<int>();
+                    dwellGroups.Add(_sampleTargets[i], group);
+                }
+                group.Add(i);
+            }
+
+            var rejected = 0;
+            foreach (var group in dwellGroups.Values)
+            {
+                if (group.Count < minimumCornerSamples)
+                {
+                    foreach (var index in group) keep[index] = false;
+                    rejected += group.Count;
+                    continue;
+                }
+
+                var featureCount = _xData[group[0]].Length;
+                var mean = new double[featureCount];
+                var variance = new double[featureCount];
+                foreach (var index in group)
+                    for (var feature = 0; feature < featureCount; feature++)
+                        mean[feature] += _xData[index][feature];
+                for (var feature = 0; feature < featureCount; feature++)
+                    mean[feature] /= group.Count;
+                foreach (var index in group)
+                    for (var feature = 0; feature < featureCount; feature++)
+                    {
+                        var delta = _xData[index][feature] - mean[feature];
+                        variance[feature] += delta * delta;
+                    }
+                for (var feature = 0; feature < featureCount; feature++)
+                    variance[feature] = Math.Max(MinimumVarianceFloor, variance[feature] / group.Count);
+
+                foreach (var index in group)
+                {
+                    double sumZSquared = 0;
+                    for (var feature = 0; feature < featureCount; feature++)
+                    {
+                        var delta = _xData[index][feature] - mean[feature];
+                        sumZSquared += delta * delta / variance[feature];
+                    }
+                    if (Math.Sqrt(sumZSquared / featureCount) > cornerOutlierZScore)
+                    {
+                        keep[index] = false;
+                        rejected++;
+                    }
+                }
+            }
+
+            var acceptedFeatures = new List<float[]>();
+            var acceptedX = new List<float>();
+            var acceptedY = new List<float>();
+            var acceptedTargets = new List<Vector2>();
+            for (var i = 0; i < _xData.Count; i++)
+            {
+                if (!keep[i]) continue;
+                acceptedFeatures.Add(_xData[i]);
+                acceptedX.Add(_yXData[i]);
+                acceptedY.Add(_yYData[i]);
+                acceptedTargets.Add(_yData[i]);
+            }
+            if (acceptedFeatures.Count == 0)
+                throw new InvalidOperationException("No valid calibration samples remain after corner quality checks. " +
+                    "Increase Corner Dwell Seconds, lower Minimum Corner Samples, or relax Corner Outlier Z Score.");
+
+            var selected = RidgeCalibrationTrainer.SpatiallyBalancedIndices(
+                acceptedX, acceptedY, new System.Random(SpatialBalancingSeed));
+            features = new float[selected.Length][];
+            targetsX = new float[selected.Length];
+            targetsY = new float[selected.Length];
+            targets = new Vector2[selected.Length];
+            for (var i = 0; i < selected.Length; i++)
+            {
+                var index = selected[i];
+                features[i] = acceptedFeatures[index];
+                targetsX[i] = acceptedX[index];
+                targetsY[i] = acceptedY[index];
+                targets[i] = acceptedTargets[index];
+            }
+            Debug.Log($"Calibration kept {acceptedFeatures.Count}/{_xData.Count} raw samples " +
+                $"({rejected} unstable/undersampled boundary samples rejected), spatially balanced to {features.Length}.");
+        }
+
+        private bool IsBoundaryTarget(Vector2 target)
+        {
+            var x = target.x / Screen.width;
+            var y = target.y / Screen.height;
+            return x <= 1f / 3f || x >= 2f / 3f || y <= 1f / 3f || y >= 2f / 3f;
         }
 
         private void OnGUI()

@@ -31,6 +31,7 @@ namespace UnitEye
         private List<Vector2> _predMLPData = new List<Vector2>();
         private List<Vector2> _predRidgeData = new List<Vector2>();
         private List<Vector2> _targetData = new List<Vector2>();
+        private List<ScreenRegion> _targetRegions = new List<ScreenRegion>();
 
         private int _currentPoint;
         private long _lastCapturedGazeSample = -1;
@@ -51,6 +52,10 @@ namespace UnitEye
         private bool _hasMlpModel;
         private bool _hasRidgeModel;
 
+        private enum ScreenRegion { Corner, Edge, Center }
+        private const float RegionBoundaryThreshold = 1f / 3f;
+        private const float RegionBoundaryUpperThreshold = 1f - RegionBoundaryThreshold;
+
         #endregion
 
         #region Public
@@ -69,12 +74,15 @@ namespace UnitEye
         public int duration = 4;
 
         public int padding = 40;
+        [Range(0f, 0.25f)]
+        public float normalizedSafeMargin = 0.08f;
         public int dotSize = 46;
 
         public int rows = 5;
         public int columns = 5;
 
         public bool showAllPoints = false;
+        public bool applyBestCornerModel = true;
         public bool quitAfterEvaluation = false;
 
         #endregion
@@ -98,6 +106,7 @@ namespace UnitEye
             _predMLPData.Clear();
             _predRidgeData.Clear();
             _targetData.Clear();
+            _targetRegions.Clear();
             _guiMessage = "Click to start evaluation" + (returnAfter ? "\nRight click to cancel and return" : "");
         }
 
@@ -127,7 +136,10 @@ namespace UnitEye
         private void BuildPoints()
         {
             _points.Clear();
-            _presets = new List<CalibrationPreset> { new EvaluationPreset(padding, rows, columns) };
+            _presets = new List<CalibrationPreset>
+            {
+                new EvaluationPreset(padding, rows, columns, normalizedSafeMargin)
+            };
             foreach (var preset in _presets)
                 _points.AddRange(preset.GetPoints());
 
@@ -207,6 +219,7 @@ namespace UnitEye
                             _predMLPData.Add(_evalStore.Refine(raw, Calibrations.MLCalibration, features, Screen.width, Screen.height));
                             _predRidgeData.Add(_evalStore.Refine(raw, Calibrations.RidgeRegression, features, Screen.width, Screen.height));
                             _targetData.Add(_targetLocation);
+                            _targetRegions.Add(ClassifyRegion(_targetLocation));
                             _lastCapturedGazeSample = _gaze.GazeSampleSequence;
                         }
                     }
@@ -263,44 +276,86 @@ namespace UnitEye
             //Only report an RMSE for models that were actually loaded — without a model, Refine falls
             //back to the raw gaze and the number would be the RAW pipeline's error mislabeled as the model's.
             string mlpLine = _hasMlpModel
-                ? FormatRmseLine("MLP", CalculateRMSE(_predMLPData, _targetData))
+                ? FormatRmseLine("MLP", _predMLPData)
                 : $"MLP Evaluation: not calibrated for {_gaze.GazeBackbone} (no model file).";
             string ridgeLine = _hasRidgeModel
-                ? FormatRmseLine("RidgeRegression", CalculateRMSE(_predRidgeData, _targetData))
+                ? FormatRmseLine("RidgeRegression", _predRidgeData)
                 : $"RidgeRegression Evaluation: not calibrated for {_gaze.GazeBackbone} (no model file).";
 
             ReturnMessage += $"{mlpLine} {ridgeLine} ";
             message += $"{mlpLine}\n{ridgeLine}\n";
 
+            if (_hasMlpModel && _hasRidgeModel)
+            {
+                var mlpCorner = CalculateRMSE(_predMLPData, ScreenRegion.Corner);
+                var ridgeCorner = CalculateRMSE(_predRidgeData, ScreenRegion.Corner);
+                var best = EuclideanError(mlpCorner) <= EuclideanError(ridgeCorner)
+                    ? Calibrations.MLCalibration : Calibrations.RidgeRegression;
+                var selection = $"Best corner model: {best}.";
+                if (applyBestCornerModel)
+                {
+                    _gaze.Calibrations = best;
+                    selection += " Applied.";
+                }
+                ReturnMessage += $" {selection}";
+                message += $"{selection}\n";
+            }
+
             return message;
         }
 
-        private static string FormatRmseLine(string label, (float x, float y) error)
+        private string FormatRmseLine(string label, List<Vector2> predictions)
         {
-            return $"{label} Evaluation: RMSE X: {Functions.PixelsToMm(error.x) * 0.1f}cm | RMSE Y: {Functions.PixelsToMm(error.y) * 0.1f}cm.";
+            var all = CalculateRMSE(predictions, null);
+            var corner = CalculateRMSE(predictions, ScreenRegion.Corner);
+            var edge = CalculateRMSE(predictions, ScreenRegion.Edge);
+            var center = CalculateRMSE(predictions, ScreenRegion.Center);
+            return $"{label} Evaluation: all {FormatError(all)}; corners {FormatError(corner)}; " +
+                $"edges {FormatError(edge)}; center {FormatError(center)}.";
         }
+
+        private static string FormatError((float x, float y) error)
+            => $"X {Functions.PixelsToMm(error.x) * 0.1f:F2}cm, Y {Functions.PixelsToMm(error.y) * 0.1f:F2}cm";
 
         /// <summary>
         /// Root-mean-square gaze error in pixels, per axis. This intentionally matches the calibration
         /// holdout metric, independent of the visual dot size.
-        /// Uses the passed-in lists (not the _targetData field) so pred/target lengths stay in lockstep.
+        /// An optional screen region exposes corner, edge, and centre accuracy independently.
         /// </summary>
-        private (float x, float y) CalculateRMSE(List<Vector2> predData, List<Vector2> targetData)
+        private (float x, float y) CalculateRMSE(List<Vector2> predData, ScreenRegion? region)
         {
-            int count = Mathf.Min(predData.Count, targetData.Count);
+            var count = Mathf.Min(predData.Count, _targetData.Count);
+            var included = 0;
             if (count == 0)
                 return (0f, 0f);
 
             float errorX = 0.0f, errorY = 0.0f;
             for (int i = 0; i < count; i++)
             {
-                float dx = predData[i].x - targetData[i].x;
-                float dy = predData[i].y - targetData[i].y;
+                if (region.HasValue && _targetRegions[i] != region.Value)
+                    continue;
+                float dx = predData[i].x - _targetData[i].x;
+                float dy = predData[i].y - _targetData[i].y;
                 errorX += dx * dx;
                 errorY += dy * dy;
+                included++;
             }
 
-            return (Mathf.Sqrt(errorX / count), Mathf.Sqrt(errorY / count));
+            return included == 0 ? (0f, 0f) :
+                (Mathf.Sqrt(errorX / included), Mathf.Sqrt(errorY / included));
+        }
+
+        private static float EuclideanError((float x, float y) error)
+            => Mathf.Sqrt(error.x * error.x + error.y * error.y);
+
+        private static ScreenRegion ClassifyRegion(Vector2 target)
+        {
+            var x = target.x / Screen.width;
+            var y = target.y / Screen.height;
+            var horizontalEdge = x <= RegionBoundaryThreshold || x >= RegionBoundaryUpperThreshold;
+            var verticalEdge = y <= RegionBoundaryThreshold || y >= RegionBoundaryUpperThreshold;
+            if (horizontalEdge && verticalEdge) return ScreenRegion.Corner;
+            return horizontalEdge || verticalEdge ? ScreenRegion.Edge : ScreenRegion.Center;
         }
 
         void OnGUI()
