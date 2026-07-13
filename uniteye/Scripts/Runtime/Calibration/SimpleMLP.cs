@@ -64,7 +64,8 @@ namespace UnitEye
         /// Trains the network on calibration samples (targets in pixels, matching the old MLP API).
         /// Returns the accuracy message with the holdout RMSE per axis in cm.
         /// </summary>
-        public string Train(float[][] x, Vector2[] y)
+        public string Train(float[][] x, Vector2[] y,
+            CalibrationFeatureAugmentationSettings augmentation = null)
         {
             if (x == null || x.Length < 10)
                 throw new ArgumentException("Not enough calibration samples to train the MLP.");
@@ -85,6 +86,12 @@ namespace UnitEye
 
             //Standardization stats from the training portion only
             ComputeStandardization(xTrain, yTrain);
+
+            //Augment only the fitting partition after its statistics are established. The untouched
+            //original holdout below remains the reported accuracy measure.
+            xTrain = CalibrationFeatureAugmentation.Augment(xTrain, augmentation);
+            yTrain = CalibrationFeatureAugmentation.DuplicateTargets(yTrain, augmentation);
+            trainCount = xTrain.Length;
 
             //Pre-standardize the training set
             var xs = new float[trainCount][];

@@ -106,6 +106,8 @@ namespace UnitEye
 
         public Calibrations calibrationType = Calibrations.RidgeRegression;
         public bool save = true;
+        [Tooltip("Optional bounded jitter of numerical calibration features during training only. Image augmentation is not label-preserving for screen targets.")]
+        public CalibrationFeatureAugmentationSettings featureAugmentation = new CalibrationFeatureAugmentationSettings();
 
         public bool stopAfterPoints = true;
         public bool quitAfterCalibration = false;
@@ -396,7 +398,7 @@ namespace UnitEye
 
             BuildBalancedTrainingData(out var features, out _, out _, out var targets);
             var mlp = new SimpleMLP();
-            string MLPstring = mlp.Train(features, targets);
+            string MLPstring = mlp.Train(features, targets, featureAugmentation);
 
             if (save)
             {
@@ -415,7 +417,8 @@ namespace UnitEye
             var result = RidgeCalibrationTrainer.Train(
                 features, targetsX, targetsY,
                 rmseScaleX: Functions.PixelsToMm(Screen.width) * 0.1f,
-                rmseScaleY: Functions.PixelsToMm(Screen.height) * 0.1f);
+                rmseScaleY: Functions.PixelsToMm(Screen.height) * 0.1f,
+                augmentation: featureAugmentation);
 
             Debug.Log($"Total Count: {_xData.Count}, Train Count: {result.TrainCount}, Test Count: {result.TestCount}, " +
                       $"Lambda X: {result.BestLambdaX}, Lambda Y: {result.BestLambdaY}");
