@@ -109,7 +109,7 @@ namespace UnitEye
 
         private static float NextGaussian(Random random)
         {
-            //Prevent log(0) in the Box-Muller transform.
+            //Ensure u1 is positive before applying Box-Muller.
             var u1 = Math.Max(double.Epsilon, random.NextDouble());
             var u2 = random.NextDouble();
             return (float)(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
