@@ -34,6 +34,7 @@ public static class UnitEyeSmokeTests
             TestRidgeInterceptNotPenalized();
             TestNoShippedDefaultCalibration();
             TestTrainerOnSyntheticData();
+            TestSpatiallyBalancedCalibrationSamples();
             TestSimpleMLP();
             TestGazeGridQuantizer();
             TestOneEuroFilter();
@@ -259,6 +260,31 @@ public static class UnitEyeSmokeTests
             rmseScaleX: 10f, rmseScaleY: 10f,
             rng: new System.Random(7));
         Check(repeat.XRmse == result.XRmse && repeat.YRmse == result.YRmse, "Training with the same seed should be deterministic");
+    }
+
+    private static void TestSpatiallyBalancedCalibrationSamples()
+    {
+        var x = new List<float>();
+        var y = new List<float>();
+        //A dense centre sweep and sparse corner fixation must contribute equally after balancing.
+        for (var i = 0; i < 100; i++) { x.Add(0.5f); y.Add(0.5f); }
+        x.Add(0.08f); y.Add(0.08f);
+        x.Add(0.08f); y.Add(0.08f);
+
+        var indices = RidgeCalibrationTrainer.SpatiallyBalancedIndices(
+            x, y, new System.Random(9), maxSamplesPerCell: 10);
+        Check(indices.Length == 20, "Spatial balancing should retain ten samples from each occupied cell");
+
+        var cornerCount = 0;
+        foreach (var index in indices)
+            if (x[index] < 1f / 3f && y[index] < 1f / 3f) cornerCount++;
+        Check(cornerCount == 10, "Spatial balancing should upweight sparse corner fixation samples");
+
+        var permutation = RidgeCalibrationTrainer.StratifiedRandomPermutation(x, y, new System.Random(9));
+        Check(permutation.Length == x.Count, "Stratified permutation should retain every sample");
+        var firstIsCorner = x[permutation[0]] < 1f / 3f && y[permutation[0]] < 1f / 3f;
+        var secondIsCorner = x[permutation[1]] < 1f / 3f && y[permutation[1]] < 1f / 3f;
+        Check(firstIsCorner != secondIsCorner, "Stratified permutation should interleave target cells");
     }
 
     private static float[][] ToArray(List<float[]> list) => list.ToArray();

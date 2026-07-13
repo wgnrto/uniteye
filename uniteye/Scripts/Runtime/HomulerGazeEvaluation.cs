@@ -318,7 +318,7 @@ namespace UnitEye
         /// <summary>
         /// Root-mean-square gaze error in pixels, per axis. This intentionally matches the calibration
         /// holdout metric, independent of the visual dot size.
-        /// Uses the passed-in lists (not the _targetData field) so pred/target lengths stay in lockstep.
+        /// An optional screen region exposes corner, edge, and centre accuracy independently.
         /// </summary>
         private (float x, float y) CalculateRMSE(List<Vector2> predData, ScreenRegion? region)
         {

@@ -431,7 +431,8 @@ namespace UnitEye
             out float[] targetsY, out Vector2[] targets)
         {
             var keep = new bool[_xData.Count];
-            Array.Fill(keep, true);
+            for (var i = 0; i < keep.Length; i++)
+                keep[i] = true;
             var dwellGroups = new Dictionary<Vector2, List<int>>();
             for (var i = 0; i < _xData.Count; i++)
             {

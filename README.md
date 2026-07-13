@@ -138,7 +138,7 @@ Every setup needs calibration for good accuracy; recalibrate if your seating or 
 
 ![](./uniteye/Documentation~/Images/GazeCalibrationInspector.png)
 
-Inspector settings include the calibration dot texture (a default `CalibrationDot` is included), dot speed, edge padding, and `Max Rounds Per Preset`. The active presets ([`HomulerGazeCalibration.cs`](uniteye/Scripts/Runtime/HomulerGazeCalibration.cs)) are a **corner** pass — which dwells ~2 s at the four corners and edge midpoints so the screen extremes are well sampled (this is what lets calibration reach the corners) — followed by **zig-zag**, **vertical wavy** and **horizontal wavy** sweeps for full-screen coverage; with `Max Rounds Per Preset = 2` that's 8 rounds. You also choose the calibration type, whether to save (overwriting an existing file for that type+model), and whether to quit after calibrating.
+Inspector settings include the calibration dot texture (a default `CalibrationDot` is included), dot speed, edge padding, and `Max Rounds Per Preset`. The active presets ([`HomulerGazeCalibration.cs`](uniteye/Scripts/Runtime/HomulerGazeCalibration.cs)) begin with a repeated **corner** pass: it dwells at the four corners and edge midpoints, rejects unstable or under-sampled fixation frames, and balances target cells before training so dense sweeps cannot outweigh the screen extremes. The **Normalized Safe Margin** keeps these targets away from the physical bezel (default 8% on each axis); increase it if the outermost targets remain unreliable. **Corner Visits**, **Corner Dwell Seconds**, and **Settle Seconds** control corner sample quality. Zig-zag, vertical-wavy, and horizontal-wavy sweeps follow for full-screen coverage; with `Max Rounds Per Preset = 2` that's 8 rounds. You also choose the calibration type, whether to save (overwriting an existing file for that type+model), and whether to quit after calibrating.
 
 ![](./uniteye/Documentation~/Images/CalibrationScreen.png)
 
@@ -153,7 +153,7 @@ To measure accuracy, run an evaluation: like a calibration, but the dot jumps be
 
 ![](./uniteye/Documentation~/Images/GazeEvaluationInspector.png)
 
-Settings: the evaluation dot texture, the per-location `Duration` (only the middle 50 % of each is used, giving you time to find the new point), edge padding, dot size, grid rows/columns, whether to show the grid as ghost dots, and whether to quit afterward. All calibration types (except `None`) are evaluated at once.
+Settings: the evaluation dot texture, the per-location `Duration` (only the middle 50 % of each is used, giving you time to find the new point), edge padding, **Normalized Safe Margin**, dot size, grid rows/columns, whether to show the grid as ghost dots, and whether to quit afterward. All calibration types (except `None`) are evaluated at once. Results report overall plus corner, edge, and center RMSE separately, so verify corner performance rather than relying on an average dominated by center targets. When both models exist, evaluation identifies the lower-corner-error model and can apply it automatically with **Apply Best Corner Model**.
 
 ![](./uniteye/Documentation~/Images/EvaluationScreen.png)
 
