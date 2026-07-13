@@ -35,6 +35,7 @@ public static class UnitEyeSmokeTests
             TestNoShippedDefaultCalibration();
             TestTrainerOnSyntheticData();
             TestSpatiallyBalancedCalibrationSamples();
+            TestFeatureAugmentation();
             TestSimpleMLP();
             TestGazeGridQuantizer();
             TestOneEuroFilter();
@@ -287,6 +288,53 @@ public static class UnitEyeSmokeTests
         Check(firstIsCorner != secondIsCorner, "Stratified permutation should interleave target cells");
     }
 
+    private static void TestFeatureAugmentation()
+    {
+        var features = new[]
+        {
+            new[] { 1f, 10f, 5f },
+            new[] { 3f, 30f, 5f },
+            new[] { 5f, 50f, 5f },
+        };
+        var targets = new[] { 0.1f, 0.5f, 0.9f };
+        var disabled = new CalibrationFeatureAugmentationSettings();
+        Check(ReferenceEquals(CalibrationFeatureAugmentation.Augment(features, disabled), features),
+            "Disabled augmentation should leave training features unchanged");
+
+        var settings = new CalibrationFeatureAugmentationSettings
+        {
+            enabled = true,
+            copiesPerSample = 2,
+            standardDeviationScale = 0.1f,
+            maximumStandardDeviations = 2f,
+            seed = 17,
+        };
+        var augmented = CalibrationFeatureAugmentation.Augment(features, settings);
+        var repeated = CalibrationFeatureAugmentation.Augment(features, settings);
+        var augmentedTargets = CalibrationFeatureAugmentation.DuplicateTargets(targets, settings);
+        Check(augmented.Length == features.Length * 3, "Augmentation should add the requested training copies");
+        Check(augmentedTargets.Length == augmented.Length, "Augmented features and labels should remain aligned");
+        for (var copy = 0; copy <= settings.copiesPerSample; copy++)
+            for (var i = 0; i < features.Length; i++)
+            {
+                var index = copy * features.Length + i;
+                Check(augmentedTargets[index] == targets[i], "Feature augmentation must not change calibration labels");
+                for (var feature = 0; feature < features[i].Length; feature++)
+                    Check(augmented[index][feature] == repeated[index][feature],
+                        "Fixed augmentation seed should produce deterministic feature jitter");
+            }
+        Check(augmented[features.Length][2] == features[0][2],
+            "Zero-variance features should not receive synthetic jitter");
+
+        var (ridgeFeatures, yX, yY) = MakeSyntheticData(500, new System.Random(31), noise: 0.005f);
+        var result = RidgeCalibrationTrainer.Train(ridgeFeatures, yX, yY, 10f, 10f,
+            rng: new System.Random(7), augmentation: settings);
+        Check(result.TrainCount == 400 && result.TestCount == 100,
+            "Ridge augmentation must not duplicate the reported train or holdout counts");
+        Check(result.XRmse < 0.4f && result.YRmse < 0.4f,
+            "Ridge feature jitter should retain clean synthetic-data accuracy");
+    }
+
     private static float[][] ToArray(List<float[]> list) => list.ToArray();
 
     private static void TestSimpleMLP()
@@ -340,6 +388,20 @@ public static class UnitEyeSmokeTests
         mlp2.Train(x, y);
         var q1 = mlp.Predict(probe); var q2 = mlp2.Predict(probe);
         Check(q1 == q2, "SimpleMLP training should be deterministic for a fixed seed");
+
+        var augmentation = new CalibrationFeatureAugmentationSettings
+        {
+            enabled = true,
+            copiesPerSample = 1,
+            standardDeviationScale = 0.01f,
+            maximumStandardDeviations = 2f,
+            seed = 42,
+        };
+        var augmentedMlp = new SimpleMLP(seed: 42);
+        augmentedMlp.Train(x, y, augmentation);
+        var augmentedPrediction = augmentedMlp.Predict(probe);
+        Check(Mathf.Abs(augmentedPrediction.x - p1.x) < 100f && Mathf.Abs(augmentedPrediction.y - p1.y) < 100f,
+            "MLP feature jitter should retain clean synthetic-data accuracy");
 
         //Feature/model mismatch returns NaN (raw-gaze fallback contract)
         var mismatch = mlp.Predict(new float[] { 1f, 2f });

@@ -155,7 +155,8 @@ namespace UnitEye
             float testFraction = 0.2f,
             int folds = 5,
             float[] lambdas = null,
-            Random rng = null)
+            Random rng = null,
+            CalibrationFeatureAugmentationSettings augmentation = null)
         {
             if (features == null || features.Count == 0)
                 throw new ArgumentException("No calibration samples were captured, cannot train.");
@@ -197,14 +198,17 @@ namespace UnitEye
             }
 
             //Select lambda per axis on the training set only
-            var bestLambdaX = SelectLambda(xTrain, yXTrain, lambdas, folds);
-            var bestLambdaY = SelectLambda(xTrain, yYTrain, lambdas, folds);
+            var bestLambdaX = SelectLambda(xTrain, yXTrain, lambdas, folds, augmentation);
+            var bestLambdaY = SelectLambda(xTrain, yYTrain, lambdas, folds, augmentation);
 
-            //Refit the final models on the full training set
+            //Refit using training-only feature jitter. The holdout remains the original captured data.
+            var augmentedTrain = CalibrationFeatureAugmentation.Augment(xTrain, augmentation);
+            var augmentedXTargets = CalibrationFeatureAugmentation.DuplicateTargets(yXTrain, augmentation);
+            var augmentedYTargets = CalibrationFeatureAugmentation.DuplicateTargets(yYTrain, augmentation);
             var xModel = new RidgeRegression(bestLambdaX);
-            xModel.Train(xTrain, yXTrain);
+            xModel.Train(augmentedTrain, augmentedXTargets);
             var yModel = new RidgeRegression(bestLambdaY);
-            yModel.Train(xTrain, yYTrain);
+            yModel.Train(augmentedTrain, augmentedYTargets);
 
             //Report the error on the untouched holdout set, fall back to the training set
             //when there are too few samples for a holdout
@@ -229,7 +233,8 @@ namespace UnitEye
         /// Selects the lambda with the lowest k-fold cross validation MSE.
         /// The samples must already be in random order, folds are contiguous chunks.
         /// </summary>
-        private static float SelectLambda(float[][] x, float[] y, float[] lambdas, int folds)
+        private static float SelectLambda(float[][] x, float[] y, float[] lambdas, int folds,
+            CalibrationFeatureAugmentationSettings augmentation)
         {
             var sampleCount = x.Length;
 
@@ -279,11 +284,15 @@ namespace UnitEye
             {
                 double squaredErrorSum = 0.0;
                 long errorCount = 0;
+                //Each candidate sees identical deterministic jitter, so lambda selection compares models fairly.
+                var augmentationRandom = augmentation != null ? new Random(augmentation.seed) : null;
 
                 foreach (var (xFit, yFit, xVal, yVal) in foldSplits)
                 {
                     var model = new RidgeRegression(lambda);
-                    model.Train(xFit, yFit);
+                    var augmentedFit = CalibrationFeatureAugmentation.Augment(xFit, augmentation, augmentationRandom);
+                    var augmentedTargets = CalibrationFeatureAugmentation.DuplicateTargets(yFit, augmentation);
+                    model.Train(augmentedFit, augmentedTargets);
 
                     for (int i = 0; i < xVal.Length; i++)
                     {
