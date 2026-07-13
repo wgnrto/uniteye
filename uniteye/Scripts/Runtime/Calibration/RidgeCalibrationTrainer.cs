@@ -90,7 +90,7 @@ namespace UnitEye
                 targetCount = Math.Max(targetCount, bucket.Count);
             targetCount = Clamp(targetCount, 1, maxSamplesPerCell);
 
-            var indices = new List<int>(buckets.Count * targetCount);
+            var indices = new List<int>(buckets.Length * targetCount);
             foreach (var bucket in buckets)
             {
                 if (bucket.Count == 0)
