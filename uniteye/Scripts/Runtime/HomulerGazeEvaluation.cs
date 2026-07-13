@@ -55,6 +55,8 @@ namespace UnitEye
         private enum ScreenRegion { Corner, Edge, Center }
         private const float RegionBoundaryThreshold = 1f / 3f;
         private const float RegionBoundaryUpperThreshold = 1f - RegionBoundaryThreshold;
+        //Evaluation dot pulse rate (Hz); one pulse per second, matching the calibration dot animation.
+        private const float EvalPulseHz = 1f;
 
         #endregion
 
@@ -385,6 +387,19 @@ namespace UnitEye
                         evaluationDot);
                     }
                     GUI.color = oldColor;
+                }
+
+                // Expanding, fading pulse ring while a point is active, cueing the participant to hold a
+                // steady fixation on the dot (matches the calibration dot animation and the reference HTML).
+                if (_isTimerRunning)
+                {
+                    var prev = GUI.color;
+                    float phase = Mathf.Repeat(Time.time * EvalPulseHz, 1f);
+                    float ringSize = dotSize * (1f + phase * 1.6f);
+                    GUI.color = new Color(prev.r, prev.g, prev.b, (1f - phase) * 0.55f);
+                    GUI.DrawTexture(new Rect(_targetLocation.x - 0.5f * ringSize,
+                            _targetLocation.y - 0.5f * ringSize, ringSize, ringSize), evaluationDot);
+                    GUI.color = prev;
                 }
 
                 // Draw calibration dot

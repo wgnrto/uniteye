@@ -11,15 +11,31 @@ namespace UnitEye
     [Serializable]
     public class CalibrationFeatureAugmentationSettings
     {
+        //Default ON: augmentation is the default calibration approach. Each captured sample also yields
+        //`copiesPerSample` bounded-jitter copies, which regularizes the fit and reduces overcommitment to
+        //the exact captured samples. Holdout and evaluation samples are never augmented.
         [Tooltip("Add bounded zero-mean jitter to training features. Holdout and evaluation samples are never augmented.")]
-        public bool enabled;
+        public bool enabled = true;
         [Range(1, 5)]
         public int copiesPerSample = 1;
         [Range(0f, 0.5f)]
         public float standardDeviationScale = 0.05f;
         [Range(0.1f, 5f)]
         public float maximumStandardDeviations = 3f;
+        //Extra ABSOLUTE jitter for the head-pose feature slots named by headPoseFeatureIndices, given in
+        //DEGREES (converted to the features' native radian scale internally). It models head-pose
+        //measurement noise and guarantees the head yaw/pitch/roll features carry variance even when the
+        //captured head barely moved, so the calibration does not overcommit to the exact calibration head
+        //pose. Complements the head-movement capture stage (real variance); keep it small vs the real range.
+        [Tooltip("Extra absolute jitter (degrees) added to the head-pose features only, modeling head-pose noise so the fit is less tied to the exact calibration head pose.")]
+        [Range(0f, 15f)]
+        public float headPoseJitterDegrees = 3f;
         public int seed = 12345;
+
+        //Runtime hint (not serialized): which feature slots are head yaw/pitch/roll for the active gaze
+        //backbone. Set by HomulerGazeCalibration before training; headPoseJitterDegrees applies to these.
+        [NonSerialized]
+        public int[] headPoseFeatureIndices;
     }
 
     /// <summary>Shared, deterministic feature-space augmentation used by both calibration trainers.</summary>
@@ -56,6 +72,8 @@ namespace UnitEye
                 standardDeviation[feature] = (float)Math.Sqrt(standardDeviation[feature] / features.Length);
 
             random ??= new Random(settings.seed);
+            var headPoseIndices = settings.headPoseFeatureIndices;
+            var headPoseJitter = settings.headPoseJitterDegrees;
             var augmented = new float[features.Length * (settings.copiesPerSample + 1)][];
             for (var sampleIndex = 0; sampleIndex < features.Length; sampleIndex++)
             {
@@ -71,6 +89,26 @@ namespace UnitEye
                                              settings.standardDeviationScale;
                         jittered[feature] = Math.Max(features[sampleIndex][feature] - limit,
                             Math.Min(features[sampleIndex][feature] + limit, jittered[feature]));
+                    }
+                    //Extra absolute head-pose jitter on top of the proportional term (see the settings
+                    //field comment). The head-pose features (head yaw/pitch/roll) are stored in RADIANS
+                    //(FaceMeshSolution uses atan/atan2), so the degrees value is converted to radians here to
+                    //match the feature scale. Bounded by the proportional limit PLUS the head-pose limit so
+                    //the two jitter sources compose instead of the second clamp undoing the first.
+                    if (headPoseIndices != null && headPoseJitter > 0f)
+                    {
+                        var headPoseJitterRad = headPoseJitter * Mathf.Deg2Rad;
+                        foreach (var feature in headPoseIndices)
+                        {
+                            if (feature < 0 || feature >= featureCount)
+                                continue;
+                            jittered[feature] += NextGaussian(random) * headPoseJitterRad;
+                            var limit = standardDeviation[feature] * settings.standardDeviationScale *
+                                        settings.maximumStandardDeviations +
+                                        headPoseJitterRad * settings.maximumStandardDeviations;
+                            jittered[feature] = Math.Max(features[sampleIndex][feature] - limit,
+                                Math.Min(features[sampleIndex][feature] + limit, jittered[feature]));
+                        }
                     }
                     augmented[copy * features.Length + sampleIndex] = jittered;
                 }

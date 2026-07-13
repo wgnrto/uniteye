@@ -41,6 +41,11 @@ namespace UnitEye
         private List<Vector2> _yData = new List<Vector2>();
         private List<Vector2> _sampleTargets = new List<Vector2>();
         private List<bool> _sampleCapturedAtDwell = new List<bool>();
+        //True for samples captured during the head-movement stage. They are DELIBERATELY high-variance
+        //(head yaw/pitch/roll swing while the eye fixates one target), so they must bypass the corner
+        //stability rejection in BuildBalancedTrainingData — that rejection exists to drop unstable corner
+        //fixations, and would otherwise throw away exactly the head-pose variance this stage collects.
+        private List<bool> _sampleFromHeadRotation = new List<bool>();
 
         private int _currentPoint = 0;
 
@@ -52,6 +57,9 @@ namespace UnitEye
 
         private GUIStyle _guiStyle = new GUIStyle();
         private GUIStyle _timerStyle = new GUIStyle();
+        private GUIStyle _headRotationStyle = new GUIStyle();
+        //Dot pulse rate (Hz). One pulse per second matches the reference HTML's 1s target animation.
+        private const float PulseHz = 1f;
 
         private List<CalibrationPreset> _presets;
         private int _currentPreset = 0;
@@ -91,6 +99,9 @@ namespace UnitEye
         public int cornerVisits = 2;
         [Range(1f, 6f)]
         public float cornerDwellSeconds = 3f;
+        [Tooltip("Seconds to dwell at each head-movement target while the user rotates their head. Longer = more head-pose coverage but a longer calibration.")]
+        [Range(2f, 10f)]
+        public float headRotationDwellSeconds = 5f;
         [Range(0.1f, 1f)]
         public float settleSeconds = 0.5f;
         [Range(5, 60)]
@@ -148,6 +159,7 @@ namespace UnitEye
             _yData.Clear();
             _sampleTargets.Clear();
             _sampleCapturedAtDwell.Clear();
+            _sampleFromHeadRotation.Clear();
             if (_presets != null)
             {
                 _currentPreset = 0;
@@ -170,12 +182,16 @@ namespace UnitEye
 
             //Calibration presets. CornerPreset leads and DWELLS at the four corners + four edge midpoints
             //(it's a StopAtWaypoints preset) so the extremes get sustained-fixation samples — without that
-            //the fit had almost no leverage at the corners and collapsed predictions toward the centre. The
-            //ZigZag + wavy presets follow as continuous sweeps for full-screen coverage (no dwell). Dwell is
-            //now decided per preset (StopAtWaypoints), not one global flag.
+            //the fit had almost no leverage at the corners and collapsed predictions toward the centre.
+            //HeadRotationPreset then dwells at the centre + corners while prompting the user to rotate their
+            //head, giving the head-pose features real variance so the fit compensates for head movement (see
+            //HeadRotationPreset / CalibrationPreset.IsHeadMovement). The ZigZag + wavy presets follow as
+            //continuous sweeps for full-screen coverage (no dwell). Dwell is decided per preset
+            //(StopAtWaypoints), not one global flag.
             _presets = new List<CalibrationPreset>
             {
                 new CornerPreset(padding, cornerVisits, cornerDwellSeconds, normalizedSafeMargin),
+                new HeadRotationPreset(padding, headRotationDwellSeconds, normalizedSafeMargin),
                 new ZigZagPreset(padding, true, 4),
                 new VerticalWavyPreset(padding),
                 new HorizontalWavyPreset(padding),
@@ -301,7 +317,12 @@ namespace UnitEye
                 ResetPoints(_currentPreset);
                 _started = false;
                 _showMessage = true;
-                _guiMessage = $"Click to start next round\nRound {currentRound}/{_presets.Count * maxRoundsPerPreset}\nRight click to cancel calibration and return";
+                //Heads-up when the upcoming round is the head-movement stage (_currentPreset already points
+                //at it), so the user expects the "turn your head" prompt before clicking in.
+                var headTurnNote = _presets[_currentPreset].IsHeadMovement
+                    ? "\nHead-turn round: keep looking at the dot and slowly rotate your head"
+                    : "";
+                _guiMessage = $"Click to start next round\nRound {currentRound}/{_presets.Count * maxRoundsPerPreset}{headTurnNote}\nRight click to cancel calibration and return";
                 _isYielding = false;
                 DrawPath(points);
             }
@@ -326,6 +347,11 @@ namespace UnitEye
 
             //Prepare GUI message
             var message = $"Calibration done!\nScreen size: {Functions.PixelsToMm(Screen.width) * 0.1f}x{Functions.PixelsToMm(Screen.height) * 0.1f}cm. Unity's built in DPI value might be wrong!\n";
+
+            //Tell the feature augmentation which feature slots are head yaw/pitch/roll for the active
+            //backbone, so its extra head-pose jitter targets them (the layout differs per backbone).
+            featureAugmentation.headPoseFeatureIndices =
+                _gaze != null ? HeadPoseFeatureIndices(_gaze.GazeBackbone) : null;
 
             //Process data by calibration type
             switch (calibrationType)
@@ -388,6 +414,7 @@ namespace UnitEye
             _yData.Add(new Vector2(_crossHairPos.x /*/ Screen.width*/, _crossHairPos.y /*/ Screen.height*/));
             _sampleTargets.Add(_crossHairPos);
             _sampleCapturedAtDwell.Add(_isYielding);
+            _sampleFromHeadRotation.Add(_presets[_currentPreset].IsHeadMovement);
             _lastCapturedGazeSample = _gaze.GazeSampleSequence;
         }
 
@@ -443,6 +470,11 @@ namespace UnitEye
             var dwellGroups = new Dictionary<Vector2, List<int>>();
             for (var i = 0; i < _xData.Count; i++)
             {
+                //Head-movement samples are intentionally high-variance (the head yaw/pitch/roll features
+                //swing while the eye fixates), so they are exempt from the per-target stability rejection
+                //below — grouping them would flag that wanted variance as "unstable" and discard it.
+                if (_sampleFromHeadRotation[i])
+                    continue;
                 if (!_sampleCapturedAtDwell[i] || !IsBoundaryTarget(_sampleTargets[i]))
                     continue;
                 if (!dwellGroups.TryGetValue(_sampleTargets[i], out var group))
@@ -537,6 +569,27 @@ namespace UnitEye
             return x <= 1f / 3f || x >= 2f / 3f || y <= 1f / 3f || y >= 2f / 3f;
         }
 
+        /// <summary>
+        /// The indices of the head yaw/pitch/roll slots in the active backbone's feature vector, used to
+        /// aim the augmentation's extra head-pose jitter. EyeMU emits [embedding4, gaze2, headYaw, headPitch,
+        /// headRoll, headArea, w, h] so head pose is at 6/7/8; the direction backbones emit the polynomial
+        /// [yaw, pitch, yaw², pitch², yaw·pitch, yaw³, pitch³, headYaw, headPitch, headRoll, headArea] so it
+        /// is at 7/8/9. Head area is excluded (it is not a rotation). Kept in sync with HomulerEyeMURunner
+        /// .Features and GazeEstimationRunner.FillGazeFeatures.
+        /// </summary>
+        private static int[] HeadPoseFeatureIndices(GazeBackbone backbone)
+        {
+            switch (backbone)
+            {
+                case GazeBackbone.GazeMobileOne:
+                case GazeBackbone.GazeMobileNetV2:
+                case GazeBackbone.GazeResNet34:
+                    return new[] { 7, 8, 9 };
+                default: // EyeMU
+                    return new[] { 6, 7, 8 };
+            }
+        }
+
         private void OnGUI()
         {
             //Show message on screen. Scale the font with resolution so the message (and the final RMSE)
@@ -546,6 +599,28 @@ namespace UnitEye
                 float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
                 _guiStyle.fontSize = Mathf.RoundToInt((_finished ? 16 : 36) * uiScale);
                 GUI.Label(new Rect(Screen.width / 2 - Screen.width * (_finished ? 0.15f : 0.1f), Screen.height / 2 - 20, 100, 60), $"{_guiMessage}", _guiStyle);
+            }
+
+            //During the head-movement stage, prompt the user to rotate their head so the head-pose features
+            //gain variance (see HeadRotationPreset). Shown as a banner near the top so it never covers the dot.
+            if (IsHeadRotationStage())
+            {
+                float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
+                _headRotationStyle.fontSize = Mathf.RoundToInt(26 * uiScale);
+                _headRotationStyle.fontStyle = FontStyle.Bold;
+                _headRotationStyle.alignment = TextAnchor.MiddleCenter;
+                _headRotationStyle.wordWrap = true;
+                _headRotationStyle.normal.textColor = Color.white;
+                var prompt = _isYielding
+                    ? "Keep looking at the dot —\nslowly turn your head:  left · right · up · down"
+                    : "Head-turn round: follow the dot, then turn your head when it stops";
+                var rect = new Rect(Screen.width * 0.1f, Screen.height * 0.04f, Screen.width * 0.8f, Screen.height * 0.16f);
+                //Dark backing so the prompt stays readable over whatever the scene renders behind it.
+                var prev = GUI.color;
+                GUI.color = new Color(0f, 0f, 0f, 0.5f);
+                GUI.DrawTexture(rect, Texture2D.whiteTexture);
+                GUI.color = prev;
+                GUI.Label(rect, prompt, _headRotationStyle);
             }
 
             var size = 36;
@@ -567,12 +642,10 @@ namespace UnitEye
                 }
                 GUI.color = oldColor;
 
-                // Draw calibration dot
-                GUI.DrawTexture(new Rect(_crossHairPos.x - 0.5f * size,
-                        _crossHairPos.y - 0.5f * size,
-                        size,
-                        size),
-                    calibrationDot);
+                // Draw the calibration dot, animated to hold the participant's attention: a gentle breathing
+                // pulse always, plus an expanding/fading ring during the dwell ("collect") phase so it is
+                // obvious WHEN to hold a steady fixation — the same cue the reference GazeCloud HTML uses.
+                DrawAnimatedDot(_crossHairPos, size, _isYielding);
 
                 // Draw countdown
                 if (_isYielding)
@@ -586,6 +659,37 @@ namespace UnitEye
                             size), String.Format("{0}s", Mathf.FloorToInt((_currentTime + 1) % 60)), _timerStyle);
                 }
             }
+        }
+
+        //True while the active preset is the head-movement stage (used to show the rotate-your-head prompt).
+        private bool IsHeadRotationStage() =>
+            _started && !_finished && _presets != null && _currentPreset >= 0 &&
+            _currentPreset < _presets.Count && _presets[_currentPreset].IsHeadMovement;
+
+        /// <summary>
+        /// Draws the calibration dot with an attention-holding animation: a small always-on "breathing"
+        /// scale, plus an expanding, fading ring behind it while <paramref name="collecting"/> (the dwell /
+        /// measurement phase). The animation is driven by Time.time so it runs at the same rate regardless
+        /// of frame rate. Restores GUI.color before returning.
+        /// </summary>
+        private void DrawAnimatedDot(Vector2 pos, float baseSize, bool collecting)
+        {
+            var oldColor = GUI.color;
+
+            //Expanding, fading pulse ring during the collect/dwell phase — the "hold your fixation here" cue.
+            if (collecting)
+            {
+                float phase = Mathf.Repeat(Time.time * PulseHz, 1f);   // 0..1 each pulse
+                float ringSize = baseSize * (1f + phase * 1.6f);
+                GUI.color = new Color(oldColor.r, oldColor.g, oldColor.b, (1f - phase) * 0.55f);
+                GUI.DrawTexture(new Rect(pos.x - 0.5f * ringSize, pos.y - 0.5f * ringSize, ringSize, ringSize), calibrationDot);
+            }
+
+            //Gentle breathing of the dot itself so it keeps drawing the eye while it moves.
+            float breathe = 1f + 0.12f * Mathf.Sin(Time.time * 2f * Mathf.PI * PulseHz);
+            float dotSize = baseSize * breathe;
+            GUI.color = oldColor;
+            GUI.DrawTexture(new Rect(pos.x - 0.5f * dotSize, pos.y - 0.5f * dotSize, dotSize, dotSize), calibrationDot);
         }
     }
 }

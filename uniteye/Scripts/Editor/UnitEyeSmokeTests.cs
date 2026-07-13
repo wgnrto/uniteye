@@ -36,6 +36,7 @@ public static class UnitEyeSmokeTests
             TestTrainerOnSyntheticData();
             TestSpatiallyBalancedCalibrationSamples();
             TestFeatureAugmentation();
+            TestHeadRotationPreset();
             TestSimpleMLP();
             TestGazeGridQuantizer();
             TestOneEuroFilter();
@@ -297,7 +298,15 @@ public static class UnitEyeSmokeTests
             new[] { 5f, 50f, 5f },
         };
         var targets = new[] { 0.1f, 0.5f, 0.9f };
-        var disabled = new CalibrationFeatureAugmentationSettings();
+
+        //Feature augmentation is now the DEFAULT calibration approach: a freshly constructed settings object
+        //must be enabled so calibration augments unless the user deliberately turns it off.
+        Check(new CalibrationFeatureAugmentationSettings().enabled,
+            "Feature augmentation should be enabled by default");
+        Check(CalibrationFeatureAugmentation.IsEnabled(new CalibrationFeatureAugmentationSettings()),
+            "Default feature augmentation settings should report as enabled");
+
+        var disabled = new CalibrationFeatureAugmentationSettings { enabled = false };
         Check(ReferenceEquals(CalibrationFeatureAugmentation.Augment(features, disabled), features),
             "Disabled augmentation should leave training features unchanged");
 
@@ -326,6 +335,46 @@ public static class UnitEyeSmokeTests
         Check(augmented[features.Length][2] == features[0][2],
             "Zero-variance features should not receive synthetic jitter");
 
+        //Extra head-pose jitter: a head-pose slot with zero captured variance still receives synthetic
+        //jitter when named (so the fit is not tied to the single calibration head pose), while an unnamed
+        //zero-variance feature stays fixed and the original (copy 0) samples are never jittered.
+        var headSettings = new CalibrationFeatureAugmentationSettings
+        {
+            enabled = true,
+            copiesPerSample = 1,
+            standardDeviationScale = 0.1f,
+            maximumStandardDeviations = 2f,
+            headPoseJitterDegrees = 3f,
+            seed = 17,
+            headPoseFeatureIndices = new[] { 1 }, // feature 1 is the "head-pose" slot; feature 2 is not
+        };
+        var headFeatures = new[]
+        {
+            new[] { 1f, 5f, 7f },
+            new[] { 3f, 5f, 7f },
+            new[] { 5f, 5f, 7f },
+        };
+        var headAug = CalibrationFeatureAugmentation.Augment(headFeatures, headSettings);
+        var headRepeat = CalibrationFeatureAugmentation.Augment(headFeatures, headSettings);
+        Check(headAug.Length == headFeatures.Length * 2, "Head-pose augmentation should still add the requested copies");
+        var anyHeadJitter = false;
+        for (var i = 0; i < headFeatures.Length; i++)
+        {
+            Check(headAug[i][1] == headFeatures[i][1], "The original (copy 0) samples must never be jittered");
+            var copyIndex = headFeatures.Length + i;
+            if (Mathf.Abs(headAug[copyIndex][1] - headFeatures[i][1]) > 1e-6f)
+                anyHeadJitter = true;
+            //Bound = proportional (0 for a zero-variance feature) + (jitterDegrees in radians) * maxStd.
+            //Head-pose features are radians, so the 3-degree jitter is converted before being applied.
+            Check(Mathf.Abs(headAug[copyIndex][1] - headFeatures[i][1]) <= 3f * Mathf.Deg2Rad * 2f + 1e-4f,
+                "Head-pose jitter must stay within its bound");
+            Check(headAug[copyIndex][2] == headFeatures[i][2],
+                "An unnamed zero-variance feature must not receive head-pose jitter");
+            Check(headAug[copyIndex][1] == headRepeat[copyIndex][1],
+                "Head-pose jitter should be deterministic for a fixed seed");
+        }
+        Check(anyHeadJitter, "A named zero-variance head-pose feature should receive synthetic jitter");
+
         var (ridgeFeatures, yX, yY) = MakeSyntheticData(500, new System.Random(31), noise: 0.005f);
         var result = RidgeCalibrationTrainer.Train(ridgeFeatures, yX, yY, 10f, 10f,
             rng: new System.Random(7), augmentation: settings);
@@ -333,6 +382,26 @@ public static class UnitEyeSmokeTests
             "Ridge augmentation must not duplicate the reported train or holdout counts");
         Check(result.XRmse < 0.4f && result.YRmse < 0.4f,
             "Ridge feature jitter should retain clean synthetic-data accuracy");
+    }
+
+    private static void TestHeadRotationPreset()
+    {
+        //Ordinary presets are not a head-movement stage; the new preset is, and dwells at its waypoints.
+        Check(!new CornerPreset(20f).IsHeadMovement, "Ordinary presets must not be flagged as head-movement");
+
+        var preset = new HeadRotationPreset(20f, 5f, 0.08f);
+        Check(preset.IsHeadMovement, "HeadRotationPreset should be a head-movement stage");
+        Check(preset.StopAtWaypoints, "HeadRotationPreset should dwell at its waypoints");
+        Check(Mathf.Approximately(preset.DwellSeconds, 5f), "HeadRotationPreset should honor its dwell seconds");
+        //The dwell floor keeps a too-short request usable for a full head roll.
+        Check(Mathf.Approximately(new HeadRotationPreset(20f, 0.5f).DwellSeconds, 2f),
+            "HeadRotationPreset should clamp the dwell to a sensible floor");
+
+        //centre approach + centre dwell + four corners + closing centre. The calibration dwells at
+        //points[1..n-2], i.e. the centre and the four corners, which is the head-pose coverage this stage
+        //is for. The head-pose feature indices the calibration jitters must match the runner layouts.
+        var points = preset.GetPoints();
+        Check(points.Count == 7, "HeadRotationPreset should produce centre + four corners with approach/close points");
     }
 
     private static float[][] ToArray(List<float[]> list) => list.ToArray();

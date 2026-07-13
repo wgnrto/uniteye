@@ -38,5 +38,16 @@ namespace UnitEye
         /// Seconds to hold a fixation target. Continuous presets override StopAtWaypoints instead.
         /// </summary>
         public virtual float DwellSeconds => 2f;
+
+        /// <summary>
+        /// Whether this preset is the HEAD-MOVEMENT stage: the dot dwells while the user is prompted to
+        /// slowly rotate their head, so the SAME screen target is captured across a range of head poses.
+        /// Head yaw/pitch/roll are model features but are otherwise captured at a single still pose (near-
+        /// zero variance, so the fit ignores them); this stage gives them leverage so the calibration can
+        /// compensate for head movement during use. The calibration shows the rotate-your-head prompt for
+        /// these presets and exempts their (intentionally high-variance) samples from the corner stability
+        /// rejection. False for ordinary gaze presets.
+        /// </summary>
+        public virtual bool IsHeadMovement => false;
     }
 }
