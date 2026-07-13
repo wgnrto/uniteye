@@ -25,6 +25,10 @@ namespace UnitEye
 
         //Frame rate the pixels-per-frame `speed` tuning assumed (same reference EaseSmoothing/KalmanFilter use).
         private const float ReferenceFrameRate = 30f;
+        //Prevents zero-variance fixation features from producing undefined z-scores.
+        private const double MinimumVarianceFloor = 1e-8;
+        //Keeps spatial resampling reproducible across the Ridge and MLP calibration paths.
+        private const int SpatialBalancingSeed = 12345;
 
         private HomulerGaze _gaze;
 
@@ -471,18 +475,17 @@ namespace UnitEye
                         variance[feature] += delta * delta;
                     }
                 for (var feature = 0; feature < featureCount; feature++)
-                    //The variance floor prevents a perfectly stable feature from dividing by zero.
-                    variance[feature] = Math.Max(1e-8, variance[feature] / group.Count);
+                    variance[feature] = Math.Max(MinimumVarianceFloor, variance[feature] / group.Count);
 
                 foreach (var index in group)
                 {
-                    double meanZSquared = 0;
+                    double sumZSquared = 0;
                     for (var feature = 0; feature < featureCount; feature++)
                     {
                         var delta = _xData[index][feature] - mean[feature];
-                        meanZSquared += delta * delta / variance[feature];
+                        sumZSquared += delta * delta / variance[feature];
                     }
-                    if (Math.Sqrt(meanZSquared / featureCount) > cornerOutlierZScore)
+                    if (Math.Sqrt(sumZSquared / featureCount) > cornerOutlierZScore)
                     {
                         keep[index] = false;
                         rejected++;
@@ -507,7 +510,7 @@ namespace UnitEye
                     "Increase Corner Dwell Seconds, lower Minimum Corner Samples, or relax Corner Outlier Z Score.");
 
             var selected = RidgeCalibrationTrainer.SpatiallyBalancedIndices(
-                acceptedX, acceptedY, new System.Random(12345));
+                acceptedX, acceptedY, new System.Random(SpatialBalancingSeed));
             features = new float[selected.Length][];
             targetsX = new float[selected.Length];
             targetsY = new float[selected.Length];

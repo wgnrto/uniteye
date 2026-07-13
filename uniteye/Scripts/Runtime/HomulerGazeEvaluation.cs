@@ -53,6 +53,8 @@ namespace UnitEye
         private bool _hasRidgeModel;
 
         private enum ScreenRegion { Corner, Edge, Center }
+        private const float RegionBoundaryThreshold = 1f / 3f;
+        private const float RegionBoundaryUpperThreshold = 1f - RegionBoundaryThreshold;
 
         #endregion
 
@@ -350,8 +352,8 @@ namespace UnitEye
         {
             var x = target.x / Screen.width;
             var y = target.y / Screen.height;
-            var horizontalEdge = x <= 1f / 3f || x >= 2f / 3f;
-            var verticalEdge = y <= 1f / 3f || y >= 2f / 3f;
+            var horizontalEdge = x <= RegionBoundaryThreshold || x >= RegionBoundaryUpperThreshold;
+            var verticalEdge = y <= RegionBoundaryThreshold || y >= RegionBoundaryUpperThreshold;
             if (horizontalEdge && verticalEdge) return ScreenRegion.Corner;
             return horizontalEdge || verticalEdge ? ScreenRegion.Edge : ScreenRegion.Center;
         }

@@ -12,7 +12,9 @@ namespace UnitEye
     public static class RidgeCalibrationTrainer
     {
         public static readonly float[] DefaultLambdas = { 0.01f, 0.05f, 0.1f, 1.0f, 5.0f, 10.0f };
+        /// <summary>Three cells per axis distinguish corners, edges, and centre without sparse bins.</summary>
         public const int SpatialBalanceCells = 3;
+        /// <summary>Caps each cell at 250 samples to bound training time while retaining fixation data.</summary>
         public const int MaxSamplesPerSpatialCell = 250;
 
         public class Result
