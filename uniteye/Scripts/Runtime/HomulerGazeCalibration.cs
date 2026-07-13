@@ -471,6 +471,7 @@ namespace UnitEye
                         variance[feature] += delta * delta;
                     }
                 for (var feature = 0; feature < featureCount; feature++)
+                    //The variance floor prevents a perfectly stable feature from dividing by zero.
                     variance[feature] = Math.Max(1e-8, variance[feature] / group.Count);
 
                 foreach (var index in group)
@@ -502,7 +503,8 @@ namespace UnitEye
                 acceptedTargets.Add(_yData[i]);
             }
             if (acceptedFeatures.Count == 0)
-                throw new InvalidOperationException("No valid calibration samples remain after corner quality checks.");
+                throw new InvalidOperationException("No valid calibration samples remain after corner quality checks. " +
+                    "Increase Corner Dwell Seconds, lower Minimum Corner Samples, or relax Corner Outlier Z Score.");
 
             var selected = RidgeCalibrationTrainer.SpatiallyBalancedIndices(
                 acceptedX, acceptedY, new System.Random(12345));

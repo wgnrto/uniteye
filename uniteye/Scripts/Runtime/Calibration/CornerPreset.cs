@@ -60,6 +60,7 @@ namespace UnitEye
                 });
             }
 
+            //One additional slot closes the final pass by returning to the starting target.
             var points = new List<Vector2>(pass.Count * visits + 1);
             for (var visit = 0; visit < visits; visit++)
                 points.AddRange(pass);

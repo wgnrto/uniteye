@@ -287,7 +287,7 @@ namespace UnitEye
             {
                 var mlpCorner = CalculateRMSE(_predMLPData, ScreenRegion.Corner);
                 var ridgeCorner = CalculateRMSE(_predRidgeData, ScreenRegion.Corner);
-                var best = CombinedError(mlpCorner) <= CombinedError(ridgeCorner)
+                var best = EuclideanError(mlpCorner) <= EuclideanError(ridgeCorner)
                     ? Calibrations.MLCalibration : Calibrations.RidgeRegression;
                 var selection = $"Best corner model: {best}.";
                 if (applyBestCornerModel)
@@ -343,7 +343,7 @@ namespace UnitEye
                 (Mathf.Sqrt(errorX / included), Mathf.Sqrt(errorY / included));
         }
 
-        private static float CombinedError((float x, float y) error)
+        private static float EuclideanError((float x, float y) error)
             => Mathf.Sqrt(error.x * error.x + error.y * error.y);
 
         private static ScreenRegion ClassifyRegion(Vector2 target)

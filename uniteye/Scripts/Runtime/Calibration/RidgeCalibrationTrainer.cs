@@ -86,7 +86,7 @@ namespace UnitEye
             var targetCount = 0;
             foreach (var bucket in buckets)
                 targetCount = Math.Max(targetCount, bucket.Count);
-            targetCount = Math.Min(Math.Max(1, maxSamplesPerCell), targetCount);
+            targetCount = Clamp(targetCount, 1, maxSamplesPerCell);
 
             var indices = new List<int>(buckets.Count * targetCount);
             foreach (var bucket in buckets)
@@ -110,12 +110,18 @@ namespace UnitEye
 
             for (var i = 0; i < targetsX.Count; i++)
             {
-                var x = Math.Max(0, Math.Min(SpatialBalanceCells - 1, (int)(targetsX[i] * SpatialBalanceCells)));
-                var y = Math.Max(0, Math.Min(SpatialBalanceCells - 1, (int)(targetsY[i] * SpatialBalanceCells)));
+                var x = ClampToCellIndex(targetsX[i]);
+                var y = ClampToCellIndex(targetsY[i]);
                 buckets[y * SpatialBalanceCells + x].Add(i);
             }
             return buckets;
         }
+
+        private static int ClampToCellIndex(float coordinate)
+            => Clamp((int)(coordinate * SpatialBalanceCells), 0, SpatialBalanceCells - 1);
+
+        private static int Clamp(int value, int minimum, int maximum)
+            => Math.Max(minimum, Math.Min(maximum, value));
 
         private static void Shuffle<T>(IList<T> values, Random rng)
         {
