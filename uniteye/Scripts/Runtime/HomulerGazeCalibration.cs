@@ -15,6 +15,8 @@ namespace UnitEye
     /// Therefore, uncalibrated gaze location is unprecise on desktop computers.
     /// Multiple calibration presets are used in this class to ensure as many areas as possible from the screen are used for training.
     /// </summary>
+    // HomulerGaze consumes the provider sample in LateUpdate at the default order. Run afterwards so
+    // calibration associates each target with that frame's gaze/features, never the prior frame's values.
     [DefaultExecutionOrder(100)]
     public class HomulerGazeCalibration : MonoBehaviour
     {

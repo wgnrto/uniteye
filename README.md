@@ -157,7 +157,7 @@ Settings: the evaluation dot texture, the per-location `Duration` (only the midd
 
 ![](./uniteye/Documentation~/Images/EvaluationScreen.png)
 
-Left-click to start and look at each dot until it moves; press `S` to stop early. The RMSE per calibration type (cm) is shown and written to the CSV for runtime evaluations.
+Left-click to start and look at each dot until it moves; press `S` to stop early. Every grid target is sampled, using only fresh camera frames. The reported per-axis RMSE (cm) uses the same plain metric as calibration holdout evaluation and is independent of the visual dot size.
 
 ## Area Of Interest
 The AOI system tracks when regions/objects are looked at. [`AOIManager`](uniteye/Scripts/Runtime/AOI/AOIManager.cs) holds the tracked AOIs and offers add/remove/get; add AOIs via the [UnitEyeAPI](#uniteyeapi), by reference, or by inheritance (see [`GazeGameAPI.cs`](uniteye/Scripts/Runtime/GazeGameAPI.cs) / [`GazeGame.cs`](uniteye/Scripts/Runtime/GazeGame.cs)). [`ExampleAOIs.cs`](uniteye/Scripts/Runtime/AOI/ExampleAOIs.cs) shows every shape.

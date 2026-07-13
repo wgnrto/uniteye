@@ -10,6 +10,8 @@ namespace UnitEye
     /// This component is responsible for evaluating the UnitEye eye tracking.
     /// The user is supposed to look at each appearing dot.
     /// </summary>
+    // HomulerGaze consumes the provider sample in LateUpdate at the default order. Run afterwards so
+    // evaluation scores the fresh sample that corresponds to the displayed target.
     [DefaultExecutionOrder(100)]
     public class HomulerGazeEvaluation : MonoBehaviour
     {
@@ -135,6 +137,8 @@ namespace UnitEye
             _targetLocation = new Vector2(_points[0].x, _points[0].y);
         }
 
+        // This must run after HomulerGaze.LateUpdate: both the fresh-sample sequence and the provider
+        // values are updated there. Running in Update could pair a newly moved target with stale gaze.
         void LateUpdate()
         {
             //If finished and leftclick, signal Returned (new Input System, matching HomulerGazeCalibration)
@@ -189,10 +193,11 @@ namespace UnitEye
                         //test. No SmoothGazeLocation here either: it mutated the SAME stateful filter
                         //instances the live pipeline uses (three interleaved signals per frame corrupted
                         //both the on-screen gaze and these numbers). Samples are gated like the
-                        //calibration capture: no face / blinking frames pair unreliable features with the
-                        //dot's position and skew the RMSE.
+                        //Calibration capture: no-face frames pair stale features with the dot's position
+                        //and skew the RMSE. Do not gate on the EAR blink heuristic: downward gaze can
+                        //look like a blink, and calibration intentionally retains those edge samples.
                         var provider = _gaze.Provider;
-                        if (provider != null && provider.IsFacePresent && !provider.IsBlinking &&
+                        if (provider != null && provider.IsFacePresent &&
                             _gaze.GazeSampleSequence > 0 &&
                             _gaze.GazeSampleSequence != _lastCapturedGazeSample)
                         {
@@ -208,14 +213,17 @@ namespace UnitEye
                 else
                 {
                     //Reset for next point
-                    _timeRemaining = duration;
                     _currentPoint++;
-                    _targetLocation = new Vector2(_points[_currentPoint].x, _points[_currentPoint].y);
+                    if (_currentPoint < _points.Count)
+                    {
+                        _timeRemaining = duration;
+                        _targetLocation = new Vector2(_points[_currentPoint].x, _points[_currentPoint].y);
+                    }
                 }
             }
 
             //If done with all the points or if we want to stop early, finish evaluation
-            if (_currentPoint == _points.Count - 1 || _earlyStop)
+            if (_currentPoint >= _points.Count || _earlyStop)
             {
                 _isTimerRunning = false;
                 _finished = true;
@@ -243,7 +251,7 @@ namespace UnitEye
             string message = $"Evaluation done.\nScreen size: {Functions.PixelsToMm(Screen.width) * 0.1f}x{Functions.PixelsToMm(Screen.height) * 0.1f}cm. Unity's built in DPI value might be wrong!\n";
             ReturnMessage = "";
 
-            //All samples gated out (face never tracked / constant blinking) -> no data to score.
+            //All samples gated out (face never tracked) -> no data to score.
             if (_targetData.Count == 0)
             {
                 ReturnMessage = "Evaluation captured no valid samples (was the face tracked?). ";
@@ -271,12 +279,8 @@ namespace UnitEye
         }
 
         /// <summary>
-        /// Root-mean-square gaze error in pixels, per axis.
-        /// Metric note: a hit that lands within the calibration dot's radius counts as zero error (you
-        /// cannot be more accurate than the dot itself), but that sample IS still counted in the average.
-        /// So this is "mean error treating within-dot hits as perfect", NOT a plain RMSE — it reads lower
-        /// than a plain RMSE by design. Change the denominator to the above-threshold count if you instead
-        /// want the RMSE over only the misses.
+        /// Root-mean-square gaze error in pixels, per axis. This intentionally matches the calibration
+        /// holdout metric, independent of the visual dot size.
         /// Uses the passed-in lists (not the _targetData field) so pred/target lengths stay in lockstep.
         /// </summary>
         private (float x, float y) CalculateRMSE(List<Vector2> predData, List<Vector2> targetData)
@@ -286,19 +290,12 @@ namespace UnitEye
                 return (0f, 0f);
 
             float errorX = 0.0f, errorY = 0.0f;
-            float radiusSq = (dotSize * 0.5f) * (dotSize * 0.5f);
             for (int i = 0; i < count; i++)
             {
                 float dx = predData[i].x - targetData[i].x;
                 float dy = predData[i].y - targetData[i].y;
-                float errX = dx * dx;
-                float errY = dy * dy;
-
-                // Since the dot is a circle, only count the error beyond its radius
-                if (errX > radiusSq)
-                    errorX += errX;
-                if (errY > radiusSq)
-                    errorY += errY;
+                errorX += dx * dx;
+                errorY += dy * dy;
             }
 
             return (Mathf.Sqrt(errorX / count), Mathf.Sqrt(errorY / count));
