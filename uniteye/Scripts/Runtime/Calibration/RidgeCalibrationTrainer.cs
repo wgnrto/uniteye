@@ -284,6 +284,7 @@ namespace UnitEye
             {
                 double squaredErrorSum = 0.0;
                 long errorCount = 0;
+                //Each candidate sees identical deterministic jitter, so lambda selection compares models fairly.
                 var augmentationRandom = augmentation != null ? new Random(augmentation.seed) : null;
 
                 foreach (var (xFit, yFit, xVal, yVal) in foldSplits)
