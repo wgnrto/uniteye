@@ -26,7 +26,9 @@ namespace UnitEye
         private bool _blinking;
         private float _distance;
 
-        private Rect gazeUI = new Rect(Screen.height * 0.05f, Screen.height * 0.08f, Screen.width * 0.5f, Screen.height * 0.82f);
+        //Taller than before (0.96 vs 0.82) and higher up so the Calibration profiles panel at the bottom is
+        //inside the window instead of clipped past its lower edge. Draggable at runtime.
+        private Rect gazeUI = new Rect(Screen.height * 0.05f, Screen.height * 0.02f, Screen.width * 0.5f, Screen.height * 0.96f);
 
         private GUIStyle style = new GUIStyle();
 
@@ -403,7 +405,9 @@ namespace UnitEye
             if (showGazeUI)
             {
                 EnsureGazeUIStyles(Screen.width, Screen.height);
-                if (GUI.Button(new Rect(Screen.height * 0.05f, Screen.height - Screen.height * 0.1f, Screen.width * 0.1f, Screen.height * 0.05f), $"{(gazeUIActivated ? "Hide" : "Show")} Gaze UI", _toggleStyle))
+                //Top-right, clear of the (now taller) window on the left — and far easier to find than the
+                //old bottom-left spot, which users routinely missed.
+                if (GUI.Button(new Rect(Screen.width - Screen.width * 0.12f, Screen.height * 0.02f, Screen.width * 0.11f, Screen.height * 0.045f), $"{(gazeUIActivated ? "Hide" : "Show")} Gaze UI", _toggleStyle))
                     gazeUIActivated = !gazeUIActivated;
             }
 
@@ -709,7 +713,8 @@ namespace UnitEye
             var width = Screen.width;
             gazeUI.width = width * 0.5f;
             var height = Screen.height;
-            gazeUI.height = height * 0.82f;
+            //Tall enough to contain the Calibration profiles group (its controls sit at ~0.90 of this height).
+            gazeUI.height = height * 0.96f;
 
             //Opaque backdrop: Unity's IMGUI window is semi-transparent by default, so the live webcam feed
             //behind it shows through and washes out the text (unreadable regardless of font size). Paint a
