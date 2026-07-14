@@ -164,9 +164,14 @@ namespace UnitEye
             return ta != null ? ta.text : null;
         }
 
+        //Characters that must never appear in a profile-entry file name. Explicit (not
+        //Path.GetInvalidFileNameChars) so the rule is identical on every platform — on Windows a ':' would
+        //otherwise silently write an NTFS alternate data stream ("Reg_X:evil.json").
+        private static readonly char[] ReservedNameChars = { ':', '*', '?', '"', '<', '>', '|' };
+
         /// <summary>
-        /// A profile entry key must be "&lt;knownSubfolder&gt;/&lt;file&gt;.json" with no path traversal, so a
-        /// crafted profile can never write outside the calibration folder.
+        /// A profile entry key must be "&lt;knownSubfolder&gt;/&lt;file&gt;.json" with no path traversal and no
+        /// reserved characters, so a crafted profile can never write outside the calibration folder.
         /// </summary>
         public static bool IsSafeRelativePath(string relative)
         {
@@ -175,6 +180,8 @@ namespace UnitEye
             if (parts.Length != 2) return false;
             if (Array.IndexOf(Subfolders, parts[0]) < 0) return false;
             if (parts[1].Length == 0 || parts[1].Contains("..") || !parts[1].EndsWith(Extension, StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (parts[1].IndexOfAny(ReservedNameChars) >= 0)
                 return false;
             return true;
         }

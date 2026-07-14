@@ -70,6 +70,7 @@ namespace UnitEye
         private bool _hasRecentGaze;
         private float _recenterArmedUntil = -1f;
         private const float RecenterArmSeconds = 1.5f;
+        private GUIStyle _recenterStyle;
         /// <summary>True while a drift re-center is counting down (a marker is shown at screen center).</summary>
         public bool IsRecentering => _recenterArmedUntil > 0f;
 
@@ -129,7 +130,7 @@ namespace UnitEye
         public void SetBackbone(GazeBackbone backbone)
         {
             //Refuse to swap the model while a calibration/evaluation is running: the backbones produce
-            //DIFFERENT feature-vector lengths (EyeMU 12 vs GazeEstimation 8), so a mid-run switch would mix
+            //DIFFERENT feature-vector lengths (EyeMU 15 vs GazeEstimation 11), so a mid-run switch would mix
             //jagged rows into the capture (training then throws inside the coroutine) and the result would
             //be saved under the NEW backbone's calibration file, silently corrupting it.
             if ((_calibrationScript != null && _calibrationScript.enabled) ||
@@ -144,6 +145,9 @@ namespace UnitEye
             //Load this backbone's own calibration (per-backbone files). If it hasn't been calibrated yet,
             //the models load as null and RefineGazeLocation falls back to raw gaze until you calibrate.
             _modelStore.Load(_calibrations, _gazeBackbone);
+            //A drift offset captured against the OLD backbone's calibrated gaze is meaningless for the new
+            //model's output — clear it rather than silently shifting the new gaze by a stale correction.
+            ClearDrift();
         }
 
         [System.NonSerialized]
@@ -492,11 +496,16 @@ namespace UnitEye
                     GUI.color = prev;
                     GUI.DrawTexture(new Rect(center.x - size * 0.5f, center.y - size * 0.5f, size, size), dot);
                 }
-                style.fontSize = Mathf.RoundToInt(24f * uiScale);
-                style.normal.textColor = Color.white;
-                style.alignment = TextAnchor.MiddleCenter;
+                //Dedicated style: mutating the shared `style` here leaked MiddleCenter/white into the AOI
+                //label below (it only resets fontSize), restyling it after the first re-center.
+                _recenterStyle ??= new GUIStyle { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+                _recenterStyle.fontSize = Mathf.RoundToInt(24f * uiScale);
+                _recenterStyle.normal.textColor = Color.white;
+                //Clamp: if the face is lost while armed, the capture waits for the next tracked frame and
+                //the raw countdown would run negative ("(-3)") — hold at 0 instead.
+                int remaining = Mathf.Max(0, Mathf.CeilToInt(_recenterArmedUntil - Time.unscaledTime));
                 GUI.Label(new Rect(center.x - Screen.width * 0.2f, center.y + size, Screen.width * 0.4f, size),
-                    $"Look at the dot to re-center… ({Mathf.CeilToInt(_recenterArmedUntil - Time.unscaledTime)})", style);
+                    $"Look at the dot to re-center… ({remaining})", _recenterStyle);
                 GUI.color = prev;
             }
 
@@ -604,9 +613,9 @@ namespace UnitEye
             //Unpause CSVLogging
             PauseCSVLogging = true;
 
-            //Attach calibration to same gameObject
-            _calibrationScript.enabled = true;
-
+            //Configure BEFORE enabling: OnEnable rebuilds the presets from the current parameters, so
+            //assigning padding/rounds after `enabled = true` (the old order) meant a repeat calibration in
+            //the same session ran with the previous run's preset geometry.
             //Set _calibrations to none for a bit of performance gain
             _calibrationScript.calibrationType = _calibrations;
             _calibrations = Calibrations.None;
@@ -617,6 +626,9 @@ namespace UnitEye
             _calibrationScript.speed = speed;
             _calibrationScript.padding = padding;
             _calibrationScript.maxRoundsPerPreset = rounds;
+
+            //Attach calibration to same gameObject
+            _calibrationScript.enabled = true;
         }
 
         /// <summary>

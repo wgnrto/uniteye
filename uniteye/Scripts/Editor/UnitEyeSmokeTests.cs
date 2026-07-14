@@ -811,6 +811,8 @@ public static class UnitEyeSmokeTests
         Check(!CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/../../evil.json"), "Nested traversal is rejected");
         Check(!CalibrationProfileStore.IsSafeRelativePath("Unknown/x.json"), "An unknown subfolder is rejected");
         Check(!CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/x.txt"), "A non-json profile entry is rejected");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/Reg_X:evil.json"),
+            "Reserved name characters (NTFS alternate-data-stream ':') are rejected");
 
         //Sanitize turns a name into a safe file stem.
         Check(CalibrationProfileStore.Sanitize("MC-14-07-2026") == "MC-14-07-2026", "A clean profile name is unchanged");

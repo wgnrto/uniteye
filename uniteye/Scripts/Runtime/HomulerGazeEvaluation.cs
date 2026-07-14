@@ -27,6 +27,11 @@ namespace UnitEye
         private GUIStyle _heatmapStyle = new GUIStyle();
         //Reused 1x1 white texture for the heatmap connector lines.
         private static Texture2D _lineTex;
+        //Per-target heatmap entries, aggregated ONCE when the evaluation finishes. OnGUI runs 2+ passes per
+        //frame for as long as the results screen is up, so aggregating there allocated two dictionaries and
+        //re-grouped every sample on every pass.
+        private readonly List<(Vector2 target, Vector2 mean, Color color)> _heatmapEntries =
+            new List<(Vector2 target, Vector2 mean, Color color)>();
 
         private List<Vector2> _points = new List<Vector2>();
         private List<CalibrationPreset> _presets;
@@ -114,11 +119,16 @@ namespace UnitEye
             _predRidgeData.Clear();
             _targetData.Clear();
             _targetRegions.Clear();
+            _heatmapEntries.Clear();
             _guiMessage = "Click to start evaluation" + (returnAfter ? "\nRight click to cancel and return" : "");
         }
 
         void Start()
         {
+            //OnGUI here draws only labels/textures (no GUILayout); skipping the layout pass halves the
+            //per-frame IMGUI overhead during a run and while the results/heatmap screen is up.
+            useGUILayout = false;
+
             //Get Gaze reference
             _gaze = GetComponent<HomulerGaze>();
 
@@ -253,6 +263,9 @@ namespace UnitEye
 
                 //Calculate errors
                 _guiMessage = Evaluate();
+
+                //Aggregate the per-target heatmap once, here — not in OnGUI, which repeats 2+ passes/frame.
+                BuildHeatmapEntries();
 
                 //Append return hint to GUI
                 if (returnAfter)
@@ -439,8 +452,13 @@ namespace UnitEye
         /// mean), colored green/amber/red by error as a fraction of the screen diagonal. Uses the
         /// RidgeRegression predictions when available, else the MLP's — i.e. what the calibration produced.
         /// </summary>
-        private void DrawResultsHeatmap()
+        /// <summary>
+        /// Aggregates the evaluation samples into per-target (target, mean gaze, error color) entries.
+        /// Called once when the evaluation finishes; DrawResultsHeatmap then just renders the cached list.
+        /// </summary>
+        private void BuildHeatmapEntries()
         {
+            _heatmapEntries.Clear();
             var predictions = _hasRidgeModel ? _predRidgeData : (_hasMlpModel ? _predMLPData : null);
             if (predictions == null || predictions.Count == 0 || _targetData.Count == 0)
                 return;
@@ -458,16 +476,25 @@ namespace UnitEye
             }
 
             float diagonal = Mathf.Sqrt((float)Screen.width * Screen.width + (float)Screen.height * Screen.height);
+            foreach (var pair in sum)
+            {
+                var mean = pair.Value / counts[pair.Key];
+                _heatmapEntries.Add((pair.Key, mean, ErrorColor(Vector2.Distance(mean, pair.Key) / diagonal)));
+            }
+        }
+
+        private void DrawResultsHeatmap()
+        {
+            if (_heatmapEntries.Count == 0)
+                return;
+
+            float diagonal = Mathf.Sqrt((float)Screen.width * Screen.width + (float)Screen.height * Screen.height);
             float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
             float marker = 12f * uiScale;
 
             var previousColor = GUI.color;
-            foreach (var pair in sum)
+            foreach (var (target, mean, color) in _heatmapEntries)
             {
-                var target = pair.Key;
-                var mean = pair.Value / counts[target];
-                var color = ErrorColor(Vector2.Distance(mean, target) / diagonal);
-
                 DrawLine(target, mean, color, Mathf.Max(2f, 3f * uiScale));
                 DrawMarker(target, marker, new Color(1f, 1f, 1f, 0.9f)); // where they were asked to look
                 DrawMarker(mean, marker * 0.9f, color);                  // where the gaze actually landed
@@ -502,6 +529,8 @@ namespace UnitEye
             if (_lineTex == null)
             {
                 _lineTex = new Texture2D(1, 1);
+                //Not tied to any scene/asset: survives scene loads and never shows up as a leaked asset.
+                _lineTex.hideFlags = HideFlags.HideAndDontSave;
                 _lineTex.SetPixel(0, 0, Color.white);
                 _lineTex.Apply();
             }

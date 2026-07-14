@@ -144,6 +144,10 @@ namespace UnitEye
             Returned = false;
             currentRound = 0;
             _guiMessage = "Follow the dot with your eyes!\nClick to start calibration";
+            //Append here (not only in Start) so repeat runs keep the cancel hint. LoadCalibration sets
+            //returnAfter BEFORE enabling.
+            if (returnAfter)
+                _guiMessage += "\nRight click to cancel and return";
             //Also reset the run-position state and DISCARD any samples from a previous (possibly
             //cancelled) run. Without this, a mid-preset cancel left _currentPoint pointing into a longer
             //preset (points[_currentPoint] then throws every frame once the short first preset is
@@ -162,13 +166,27 @@ namespace UnitEye
             _sampleFromHeadRotation.Clear();
             if (_presets != null)
             {
+                //REBUILD the presets, not just reset the position: Start() runs once per component, so a
+                //repeat calibration in the same play session otherwise kept the FIRST run's preset geometry
+                //and dwell times — inspector/API changes to padding, cornerVisits, cornerDwellSeconds,
+                //headRotationDwellSeconds or normalizedSafeMargin between runs were silently ignored.
+                //(LoadCalibration assigns its parameters before enabling, so the values here are current.)
+                BuildPresets();
                 _currentPreset = 0;
                 ResetPoints(0);
+                //Refresh the path line for the rebuilt first preset (path is the runtime instance once
+                //Start has run; _presets != null guarantees that).
+                if (path != null)
+                    DrawPath(points);
             }
         }
 
         void Start()
         {
+            //OnGUI here draws only labels/textures (no GUILayout); skipping the layout pass halves the
+            //per-frame IMGUI overhead during a run, which is exactly when frame pacing matters most.
+            useGUILayout = false;
+
             //Get HomulerGaze reference (features come from its platform gaze provider)
             _gaze = GetComponent<HomulerGaze>();
 
@@ -176,26 +194,9 @@ namespace UnitEye
             if (calibrationDot == null)
                 calibrationDot = (Texture2D)Resources.Load("CalibrationDot");
 
-            //If can return after calibration append string to gui
-            if (returnAfter)
-                _guiMessage += "\nRight click to cancel and return";
+            //(The returnAfter cancel hint is appended in OnEnable, which has already run.)
 
-            //Calibration presets. CornerPreset leads and DWELLS at the four corners + four edge midpoints
-            //(it's a StopAtWaypoints preset) so the extremes get sustained-fixation samples — without that
-            //the fit had almost no leverage at the corners and collapsed predictions toward the centre.
-            //HeadRotationPreset then dwells at the centre + corners while prompting the user to rotate their
-            //head, giving the head-pose features real variance so the fit compensates for head movement (see
-            //HeadRotationPreset / CalibrationPreset.IsHeadMovement). The ZigZag + wavy presets follow as
-            //continuous sweeps for full-screen coverage (no dwell). Dwell is decided per preset
-            //(StopAtWaypoints), not one global flag.
-            _presets = new List<CalibrationPreset>
-            {
-                new CornerPreset(padding, cornerVisits, cornerDwellSeconds, normalizedSafeMargin),
-                new HeadRotationPreset(padding, headRotationDwellSeconds, normalizedSafeMargin),
-                new ZigZagPreset(padding, true, 4),
-                new VerticalWavyPreset(padding),
-                new HorizontalWavyPreset(padding),
-            };
+            BuildPresets();
 
             //Master enable for dwelling; each preset's StopAtWaypoints then decides whether IT dwells.
             stopAfterPoints = true;
@@ -204,6 +205,28 @@ namespace UnitEye
             path = Instantiate(path, new Vector3(Screen.width/2, -Screen.height/2), Quaternion.identity, screen.transform);
 
             DrawPath(points);
+        }
+
+        /// <summary>
+        /// (Re)builds the calibration presets from the CURRENT parameters. CornerPreset leads and DWELLS at
+        /// the four corners + four edge midpoints (StopAtWaypoints) so the extremes get sustained-fixation
+        /// samples — without that the fit had almost no leverage at the corners and collapsed predictions
+        /// toward the centre. HeadRotationPreset then dwells at the centre + corners while prompting the
+        /// user to rotate their head, giving the head-pose features real variance so the fit compensates
+        /// for head movement (see HeadRotationPreset / CalibrationPreset.IsHeadMovement). The ZigZag + wavy
+        /// presets follow as continuous sweeps for full-screen coverage (no dwell). Called from Start and
+        /// from OnEnable on repeat runs, so parameter changes between runs take effect.
+        /// </summary>
+        private void BuildPresets()
+        {
+            _presets = new List<CalibrationPreset>
+            {
+                new CornerPreset(padding, cornerVisits, cornerDwellSeconds, normalizedSafeMargin),
+                new HeadRotationPreset(padding, headRotationDwellSeconds, normalizedSafeMargin),
+                new ZigZagPreset(padding, true, 4),
+                new VerticalWavyPreset(padding),
+                new HorizontalWavyPreset(padding),
+            };
         }
 
         private void ResetPoints(int currentPreset)
