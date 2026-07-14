@@ -118,6 +118,14 @@ namespace UnitEye
         //Reused pose input buffer (was a fresh float[4] every inference)
         private readonly float[] _poseBuffer = new float[4];
 
+        //Reused eye-image input tensors so inference doesn't allocate + free two ~192KB (1x128x128x3) GPU
+        //tensors every frame. TextureConverter.ToTensor writes into these pre-allocated tensors, the same
+        //reuse GazeEstimationRunner does with its single input tensor. Overwriting them next frame is safe:
+        //DownloadToArray() below forces the scheduled inference to complete before PerformInference returns,
+        //so the previous frame's inputs are done being read by the time we refill them.
+        private Tensor<float> _leftTensor;
+        private Tensor<float> _rightTensor;
+
         public HomulerEyeMURunner(FaceMeshSolution faceMesh)
         {
             _faceMesh = faceMesh;
@@ -132,6 +140,9 @@ namespace UnitEye
 
             _rightEyeTextureTensor.enableRandomWrite = true;
             _rightEyeTextureTensor.Create();
+
+            _leftTensor = new Tensor<float>(new TensorShape(1, IMG_SIZE, IMG_SIZE, 3));
+            _rightTensor = new Tensor<float>(new TensorShape(1, IMG_SIZE, IMG_SIZE, 3));
         }
 
         /// <summary>
@@ -167,15 +178,13 @@ namespace UnitEye
             //by looking at live gaze. The GPU crop geometry (bottom-left UV, left-eye horizontal flip) also
             //wants a live check — the eye-crop thumbnails (Show Eyecrops) should look identical to before.
             _leftEyeTextureTensor = PreprocessImage(LeftEyeTexture, _leftEyeTextureTensor, _eyeMUResource.preprocessCompute);
-            var leftTensor = new Tensor<float>(new TensorShape(1, IMG_SIZE, IMG_SIZE, 3));
-            TextureConverter.ToTensor(_leftEyeTextureTensor, leftTensor, _nhwcTransform);
+            TextureConverter.ToTensor(_leftEyeTextureTensor, _leftTensor, _nhwcTransform);
 
             _rightEyeTextureTensor = PreprocessImage(RightEyeTexture, _rightEyeTextureTensor, _eyeMUResource.preprocessCompute);
-            var rightTensor = new Tensor<float>(new TensorShape(1, IMG_SIZE, IMG_SIZE, 3));
-            TextureConverter.ToTensor(_rightEyeTextureTensor, rightTensor, _nhwcTransform);
+            TextureConverter.ToTensor(_rightEyeTextureTensor, _rightTensor, _nhwcTransform);
 
-            _worker.SetInput(INPUT_LEFT, leftTensor);
-            _worker.SetInput(INPUT_RIGHT, rightTensor);
+            _worker.SetInput(INPUT_LEFT, _leftTensor);
+            _worker.SetInput(INPUT_RIGHT, _rightTensor);
             _worker.SetInput(INPUT_CORNERS, corners);
             _worker.SetInput(INPUT_POSE, pose);
             _worker.Schedule();
@@ -192,9 +201,7 @@ namespace UnitEye
             NetworkOutput[0] = finalData[0] * Screen.width;
             NetworkOutput[1] = finalData[1] * Screen.height;
 
-            //Cleanup input tensors
-            leftTensor.Dispose();
-            rightTensor.Dispose();
+            //Cleanup the per-frame small input tensors (the eye-image tensors are reused, disposed in Dispose).
             corners.Dispose();
             pose.Dispose();
 
@@ -265,6 +272,11 @@ namespace UnitEye
         {
             _worker?.Dispose();
             _worker = null;
+
+            _leftTensor?.Dispose();
+            _leftTensor = null;
+            _rightTensor?.Dispose();
+            _rightTensor = null;
 
             ReleaseRT(LeftEyeTexture);
             ReleaseRT(RightEyeTexture);

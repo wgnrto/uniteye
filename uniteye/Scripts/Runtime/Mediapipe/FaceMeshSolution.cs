@@ -156,12 +156,22 @@ namespace Mediapipe.Unity.FaceMesh
 
         public float[] HeadGeom => new float[4] { HeadYaw, HeadPitch, HeadRoll, HeadArea };
 
-        public float[] EyeCorners => new float[] {
-            FaceLandmarks[263].X, FaceLandmarks[263].Y,
-            FaceLandmarks[362].X, FaceLandmarks[362].Y,
-            FaceLandmarks[33].X, FaceLandmarks[33].Y,
-            FaceLandmarks[133].X, FaceLandmarks[133].Y,
-        };
+        //Reused so the per-frame EyeMU input (HomulerEyeMURunner reads this every inference) allocates no
+        //float[8]. The consumer copies it straight into a tensor, so a shared buffer is safe (same as the
+        //runner's _poseBuffer). Caller reads this only when FaceLandmarks is populated (after ComputeEyes).
+        private readonly float[] _eyeCornersBuffer = new float[8];
+        public float[] EyeCorners
+        {
+            get
+            {
+                var b = _eyeCornersBuffer;
+                b[0] = FaceLandmarks[263].X; b[1] = FaceLandmarks[263].Y;
+                b[2] = FaceLandmarks[362].X; b[3] = FaceLandmarks[362].Y;
+                b[4] = FaceLandmarks[33].X;  b[5] = FaceLandmarks[33].Y;
+                b[6] = FaceLandmarks[133].X; b[7] = FaceLandmarks[133].Y;
+                return b;
+            }
+        }
 
         private void Start()
         {
