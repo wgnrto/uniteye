@@ -164,10 +164,13 @@ namespace UnitEye
         [SerializeField, Range(1e-10f, 1.0f)] public float Q = 1e-5f;
         [SerializeField, Range(1e-10f, 1.0f)] public float R = 1e-4f;
 
-        //Smooths rapid big movement
-        [SerializeField, Range(1e-10f, 0.05f)] public float beta = 0.001f;
-        //Smooths fixation jitter
-        [SerializeField, Range(1e-10f, 1.0f)] public float mincutoff = 0.001f;
+        //1€ filter speed coefficient: how much fast movement raises the cutoff (less lag while the gaze
+        //moves). The old default 0.001 barely adapted, so quick glances to the corners lagged far behind.
+        [SerializeField, Range(1e-10f, 0.05f)] public float beta = 0.007f;
+        //1€ filter minimum cutoff (Hz): the responsiveness floor while fixating. The old default 0.001 Hz
+        //(and even the old 0.05 slider ceiling) over-smoothed ~1000x — the dot could not reach a corner
+        //before the eye moved on, which reads as poor accuracy. ~1.0 Hz is the 1€ paper's pointing baseline.
+        [SerializeField, Range(1e-10f, 3.0f)] public float mincutoff = 1.0f;
         [SerializeField, Range(1e-10f, 10.0f)] public float dcutoff = 1.0f;
 
         //Hold the last gaze location while blinking instead of feeding unreliable eye crops through calibration/filtering
@@ -872,7 +875,7 @@ namespace UnitEye
                     GUI.Label(new Rect(width * 0.025f, height * 0.14f, width * 0.08f, height * 0.06f), $"Beta: {beta}", gazeUIStyleLabel);
                     beta = GUI.HorizontalSlider(new Rect(width * 0.11f, height * 0.15f, width * 0.3f, height * 0.02f), beta, minfloat, 0.05f, GUI.skin.horizontalSlider, gazeUIStyleHSThumb);
                     GUI.Label(new Rect(width * 0.025f, height * 0.17f, width * 0.08f, height * 0.06f), $"Mincutoff: {mincutoff}", gazeUIStyleLabel);
-                    mincutoff = GUI.HorizontalSlider(new Rect(width * 0.11f, height * 0.18f, width * 0.3f, height * 0.02f), mincutoff, minfloat, 0.05f, GUI.skin.horizontalSlider, gazeUIStyleHSThumb);
+                    mincutoff = GUI.HorizontalSlider(new Rect(width * 0.11f, height * 0.18f, width * 0.3f, height * 0.02f), mincutoff, minfloat, 3f, GUI.skin.horizontalSlider, gazeUIStyleHSThumb);
                     GUI.Label(new Rect(width * 0.025f, height * 0.20f, width * 0.08f, height * 0.06f), $"Dcutoff: {dcutoff}", gazeUIStyleLabel);
                     dcutoff = GUI.HorizontalSlider(new Rect(width * 0.11f, height * 0.21f, width * 0.3f, height * 0.02f), dcutoff, minfloat, 10f, GUI.skin.horizontalSlider, gazeUIStyleHSThumb);
                     oneEuroFilter.UpdateParams(60f, mincutoff, beta, dcutoff);

@@ -571,11 +571,11 @@ namespace UnitEye
 
         /// <summary>
         /// The indices of the head yaw/pitch/roll slots in the active backbone's feature vector, used to
-        /// aim the augmentation's extra head-pose jitter. EyeMU emits [embedding4, gaze2, headYaw, headPitch,
-        /// headRoll, headArea, w, h] so head pose is at 6/7/8; the direction backbones emit the polynomial
-        /// [yaw, pitch, yaw², pitch², yaw·pitch, yaw³, pitch³, headYaw, headPitch, headRoll, headArea] so it
-        /// is at 7/8/9. Head area is excluded (it is not a rotation). Kept in sync with HomulerEyeMURunner
-        /// .Features and GazeEstimationRunner.FillGazeFeatures.
+        /// aim the augmentation's extra head-pose jitter. EyeMU emits [embedding4, gaze polynomial (gx, gy,
+        /// gx², gy², gx·gy, gx³, gy³), headYaw, headPitch, headRoll, headArea] so head pose is at 11/12/13;
+        /// the direction backbones emit [yaw, pitch, yaw², pitch², yaw·pitch, yaw³, pitch³, headYaw, headPitch,
+        /// headRoll, headArea] so it is at 7/8/9. Head area is excluded (it is not a rotation). Kept in sync
+        /// with HomulerEyeMURunner.FillEyeMUFeatures and GazeEstimationRunner.FillGazeFeatures.
         /// </summary>
         private static int[] HeadPoseFeatureIndices(GazeBackbone backbone)
         {
@@ -586,7 +586,7 @@ namespace UnitEye
                 case GazeBackbone.GazeResNet34:
                     return new[] { 7, 8, 9 };
                 default: // EyeMU
-                    return new[] { 6, 7, 8 };
+                    return new[] { 11, 12, 13 };
             }
         }
 

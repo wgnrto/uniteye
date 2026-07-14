@@ -52,30 +52,59 @@ namespace UnitEye
         public float[] HeadGeom => _faceMesh.HeadGeom;
         #endregion
 
-        //Reused 12-feature buffer so the per-frame Features access allocates nothing (was a fresh
-        //List<float> + AddRange growth every frame). Layout: embedding(4), gaze(2), head geom(4),
-        //screen w/h — identical order to the shipped default calibration files. The returned array is
-        //valid only until the next frame's access; callers that retain it (calibration capture) must copy.
-        private readonly float[] _features = new float[12];
+        /// <summary>Length of the calibration feature vector <see cref="Features"/> / FillEyeMUFeatures produce.</summary>
+        public const int FeatureCount = 15;
+
+        //Reused feature buffer so the per-frame Features access allocates nothing (was a fresh List<float> +
+        //AddRange growth every frame). See FillEyeMUFeatures for the layout. Valid only until the next
+        //frame's access; callers that retain it (the calibration capture) must copy.
+        private readonly float[] _features = new float[FeatureCount];
         public float[] Features
         {
             get
             {
-                _features[0] = Embedding2Output[0];
-                _features[1] = Embedding2Output[1];
-                _features[2] = Embedding2Output[2];
-                _features[3] = Embedding2Output[3];
-                _features[4] = NetworkOutput[0];
-                _features[5] = NetworkOutput[1];
-                //Head pose re-enabled -> 12-feature vector, matching the shipped default calibration files
-                _features[6] = _faceMesh.HeadYaw;
-                _features[7] = _faceMesh.HeadPitch;
-                _features[8] = _faceMesh.HeadRoll;
-                _features[9] = _faceMesh.HeadArea;
-                _features[10] = Screen.width;
-                _features[11] = Screen.height;
+                //Normalize the raw gaze point to 0..1 (the model's own output before it was scaled to pixels
+                //in NetworkOutput) so the polynomial terms stay in a sane range.
+                float gx = Screen.width > 0 ? NetworkOutput[0] / Screen.width : 0f;
+                float gy = Screen.height > 0 ? NetworkOutput[1] / Screen.height : 0f;
+                FillEyeMUFeatures(_features, Embedding2Output, gx, gy,
+                    _faceMesh.HeadYaw, _faceMesh.HeadPitch, _faceMesh.HeadRoll, _faceMesh.HeadArea);
                 return _features;
             }
+        }
+
+        /// <summary>
+        /// Fills the EyeMU calibration feature vector: the 4-value embedding, a low-order POLYNOMIAL of the
+        /// normalized raw gaze point [gx, gy, gx², gy², gx·gy, gx³, gy³], and the head pose [yaw, pitch,
+        /// roll, area]. EyeMU regresses a screen point trained on portrait phones, so its raw point maps
+        /// NON-LINEARLY onto a desktop screen; a per-axis linear ridge over just [gx, gy] fit the centre
+        /// slope and compressed the corners inward ("stuck near the middle, corners bad"). The quadratic +
+        /// cross terms model the off-centre asymmetry and the x–y coupling, and the cubic terms extend corner
+        /// reach — the same 2nd-order calibration polynomial that fixed the direction backbones
+        /// (GazeEstimationRunner.FillGazeFeatures), here applied to EyeMU's point instead of an angle. The old
+        /// constant Screen.width/height features were dropped (they standardize to zero, i.e. carry no
+        /// signal). Order is irrelevant to the standardized ridge/MLP; keeping it fixed is what matters for
+        /// train/predict agreement. NOTE: this changes the vector length (was 12) — EyeMU must be RECALIBRATED
+        /// (a stale-length model NaNs and falls back to raw gaze).
+        /// </summary>
+        public static void FillEyeMUFeatures(float[] f, float[] embedding, float gx, float gy,
+            float headYaw, float headPitch, float headRoll, float headArea)
+        {
+            f[0] = embedding[0];
+            f[1] = embedding[1];
+            f[2] = embedding[2];
+            f[3] = embedding[3];
+            f[4] = gx;
+            f[5] = gy;
+            f[6] = gx * gx;
+            f[7] = gy * gy;
+            f[8] = gx * gy;
+            f[9] = gx * gx * gx;
+            f[10] = gy * gy * gy;
+            f[11] = headYaw;
+            f[12] = headPitch;
+            f[13] = headRoll;
+            f[14] = headArea;
         }
 
         //GUI textures

@@ -46,6 +46,7 @@ public static class UnitEyeSmokeTests
             TestEyeMUModelLoadsAndRuns();
             TestGazeEstimationDecode();
             TestGazeFeaturePolynomial();
+            TestEyeMUFeaturePolynomial();
             TestGazeModelsLoadAndRun();
             TestCalibrationFileNames();
         }
@@ -729,6 +730,33 @@ public static class UnitEyeSmokeTests
         CheckClose(f[6], pitch * pitch * pitch, 1e-6f, "feature[6] = pitch^3");
         CheckClose(f[7], 0.11f, 1e-6f, "feature[7] = headYaw (linear)");
         CheckClose(f[10], 0.14f, 1e-6f, "feature[10] = headArea (linear)");
+    }
+
+    private static void TestEyeMUFeaturePolynomial()
+    {
+        //EyeMU regresses a screen POINT trained on portrait phones; the map onto a desktop screen is
+        //nonlinear, so its calibration features now carry a polynomial of the normalized gaze point (like
+        //the direction backbones carry one of the gaze angles) — otherwise a linear ridge compresses the
+        //corners. Pin the length + exact layout so train/predict stay in lockstep, and so HeadPoseFeature-
+        //Indices (11/12/13) keeps matching.
+        Check(HomulerEyeMURunner.FeatureCount == 15, "EyeMU calibration feature vector is 15 terms (embedding + gaze polynomial + head pose)");
+        var f = new float[HomulerEyeMURunner.FeatureCount];
+        var emb = new[] { 0.1f, 0.2f, 0.3f, 0.4f };
+        float gx = 0.25f, gy = 0.75f;
+        HomulerEyeMURunner.FillEyeMUFeatures(f, emb, gx, gy, 0.11f, 0.12f, 0.13f, 0.14f);
+        CheckClose(f[0], 0.1f, 1e-6f, "feature[0] = embedding[0]");
+        CheckClose(f[3], 0.4f, 1e-6f, "feature[3] = embedding[3]");
+        CheckClose(f[4], gx, 1e-6f, "feature[4] = gx (normalized gaze x)");
+        CheckClose(f[5], gy, 1e-6f, "feature[5] = gy (normalized gaze y)");
+        CheckClose(f[6], gx * gx, 1e-6f, "feature[6] = gx^2");
+        CheckClose(f[7], gy * gy, 1e-6f, "feature[7] = gy^2");
+        CheckClose(f[8], gx * gy, 1e-6f, "feature[8] = gx*gy (the cross term the corners need)");
+        CheckClose(f[9], gx * gx * gx, 1e-6f, "feature[9] = gx^3 (reach term)");
+        CheckClose(f[10], gy * gy * gy, 1e-6f, "feature[10] = gy^3");
+        CheckClose(f[11], 0.11f, 1e-6f, "feature[11] = headYaw (matches HeadPoseFeatureIndices)");
+        CheckClose(f[12], 0.12f, 1e-6f, "feature[12] = headPitch");
+        CheckClose(f[13], 0.13f, 1e-6f, "feature[13] = headRoll");
+        CheckClose(f[14], 0.14f, 1e-6f, "feature[14] = headArea (linear)");
     }
 
     private static void TestGazeModelsLoadAndRun()
