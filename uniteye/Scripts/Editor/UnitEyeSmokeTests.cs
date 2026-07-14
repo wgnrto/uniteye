@@ -49,6 +49,7 @@ public static class UnitEyeSmokeTests
             TestEyeMUFeaturePolynomial();
             TestGazeModelsLoadAndRun();
             TestCalibrationFileNames();
+            TestCalibrationProfiles();
         }
         catch (Exception e)
         {
@@ -757,6 +758,44 @@ public static class UnitEyeSmokeTests
         CheckClose(f[12], 0.12f, 1e-6f, "feature[12] = headPitch");
         CheckClose(f[13], 0.13f, 1e-6f, "feature[13] = headRoll");
         CheckClose(f[14], 0.14f, 1e-6f, "feature[14] = headArea (linear)");
+    }
+
+    private static void TestCalibrationProfiles()
+    {
+        //Path safety: a crafted profile may only write "<knownSubfolder>/<file>.json" — never traverse out.
+        Check(CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/Reg_X_EyeMU.json"), "A normal ridge profile path is safe");
+        Check(CalibrationProfileStore.IsSafeRelativePath("MLP/MLP_EyeMU.json"), "A normal MLP profile path is safe");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("../evil.json"), "Path traversal is rejected");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/../../evil.json"), "Nested traversal is rejected");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("Unknown/x.json"), "An unknown subfolder is rejected");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/x.txt"), "A non-json profile entry is rejected");
+
+        //Sanitize turns a name into a safe file stem.
+        Check(CalibrationProfileStore.Sanitize("MC-14-07-2026") == "MC-14-07-2026", "A clean profile name is unchanged");
+        Check(!CalibrationProfileStore.Sanitize("a/b:c*d").Contains("/"), "Sanitize strips invalid file-name characters");
+
+        //Serialize round-trip preserves the embedded calibration files verbatim.
+        var profile = new CalibrationProfile { name = "t", backbone = "EyeMU" };
+        profile.files["RidgeRegression/Reg_X_EyeMU.json"] = "{\"W\":[1,2,3]}";
+        var round = JsonConvert.DeserializeObject<CalibrationProfile>(JsonConvert.SerializeObject(profile));
+        Check(round.files["RidgeRegression/Reg_X_EyeMU.json"] == "{\"W\":[1,2,3]}",
+            "Profile serialization preserves the embedded calibration file content");
+
+        //The shipped MC-14-07-2026 profile must load from Resources AND still match the CURRENT EyeMU feature
+        //count (16 ridge weights = 15 features + the affine bias) — a guard that the committed profile stays
+        //compatible if the EyeMU feature vector is ever changed again.
+        var shipped = Resources.Load<TextAsset>($"{CalibrationProfileStore.ResourcesFolder}/MC-14-07-2026");
+        Check(shipped != null, "The shipped MC-14-07-2026 calibration profile should be in Resources");
+        if (shipped != null)
+        {
+            var mc = JsonConvert.DeserializeObject<CalibrationProfile>(shipped.text);
+            Check(mc.files.ContainsKey("RidgeRegression/Reg_X_EyeMU.json") &&
+                  mc.files.ContainsKey("RidgeRegression/Reg_Y_EyeMU.json"),
+                "MC-14-07-2026 profile contains the EyeMU ridge X/Y calibration files");
+            var rx = JsonConvert.DeserializeObject<RidgeRegression>(mc.files["RidgeRegression/Reg_X_EyeMU.json"]);
+            Check(rx.W != null && rx.W.Count == HomulerEyeMURunner.FeatureCount + 1,
+                $"MC-14-07-2026 ridge X matches the current EyeMU feature count ({HomulerEyeMURunner.FeatureCount} + affine bias)");
+        }
     }
 
     private static void TestGazeModelsLoadAndRun()

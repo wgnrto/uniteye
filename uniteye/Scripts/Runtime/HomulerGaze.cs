@@ -53,6 +53,13 @@ namespace UnitEye
         [SerializeField] private HomulerGazeCalibration _calibrationScript;
         private HomulerGazeEvaluation _evaluationScript;
 
+        //Calibration profile save/load UI state (see CalibrationProfileStore). Calibration is slow, so the
+        //Gaze UI lets the user snapshot the current calibration under a name and restore it later.
+        private string _profileName = "";
+        private string _profileStatus = "";
+        private List<string> _profileList;
+        private int _profileIndex;
+
         private bool _drawDotBackup = true;
         private bool _showEyesBackup = true;
         private bool _visualizeAOIBackup = false;
@@ -144,6 +151,11 @@ namespace UnitEye
                 _modelStore.Load(_calibrations, _gazeBackbone);
             }
         }
+
+        //Re-reads the calibration model files for the current type + backbone from disk. Used after a
+        //calibration profile is loaded (which overwrites those files) so the change takes effect live.
+        public void ReloadCalibration() => _modelStore.Load(_calibrations, _gazeBackbone);
+
         [SerializeField]
         private Filtering _filtering = Filtering.OneEuro;
         public Filtering Filtering
@@ -900,6 +912,42 @@ namespace UnitEye
             {
                 LoadEvaluation();
             }
+
+            GUI.EndGroup();
+
+            //Calibration profiles: calibration is slow, so let the user SAVE the current calibration (for the
+            //active backbone) under a name and LOAD it back later. Saved profiles go to StreamingAssets;
+            //profiles committed to the repo (package Resources) are listed too. See CalibrationProfileStore.
+            GUI.BeginGroup(new Rect(width * 0.01f, height * 0.82f, width * 0.48f, height * 0.15f));
+            GUI.Box(new Rect(0, 0, width * 0.48f, height * 0.15f), "Calibration profiles (save/load)", gazeUIStyleBox);
+
+            GUI.Label(new Rect(width * 0.02f, height * 0.03f, width * 0.08f, height * 0.04f), "Name:", gazeUIStyleLabel);
+            _profileName = GUI.TextField(new Rect(width * 0.08f, height * 0.03f, width * 0.24f, height * 0.035f), _profileName ?? "");
+            if (GUI.Button(new Rect(width * 0.335f, height * 0.028f, width * 0.12f, height * 0.04f), $"Save ({DisplayName(_gazeBackbone)})", gazeUIStyleButton))
+            {
+                _profileStatus = CalibrationProfileStore.Save(_profileName, _gazeBackbone);
+                _profileList = CalibrationProfileStore.List();
+            }
+
+            //Browse the available profiles and load the shown one.
+            _profileList ??= CalibrationProfileStore.List();
+            var hasProfiles = _profileList.Count > 0;
+            var current = hasProfiles ? _profileList[Mathf.Clamp(_profileIndex, 0, _profileList.Count - 1)] : "(none)";
+            if (GUI.Button(new Rect(width * 0.02f, height * 0.08f, width * 0.035f, height * 0.04f), "<", gazeUIStyleButton) && hasProfiles)
+                _profileIndex = (_profileIndex - 1 + _profileList.Count) % _profileList.Count;
+            GUI.Label(new Rect(width * 0.06f, height * 0.08f, width * 0.19f, height * 0.04f), current, gazeUIStyleLabel);
+            if (GUI.Button(new Rect(width * 0.255f, height * 0.08f, width * 0.035f, height * 0.04f), ">", gazeUIStyleButton) && hasProfiles)
+                _profileIndex = (_profileIndex + 1) % _profileList.Count;
+            if (GUI.Button(new Rect(width * 0.30f, height * 0.08f, width * 0.09f, height * 0.04f), "Load", gazeUIStyleButton) && hasProfiles)
+            {
+                _profileStatus = CalibrationProfileStore.Load(current);
+                ReloadCalibration();
+                _profileName = current;
+            }
+            if (GUI.Button(new Rect(width * 0.395f, height * 0.08f, width * 0.06f, height * 0.04f), "Refresh", gazeUIStyleButton))
+                _profileList = CalibrationProfileStore.List();
+
+            GUI.Label(new Rect(width * 0.02f, height * 0.125f, width * 0.44f, height * 0.02f), _profileStatus, gazeUIStyleLabel);
 
             GUI.EndGroup();
         }

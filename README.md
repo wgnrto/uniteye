@@ -150,6 +150,9 @@ For **Ridge Regression** the reported RMSE is measured on a randomly held-out 20
 
 **No default calibration is shipped:** calibration is per-person (an old one-person default extrapolated off-screen for everyone else and stuck the dot in a corner). Before you calibrate, UnitEye logs a one-time warning and uses the **raw, uncalibrated** gaze — it tracks roughly and stays on-screen but isn't accurate. Finished calibrations are saved under `StreamingAssets/Calibration Files/`, in a subfolder per calibration type and under a **per-backbone filename** (so each model keeps its own), and are therefore included in builds. Tip: set the calibration type to `None` to view the raw gaze while sanity-checking tracking.
 
+### Calibration profiles (save/load)
+Because calibrating well takes a while, the [Gaze UI](#gaze-ui) has a **Calibration profiles** panel that saves the current calibration (for the active backbone) under a name and restores it later — so you can keep a good calibration, switch between people/setups, or share one. Each profile is a single self-contained JSON file ([`CalibrationProfileStore`](uniteye/Scripts/Runtime/Calibration/CalibrationProfileStore.cs)). **Save** writes to `StreamingAssets/Calibration Files/Profiles/<name>.json`; **Load** (browse with `<` / `>`) restores the files and reloads the model live. Profiles committed to the repo live in the package under `Resources/CalibrationProfiles/` and are listed alongside your local ones — for example the bundled **MC-14-07-2026** EyeMU RidgeRegression profile. A profile only makes sense with the backbone and feature layout it was made for; if the gaze model's feature vector changes, re-save it.
+
 ## Evaluation
 To measure accuracy, run an evaluation: like a calibration, but the dot jumps between random points on a grid. Add the [`HomulerGazeEvaluation`](uniteye/Scripts/Runtime/HomulerGazeEvaluation.cs) component next to `HomulerGaze`, or start one from the [Gaze UI](#gaze-ui).
 
