@@ -32,6 +32,7 @@ public static class UnitEyeSmokeTests
             TestRidgeSerializationRoundTrip();
             TestRidgeOldFormatCompatibility();
             TestRidgeInterceptNotPenalized();
+            TestRobustRidge();
             TestNoShippedDefaultCalibration();
             TestTrainerOnSyntheticData();
             TestSpatiallyBalancedCalibrationSamples();
@@ -201,6 +202,47 @@ public static class UnitEyeSmokeTests
         model.Train(x, y);
         CheckClose(model.Predict(x[0]), 0.7f, 1e-3f,
             "Large-lambda ridge must still recover a constant target exactly (unpenalized intercept)");
+    }
+
+    private static void TestRobustRidge()
+    {
+        //Robust (IRLS/Huber) fitting: outlier calibration samples (a blink or saccade caught mid-dwell)
+        //must not drag the fit. Build clean linear data, fit it, then corrupt 10% of the TARGETS with large
+        //errors and refit — the robust fit should stay close to both the truth and the clean-data fit,
+        //whereas a plain least-squares fit would be pulled ~0.5 off by +5 outliers on a ~[0,1] target.
+        var rng = new System.Random(123);
+        const int n = 200;
+        var x = new float[n][];
+        var yClean = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float a = (float)rng.NextDouble();
+            float b = (float)rng.NextDouble();
+            x[i] = new float[] { a, b };
+            yClean[i] = 0.3f + 0.5f * a - 0.2f * b;
+        }
+
+        var clean = new RidgeRegression(0.01f);
+        clean.Train(x, (float[])yClean.Clone());
+
+        var yCorrupt = (float[])yClean.Clone();
+        for (int i = 0; i < n / 10; i++)
+            yCorrupt[rng.Next(n)] += 5f; // gross target outliers
+
+        var robust = new RidgeRegression(0.01f);
+        robust.Train(x, yCorrupt);
+
+        var probe = new float[] { 0.7f, 0.3f };
+        float truth = 0.3f + 0.5f * 0.7f - 0.2f * 0.3f;
+        float pRobust = robust.Predict(probe);
+        Check(Mathf.Abs(pRobust - truth) < 0.15f,
+            $"Robust ridge should resist target outliers (pred {pRobust:F3} vs truth {truth:F3})");
+        Check(Mathf.Abs(pRobust - clean.Predict(probe)) < 0.15f,
+            "Robust ridge on corrupted data should stay near the clean-data fit");
+
+        var robust2 = new RidgeRegression(0.01f);
+        robust2.Train(x, yCorrupt);
+        Check(Mathf.Abs(robust2.Predict(probe) - pRobust) < 1e-4f, "Robust ridge training should be deterministic");
     }
 
     private static void TestNoShippedDefaultCalibration()

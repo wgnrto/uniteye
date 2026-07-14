@@ -62,6 +62,17 @@ namespace UnitEye
         private List<string> _profileList;
         private int _profileIndex;
 
+        //Drift re-centering: a constant offset added to the calibrated gaze so slow seating/posture drift
+        //(the gaze creeping off after calibration) can be corrected in seconds without a full recalibration.
+        //_recentCalibratedGaze is a smoothed PRE-offset calibrated gaze used as the reference when re-centering.
+        private Vector2 _driftOffset = Vector2.zero;
+        private Vector2 _recentCalibratedGaze;
+        private bool _hasRecentGaze;
+        private float _recenterArmedUntil = -1f;
+        private const float RecenterArmSeconds = 1.5f;
+        /// <summary>True while a drift re-center is counting down (a marker is shown at screen center).</summary>
+        public bool IsRecentering => _recenterArmedUntil > 0f;
+
         private bool _drawDotBackup = true;
         private bool _showEyesBackup = true;
         private bool _visualizeAOIBackup = false;
@@ -155,8 +166,27 @@ namespace UnitEye
         }
 
         //Re-reads the calibration model files for the current type + backbone from disk. Used after a
-        //calibration profile is loaded (which overwrites those files) so the change takes effect live.
-        public void ReloadCalibration() => _modelStore.Load(_calibrations, _gazeBackbone);
+        //calibration profile is loaded (which overwrites those files) so the change takes effect live. A
+        //new calibration supersedes any drift correction, so clear it.
+        public void ReloadCalibration()
+        {
+            _modelStore.Load(_calibrations, _gazeBackbone);
+            ClearDrift();
+        }
+
+        /// <summary>
+        /// Arms a drift re-center: a marker appears at screen centre for a moment; the user looks at it and
+        /// the calibrated gaze is nudged so its smoothed value maps exactly to centre, correcting slow
+        /// seating/posture drift without a full recalibration. Safe to call from host-game code / a custom key.
+        /// </summary>
+        public void RecenterDrift() => _recenterArmedUntil = Time.unscaledTime + RecenterArmSeconds;
+
+        /// <summary>Clears any drift re-centering offset (and cancels a pending re-center).</summary>
+        public void ClearDrift()
+        {
+            _driftOffset = Vector2.zero;
+            _recenterArmedUntil = -1f;
+        }
 
         [SerializeField]
         private Filtering _filtering = Filtering.OneEuro;
@@ -178,9 +208,15 @@ namespace UnitEye
         [SerializeField, Range(1e-10f, 1.0f)] public float Q = 1e-5f;
         [SerializeField, Range(1e-10f, 1.0f)] public float R = 1e-4f;
 
+        //Reference display the 1€ filter is normalized to, so `beta` behaves the same on every resolution
+        //(see SmoothGazeLocation). Gaze is scaled into this space before filtering and back afterward.
+        private const float OneEuroReferenceWidth = 1920f;
+        private const float OneEuroReferenceHeight = 1080f;
         //1€ filter speed coefficient: how much fast movement raises the cutoff (less lag while the gaze
         //moves). The old default 0.001 barely adapted, so quick glances to the corners lagged far behind.
-        [SerializeField, Range(1e-10f, 0.05f)] public float beta = 0.007f;
+        //Now interpreted in the 1920x1080 reference space above (resolution-independent); 0.012 there matches
+        //the 0.007 that tested well on a 3200-wide panel.
+        [SerializeField, Range(1e-10f, 0.05f)] public float beta = 0.012f;
         //1€ filter minimum cutoff (Hz): the responsiveness floor while fixating. The old default 0.001 Hz
         //(and even the old 0.05 slider ceiling) over-smoothed ~1000x — the dot could not reach a corner
         //before the eye moved on, which reads as poor accuracy. ~1.0 Hz is the 1€ paper's pointing baseline.
@@ -327,6 +363,20 @@ namespace UnitEye
                 //Apply calibration
                 gazeLocation = RefineGazeLocation(gazeLocation, _calibrations);
 
+                //Track a smoothed PRE-offset calibrated gaze (the reference for drift re-centering) and,
+                //if a re-center is armed and its countdown has elapsed, capture the offset that maps this
+                //smoothed gaze exactly to screen centre.
+                if (!_hasRecentGaze) { _recentCalibratedGaze = gazeLocation; _hasRecentGaze = true; }
+                else _recentCalibratedGaze = Vector2.Lerp(_recentCalibratedGaze, gazeLocation, 0.15f);
+                if (_recenterArmedUntil > 0f && Time.unscaledTime >= _recenterArmedUntil)
+                {
+                    _driftOffset = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f) - _recentCalibratedGaze;
+                    _recenterArmedUntil = -1f;
+                }
+
+                //Apply the drift re-centering offset (a constant correction; zero until the user re-centers).
+                gazeLocation += _driftOffset;
+
                 //Apply filtering
                 unfilteredGaze = gazeLocation;
                 gazeLocation = SmoothGazeLocation(gazeLocation, _filtering);
@@ -409,10 +459,46 @@ namespace UnitEye
                 //old bottom-left spot, which users routinely missed.
                 if (GUI.Button(new Rect(Screen.width - Screen.width * 0.12f, Screen.height * 0.02f, Screen.width * 0.11f, Screen.height * 0.045f), $"{(gazeUIActivated ? "Hide" : "Show")} Gaze UI", _toggleStyle))
                     gazeUIActivated = !gazeUIActivated;
+
+                //Drift re-center controls, top-right below the toggle (outside the left-half panel). Corrects
+                //slow seating/posture drift in seconds: click Re-center, then look at the centre marker.
+                if (gazeUIActivated)
+                {
+                    float bx = Screen.width - Screen.width * 0.12f;
+                    float bw = Screen.width * 0.11f;
+                    float bh = Screen.height * 0.045f;
+                    if (GUI.Button(new Rect(bx, Screen.height * 0.075f, bw, bh), IsRecentering ? "Look centre…" : "Re-center drift", _toggleStyle))
+                        RecenterDrift();
+                    if (GUI.Button(new Rect(bx, Screen.height * 0.125f, bw, bh), "Clear drift", _toggleStyle))
+                        ClearDrift();
+                }
             }
 
             if (gazeUIActivated)
                 gazeUI = GUI.Window(0, gazeUI, GazeUI, "");
+
+            //Drift re-center marker: while armed, show a target at screen centre for the user to look at.
+            if (IsRecentering)
+            {
+                var center = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+                float size = Mathf.Max(48f, 48f * Screen.height / 1080f);
+                float phase = Mathf.Repeat(Time.time * 1.5f, 1f);
+                var prev = GUI.color;
+                if (dot != null)
+                {
+                    GUI.color = new Color(1f, 1f, 1f, 1f - phase * 0.6f);
+                    float ring = size * (1f + phase);
+                    GUI.DrawTexture(new Rect(center.x - ring * 0.5f, center.y - ring * 0.5f, ring, ring), dot);
+                    GUI.color = prev;
+                    GUI.DrawTexture(new Rect(center.x - size * 0.5f, center.y - size * 0.5f, size, size), dot);
+                }
+                style.fontSize = Mathf.RoundToInt(24f * uiScale);
+                style.normal.textColor = Color.white;
+                style.alignment = TextAnchor.MiddleCenter;
+                GUI.Label(new Rect(center.x - Screen.width * 0.2f, center.y + size, Screen.width * 0.4f, size),
+                    $"Look at the dot to re-center… ({Mathf.CeilToInt(_recenterArmedUntil - Time.unscaledTime)})", style);
+                GUI.color = prev;
+            }
 
             //Draw text
             if (visualizeAOI && aoiNameList != null && aoiNameList.Count > 0)
@@ -464,8 +550,17 @@ namespace UnitEye
                     smoothedGaze = easeSmoothing.Update(kalmanFilter.Update(unfilteredGaze));
                     break;
                 case Filtering.OneEuro:
-                    //FilterVector2: allocation-free equivalent of Filter<Vector2> (no per-frame boxing)
-                    smoothedGaze = oneEuroFilter.FilterVector2(unfilteredGaze, Time.realtimeSinceStartup);
+                    //FilterVector2: allocation-free equivalent of Filter<Vector2> (no per-frame boxing).
+                    //Resolution-normalize first: the 1€ cutoff rises with beta*|velocity|, and velocity is in
+                    //pixels/second, so the same beta reacts far more strongly on a 3200-wide panel than at
+                    //1080p (a given eye movement covers ~1.7x more pixels). Scale the gaze into a fixed
+                    //reference space so beta means the same thing on every display, filter, then scale back.
+                    //mincutoff/dcutoff are frequencies and are already resolution-independent.
+                    float sx = OneEuroReferenceWidth / Mathf.Max(1, Screen.width);
+                    float sy = OneEuroReferenceHeight / Mathf.Max(1, Screen.height);
+                    var scaledIn = new Vector2(unfilteredGaze.x * sx, unfilteredGaze.y * sy);
+                    var scaledOut = oneEuroFilter.FilterVector2(scaledIn, Time.realtimeSinceStartup);
+                    smoothedGaze = new Vector2(scaledOut.x / sx, scaledOut.y / sy);
                     break;
                 default:
                     smoothedGaze = unfilteredGaze;
@@ -484,10 +579,13 @@ namespace UnitEye
         public void LoadCalibration(float speed = 9.0f, float padding = 20.0f, int rounds = 2)
         {
             //Return if we have no Calibration to calibrate for
-            if (_calibrations == Calibrations.None) 
+            if (_calibrations == Calibrations.None)
                 return;
 
             IsRendering = false;
+
+            //A fresh calibration supersedes any drift re-centering correction.
+            ClearDrift();
 
             //Backup settings
             BackupSettings();

@@ -164,6 +164,11 @@ namespace UnitEye
         /// <param name="x">Input values</param>
         /// <param name="y">Expected output values</param>
         /// <returns>The mean squared error</returns>
+        //Robust (IRLS/Huber) fitting parameters.
+        private const int RobustIterations = 4;      // ordinary ridge on pass 0, then reweight a few times
+        private const int MinSamplesForRobust = 8;   // below this a robust scale is unstable -> plain ridge
+        private const float HuberTuning = 1.345f;    // 95% efficiency vs least squares under normal residuals
+
         public float Train(float[][] x, float[] y)
         {
             var input = Matrix<float>.Build.DenseOfRowArrays(x);
@@ -180,23 +185,102 @@ namespace UnitEye
             }
 
             var output = Vector<float>.Build.Dense(y);
-            var A = input.TransposeThisAndMultiply(input);
 
+            //Iteratively reweighted least squares with Huber weights: a blink, a saccade caught mid-dwell,
+            //or a momentary tracking glitch produces a calibration sample whose residual is far larger than
+            //the rest, and plain least squares chases those outliers. Pass 0 is ordinary ridge (unit
+            //weights); each later pass down-weights samples by their residual (w = 1 within a robust band,
+            //falling off as delta/|r| beyond it) and refits. On clean data the weights stay ~1 so the result
+            //matches ordinary ridge; tiny sets (no stable robust scale) stay ordinary least squares.
+            int rows = input.RowCount;
+            var weights = Vector<float>.Build.Dense(rows, 1f);
+            int iterations = rows >= MinSamplesForRobust ? RobustIterations : 1;
+            for (int iter = 0; iter < iterations; iter++)
+            {
+                W = SolveWeightedRidge(input, output, weights);
+                if (iter < iterations - 1)
+                    weights = HuberWeights(input, output, W);
+            }
+            B = W[0];
+
+            return Test(x, y);
+        }
+
+        /// <summary>
+        /// Solves the (row-)weighted ridge normal equations. Scaling each row of the design matrix and
+        /// target by sqrt(weight) turns the ordinary ridge solve into a weighted least squares solve; the
+        /// intercept column is left unpenalized exactly as in the unweighted path.
+        /// </summary>
+        private Vector<float> SolveWeightedRidge(Matrix<float> input, Vector<float> output, Vector<float> weights)
+        {
+            int rows = input.RowCount, cols = input.ColumnCount;
+            var weightedInput = Matrix<float>.Build.Dense(rows, cols);
+            var weightedOutput = Vector<float>.Build.Dense(rows);
+            for (int r = 0; r < rows; r++)
+            {
+                float sw = (float)Math.Sqrt(Math.Max(0f, weights[r]));
+                for (int c = 0; c < cols; c++)
+                    weightedInput[r, c] = input[r, c] * sw;
+                weightedOutput[r] = output[r] * sw;
+            }
+
+            var A = weightedInput.TransposeThisAndMultiply(weightedInput);
             Matrix<float> I = Matrix<float>.Build.DenseIdentity(A.RowCount, A.RowCount);
             I *= Lambda;
-            //Standard ridge does NOT penalize the intercept. With standardized (zero-mean) features the
-            //bias column is orthogonal to the rest, so penalizing it just shrinks the intercept from
-            //mean(y) to mean(y)*N/(N+lambda) — a systematic offset of every prediction toward screen
-            //coordinate 0 (worst on short early-stopped calibrations, where N is small), and it biases
-            //the k-fold lambda selection against larger lambdas for the wrong reason.
+            //Standard ridge does NOT penalize the intercept (see the note that used to live in Train): with
+            //standardized zero-mean features the bias column is orthogonal to the rest, so penalizing it just
+            //shrinks every prediction toward screen coordinate 0.
             if (Affine)
                 I[0, 0] = 0f;
             A += I;
 
-            W = A.QR().Solve(input.TransposeThisAndMultiply(output));
-            B = W[0];
+            return A.QR().Solve(weightedInput.TransposeThisAndMultiply(weightedOutput));
+        }
 
-            return Test(x, y);
+        /// <summary>
+        /// Huber sample weights from the current residuals: w = 1 for residuals within delta = 1.345*sigma
+        /// of zero, then delta/|r| beyond it, where sigma = MAD/0.6745 is a robust (outlier-resistant) scale.
+        /// Returns all-ones (no down-weighting) when the residuals are essentially identical.
+        /// </summary>
+        private static Vector<float> HuberWeights(Matrix<float> input, Vector<float> output, Vector<float> coefficients)
+        {
+            int rows = input.RowCount, cols = input.ColumnCount;
+            var residual = new float[rows];
+            for (int r = 0; r < rows; r++)
+            {
+                double predicted = 0.0;
+                for (int c = 0; c < cols; c++)
+                    predicted += input[r, c] * coefficients[c];
+                residual[r] = (float)(output[r] - predicted);
+            }
+
+            float median = Median(residual);
+            var absoluteDeviation = new float[rows];
+            for (int i = 0; i < rows; i++)
+                absoluteDeviation[i] = Math.Abs(residual[i] - median);
+            float sigma = Median(absoluteDeviation) / 0.6745f;
+
+            var weights = Vector<float>.Build.Dense(rows, 1f);
+            if (sigma < 1e-6f)
+                return weights; // residuals essentially identical -> nothing to down-weight
+
+            float delta = HuberTuning * sigma;
+            for (int i = 0; i < rows; i++)
+            {
+                float magnitude = Math.Abs(residual[i]);
+                if (magnitude > delta)
+                    weights[i] = delta / magnitude;
+            }
+            return weights;
+        }
+
+        private static float Median(float[] values)
+        {
+            int n = values.Length;
+            if (n == 0) return 0f;
+            var sorted = (float[])values.Clone();
+            Array.Sort(sorted);
+            return (n & 1) == 1 ? sorted[n / 2] : 0.5f * (sorted[n / 2 - 1] + sorted[n / 2]);
         }
 
         /// <summary>

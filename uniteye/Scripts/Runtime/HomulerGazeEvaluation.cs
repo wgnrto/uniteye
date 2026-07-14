@@ -24,6 +24,9 @@ namespace UnitEye
         private Vector2 _targetLocation = Vector2.zero;
         private GUIStyle _guiStyle = new GUIStyle();
         private GUIStyle _timerStyle = new GUIStyle();
+        private GUIStyle _heatmapStyle = new GUIStyle();
+        //Reused 1x1 white texture for the heatmap connector lines.
+        private static Texture2D _lineTex;
 
         private List<Vector2> _points = new List<Vector2>();
         private List<CalibrationPreset> _presets;
@@ -86,6 +89,8 @@ namespace UnitEye
         public bool showAllPoints = false;
         public bool applyBestCornerModel = true;
         public bool quitAfterEvaluation = false;
+        [Tooltip("After the evaluation, draw arrows from each target to the mean measured gaze, colored by error, so you can see WHERE accuracy is good or bad.")]
+        public bool showHeatmap = true;
 
         #endregion
 
@@ -362,6 +367,11 @@ namespace UnitEye
 
         void OnGUI()
         {
+            //After the run, draw the accuracy heatmap (arrows from each target to the mean measured gaze,
+            //colored by error) behind the summary text so you can see WHERE it is accurate vs off.
+            if (_finished && showHeatmap)
+                DrawResultsHeatmap();
+
             //Show message on screen. Scale the font with resolution so the message (and the final RMSE)
             //stays legible on high-DPI displays; == baseline at 1080p, larger above it.
             if (_showMessage)
@@ -421,6 +431,92 @@ namespace UnitEye
                             dotSize), String.Format("{0}s", Mathf.FloorToInt((_timeRemaining + 1) % 60)), _timerStyle);
                 }
             }
+        }
+
+        /// <summary>
+        /// Draws the post-evaluation accuracy heatmap: for each evaluated target, a line from the target to
+        /// the MEAN measured gaze for that target (a hollow-ish marker at the target, a filled marker at the
+        /// mean), colored green/amber/red by error as a fraction of the screen diagonal. Uses the
+        /// RidgeRegression predictions when available, else the MLP's — i.e. what the calibration produced.
+        /// </summary>
+        private void DrawResultsHeatmap()
+        {
+            var predictions = _hasRidgeModel ? _predRidgeData : (_hasMlpModel ? _predMLPData : null);
+            if (predictions == null || predictions.Count == 0 || _targetData.Count == 0)
+                return;
+
+            int count = Mathf.Min(predictions.Count, _targetData.Count);
+            var sum = new Dictionary<Vector2, Vector2>();
+            var counts = new Dictionary<Vector2, int>();
+            for (int i = 0; i < count; i++)
+            {
+                var target = _targetData[i];
+                sum.TryGetValue(target, out var s);
+                sum[target] = s + predictions[i];
+                counts.TryGetValue(target, out var c);
+                counts[target] = c + 1;
+            }
+
+            float diagonal = Mathf.Sqrt((float)Screen.width * Screen.width + (float)Screen.height * Screen.height);
+            float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
+            float marker = 12f * uiScale;
+
+            var previousColor = GUI.color;
+            foreach (var pair in sum)
+            {
+                var target = pair.Key;
+                var mean = pair.Value / counts[target];
+                var color = ErrorColor(Vector2.Distance(mean, target) / diagonal);
+
+                DrawLine(target, mean, color, Mathf.Max(2f, 3f * uiScale));
+                DrawMarker(target, marker, new Color(1f, 1f, 1f, 0.9f)); // where they were asked to look
+                DrawMarker(mean, marker * 0.9f, color);                  // where the gaze actually landed
+            }
+            GUI.color = previousColor;
+
+            //Legend, top-left, its own style so it doesn't disturb the summary text's style.
+            _heatmapStyle.fontSize = Mathf.RoundToInt(14 * uiScale);
+            _heatmapStyle.normal.textColor = Color.white;
+            _heatmapStyle.wordWrap = true;
+            GUI.Label(new Rect(Screen.width * 0.02f, Screen.height * 0.03f, Screen.width * 0.6f, Screen.height * 0.08f),
+                $"Accuracy heatmap — line = target → mean gaze.  " +
+                $"green < {0.02f * diagonal:F0}px   amber < {0.04f * diagonal:F0}px   red = worse", _heatmapStyle);
+        }
+
+        private static Color ErrorColor(float fractionOfDiagonal)
+        {
+            if (fractionOfDiagonal < 0.02f) return new Color(0.25f, 0.8f, 0.3f);   // good
+            if (fractionOfDiagonal < 0.04f) return new Color(0.95f, 0.8f, 0.2f);   // ok
+            return new Color(0.9f, 0.3f, 0.3f);                                    // poor
+        }
+
+        private void DrawMarker(Vector2 center, float size, Color color)
+        {
+            if (evaluationDot == null) return;
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(center.x - 0.5f * size, center.y - 0.5f * size, size, size), evaluationDot);
+        }
+
+        private static void DrawLine(Vector2 a, Vector2 b, Color color, float width)
+        {
+            if (_lineTex == null)
+            {
+                _lineTex = new Texture2D(1, 1);
+                _lineTex.SetPixel(0, 0, Color.white);
+                _lineTex.Apply();
+            }
+            var delta = b - a;
+            float length = delta.magnitude;
+            if (length < 1f) return;
+            float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+
+            var matrix = GUI.matrix;
+            var color0 = GUI.color;
+            GUI.color = color;
+            GUIUtility.RotateAroundPivot(angle, a);
+            GUI.DrawTexture(new Rect(a.x, a.y - width * 0.5f, length, width), _lineTex);
+            GUI.matrix = matrix;
+            GUI.color = color0;
         }
     }
 }

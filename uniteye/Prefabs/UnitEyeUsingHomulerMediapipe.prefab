@@ -62,7 +62,7 @@ MonoBehaviour:
   easefactor: 0.4
   Q: 0.00001
   R: 0.0001
-  beta: 0.007
+  beta: 0.012
   mincutoff: 1
   dcutoff: 1
   holdGazeDuringBlink: 1
