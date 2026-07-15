@@ -1,0 +1,945 @@
+using System;
+using System.Collections.Generic;
+using Newtonsoft.Json;
+using Unity.InferenceEngine;
+using UnitEye;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+
+/// <summary>
+/// Lightweight smoke tests for the pure logic parts of UnitEye.
+/// Run from the command line with:
+/// Unity.exe -batchmode -projectPath [host project] -executeMethod UnitEyeSmokeTests.Run -logFile [log]
+/// In batch mode the editor exits with code 0 when all checks pass and 1 when any check fails.
+/// Can also be run from the menu via UnitEye > Run Smoke Tests.
+/// </summary>
+public static class UnitEyeSmokeTests
+{
+    private static readonly List<string> _failures = new List<string>();
+    private static int _checks;
+
+    [MenuItem("UnitEye/Run Smoke Tests")]
+    public static void Run()
+    {
+        _failures.Clear();
+        _checks = 0;
+
+        try
+        {
+            TestRandomPermutation();
+            TestRidgeStandardization();
+            TestRidgeSerializationRoundTrip();
+            TestRidgeOldFormatCompatibility();
+            TestRidgeInterceptNotPenalized();
+            TestRobustRidge();
+            TestNoShippedDefaultCalibration();
+            TestTrainerOnSyntheticData();
+            TestSpatiallyBalancedCalibrationSamples();
+            TestFeatureAugmentation();
+            TestHeadRotationPreset();
+            TestSimpleMLP();
+            TestGazeGridQuantizer();
+            TestOneEuroFilter();
+            TestOneEuroFilterVector2FastPath();
+            TestEyeCropRect();
+            TestScenesAndPrefabsHaveNoMissingScripts();
+            TestEyeMUModelLoadsAndRuns();
+            TestGazeEstimationDecode();
+            TestGazeFeaturePolynomial();
+            TestEyeMUFeaturePolynomial();
+            TestGazeModelsLoadAndRun();
+            TestCalibrationFileNames();
+            TestCalibrationProfiles();
+        }
+        catch (Exception e)
+        {
+            _failures.Add($"Unhandled exception: {e}");
+        }
+
+        if (_failures.Count == 0)
+        {
+            Debug.Log($"UNITEYE_SMOKE_TESTS_PASSED ({_checks} checks)");
+            if (Application.isBatchMode)
+                EditorApplication.Exit(0);
+        }
+        else
+        {
+            foreach (var failure in _failures)
+                Debug.LogError($"UNITEYE_SMOKE_TEST_FAILED: {failure}");
+            Debug.LogError($"UNITEYE_SMOKE_TESTS_FAILED ({_failures.Count} failures out of {_checks} checks)");
+            if (Application.isBatchMode)
+                EditorApplication.Exit(1);
+        }
+    }
+
+    private static void Check(bool condition, string description)
+    {
+        _checks++;
+        if (!condition)
+            _failures.Add(description);
+    }
+
+    private static void CheckClose(float actual, float expected, float tolerance, string description)
+    {
+        Check(Mathf.Abs(actual - expected) <= tolerance,
+            $"{description} (expected {expected}, got {actual}, tolerance {tolerance})");
+    }
+
+    #region RidgeCalibrationTrainer
+
+    private static void TestRandomPermutation()
+    {
+        var rng = new System.Random(12345);
+        var permutation = RidgeCalibrationTrainer.RandomPermutation(1000, rng);
+
+        Check(permutation.Length == 1000, "Permutation should contain all 1000 entries");
+
+        var seen = new bool[1000];
+        var allValid = true;
+        foreach (var index in permutation)
+        {
+            if (index < 0 || index >= 1000 || seen[index]) { allValid = false; break; }
+            seen[index] = true;
+        }
+        Check(allValid, "Permutation should contain every index exactly once");
+
+        var isIdentity = true;
+        for (int i = 0; i < permutation.Length; i++)
+        {
+            if (permutation[i] != i) { isIdentity = false; break; }
+        }
+        Check(!isIdentity, "Permutation should actually shuffle (the old split always used the chronological head)");
+    }
+
+    private static (List<float[]> features, List<float> yX, List<float> yY) MakeSyntheticData(int count, System.Random rng, float noise)
+    {
+        //Mimics the real feature vector shape: mixed scales plus constant screen dimensions
+        var features = new List<float[]>(count);
+        var yX = new List<float>(count);
+        var yY = new List<float>(count);
+
+        for (int i = 0; i < count; i++)
+        {
+            var a = (float)rng.NextDouble();            //small scale
+            var b = (float)rng.NextDouble() * 1000f;    //large scale
+            var c = (float)rng.NextDouble() * 0.01f;    //tiny scale
+            var sample = new float[] { a, b, c, 1920f, 1080f };
+
+            features.Add(sample);
+            yX.Add(0.4f * a + 0.0003f * b + 20f * c + 0.05f + (float)(rng.NextDouble() - 0.5) * 2f * noise);
+            yY.Add(-0.2f * a + 0.0001f * b - 10f * c + 0.30f + (float)(rng.NextDouble() - 0.5) * 2f * noise);
+        }
+
+        return (features, yX, yY);
+    }
+
+    private static void TestRidgeStandardization()
+    {
+        var (features, yX, _) = MakeSyntheticData(200, new System.Random(1), noise: 0f);
+
+        var model = new RidgeRegression(0.01f);
+        var trainMse = model.Train(ToArray(features), yX.ToArray());
+
+        Check(model.FeatureMean != null && model.FeatureStd != null, "Training should compute standardization stats");
+        Check(model.FeatureMean.Count == 5, "Standardization stats should cover all features");
+        CheckClose(model.FeatureMean[3], 1920f, 0.001f, "Mean of a constant feature should be the constant");
+        CheckClose(model.FeatureStd[3], 1f, 0.001f, "Std of a constant feature should fall back to one");
+        Check(trainMse < 1e-3f, $"Ridge should fit noiseless linear data closely, train MSE was {trainMse}");
+
+        //Prediction on a fresh sample
+        var fresh = new float[] { 0.5f, 500f, 0.005f, 1920f, 1080f };
+        var expected = 0.4f * 0.5f + 0.0003f * 500f + 20f * 0.005f + 0.05f;
+        CheckClose(model.Predict(fresh), expected, 0.02f, "Ridge prediction on a fresh sample");
+    }
+
+    private static void TestRidgeSerializationRoundTrip()
+    {
+        var (features, yX, _) = MakeSyntheticData(100, new System.Random(2), noise: 0.001f);
+
+        var model = new RidgeRegression(0.05f);
+        model.Train(ToArray(features), yX.ToArray());
+
+        //Same serialization calls as RidgeRegression.Save/Load, without touching the file system
+        var json = JsonConvert.SerializeObject(model);
+        var loaded = JsonConvert.DeserializeObject<RidgeRegression>(json);
+
+        Check(loaded.FeatureMean != null, "Standardization stats should survive the serialization round trip");
+
+        var sample = features[0];
+        CheckClose(loaded.Predict(sample), model.Predict(sample), 1e-4f, "Prediction should be identical after save and load");
+    }
+
+    private static void TestRidgeOldFormatCompatibility()
+    {
+        //A file in the pre standardization format, W = bias + two feature weights
+        const string oldJson = "{\"W\":[0.1,0.2,0.3],\"B\":0.1,\"Lambda\":0.01,\"Affine\":true}";
+        var model = JsonConvert.DeserializeObject<RidgeRegression>(oldJson);
+
+        Check(model.FeatureMean == null && model.FeatureStd == null, "Old files should load without standardization stats");
+        //0.1 * 1 + 0.2 * 1 + 0.3 * 2 = 0.9
+        CheckClose(model.Predict(new float[] { 1f, 2f }), 0.9f, 1e-5f, "Old format prediction should be plain affine weights");
+    }
+
+    private static void TestRidgeInterceptNotPenalized()
+    {
+        //Ridge must NOT penalize the intercept: with standardized (zero-mean) features the intercept
+        //carries the whole target mean, so even a LARGE lambda must reproduce a constant target exactly.
+        //The old Train added lambda over the full identity (including the bias column), shrinking the
+        //intercept to mean(y) * N / (N + lambda) — for N=60, lambda=10 that is ~14% low, i.e. a
+        //systematic offset of every prediction toward screen coordinate 0.
+        const int n = 60;
+        var rng = new System.Random(7);
+        var x = new float[n][];
+        var y = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            x[i] = new float[] { (float)rng.NextDouble(), (float)rng.NextDouble() * 100f, (float)rng.NextDouble() };
+            y[i] = 0.7f;
+        }
+
+        var model = new RidgeRegression(10f);
+        model.Train(x, y);
+        CheckClose(model.Predict(x[0]), 0.7f, 1e-3f,
+            "Large-lambda ridge must still recover a constant target exactly (unpenalized intercept)");
+    }
+
+    private static void TestRobustRidge()
+    {
+        //Robust (IRLS/Huber) fitting: outlier calibration samples (a blink or saccade caught mid-dwell)
+        //must not drag the fit. Build clean linear data, fit it, then corrupt 10% of the TARGETS with large
+        //errors and refit — the robust fit should stay close to both the truth and the clean-data fit,
+        //whereas a plain least-squares fit would be pulled ~0.5 off by +5 outliers on a ~[0,1] target.
+        var rng = new System.Random(123);
+        const int n = 200;
+        var x = new float[n][];
+        var yClean = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float a = (float)rng.NextDouble();
+            float b = (float)rng.NextDouble();
+            x[i] = new float[] { a, b };
+            yClean[i] = 0.3f + 0.5f * a - 0.2f * b;
+        }
+
+        var clean = new RidgeRegression(0.01f);
+        clean.Train(x, (float[])yClean.Clone());
+
+        var yCorrupt = (float[])yClean.Clone();
+        for (int i = 0; i < n / 10; i++)
+            yCorrupt[rng.Next(n)] += 5f; // gross target outliers
+
+        var robust = new RidgeRegression(0.01f);
+        robust.Train(x, yCorrupt);
+
+        var probe = new float[] { 0.7f, 0.3f };
+        float truth = 0.3f + 0.5f * 0.7f - 0.2f * 0.3f;
+        float pRobust = robust.Predict(probe);
+        Check(Mathf.Abs(pRobust - truth) < 0.15f,
+            $"Robust ridge should resist target outliers (pred {pRobust:F3} vs truth {truth:F3})");
+        Check(Mathf.Abs(pRobust - clean.Predict(probe)) < 0.15f,
+            "Robust ridge on corrupted data should stay near the clean-data fit");
+
+        var robust2 = new RidgeRegression(0.01f);
+        robust2.Train(x, yCorrupt);
+        Check(Mathf.Abs(robust2.Predict(probe) - pRobust) < 1e-4f, "Robust ridge training should be deterministic");
+    }
+
+    private static void TestNoShippedDefaultCalibration()
+    {
+        //We deliberately no longer ship a default ridge/MLP fit. The old one-person defaults ignored
+        //the eye-gaze signal and extrapolated off-screen for anyone else (Reg_Y regularized to a
+        //near-constant top edge, Reg_X driven by that person's head geometry), so the crosshair
+        //corner-locked and looked broken before the first calibration. A fresh user must instead get
+        //raw (uncalibrated) gaze via HomulerGaze's null-model fallback.
+        var defaults = Resources.Load<CalibrationResource>("CalibrationDefaultFiles");
+        Check(defaults != null, "CalibrationDefaultFiles asset should load from Resources");
+        if (defaults != null)
+        {
+            Check(defaults.regXAsset == null, "No shipped default Reg_X (raw gaze until the user calibrates)");
+            Check(defaults.regYAsset == null, "No shipped default Reg_Y (raw gaze until the user calibrates)");
+            Check(defaults.mlpAsset == null, "No shipped default MLP (raw gaze until the user calibrates)");
+        }
+
+        //The degenerate default JSON files must be gone from Resources
+        var oldX = AssetDatabase.LoadAssetAtPath<TextAsset>(
+            "Packages/de.uniulm.uniteye/Resources/Calibration/Default/Reg_X.json");
+        var oldY = AssetDatabase.LoadAssetAtPath<TextAsset>(
+            "Packages/de.uniulm.uniteye/Resources/Calibration/Default/Reg_Y.json");
+        Check(oldX == null, "Old degenerate default Reg_X.json should be deleted");
+        Check(oldY == null, "Old degenerate default Reg_Y.json should be deleted");
+
+        //Fallback contract: a model with no weights predicts NaN, which HomulerGaze.RefineGazeLocation
+        //treats as 'use raw gaze'. (This is what a null default now resolves to.)
+        var empty = JsonConvert.DeserializeObject<RidgeRegression>("{\"W\":null,\"B\":0,\"Lambda\":1,\"Affine\":true}");
+        Check(empty != null, "RidgeRegression should still deserialize");
+        var features = new float[12];
+        Check(float.IsNaN(empty.Predict(features)), "A model with no weights must predict NaN (the raw-gaze fallback signal)");
+    }
+
+    private static void TestTrainerOnSyntheticData()
+    {
+        var (features, yX, yY) = MakeSyntheticData(500, new System.Random(3), noise: 0.005f);
+
+        var result = RidgeCalibrationTrainer.Train(
+            features, yX, yY,
+            rmseScaleX: 10f, rmseScaleY: 10f,
+            rng: new System.Random(7));
+
+        Check(result.TrainCount == 400, $"Expected 400 training samples, got {result.TrainCount}");
+        Check(result.TestCount == 100, $"Expected 100 holdout samples, got {result.TestCount}");
+        Check(result.XRmse < 0.3f, $"Holdout RMSE X should be near the noise level, was {result.XRmse}");
+        Check(result.YRmse < 0.3f, $"Holdout RMSE Y should be near the noise level, was {result.YRmse}");
+        Check(Array.IndexOf(RidgeCalibrationTrainer.DefaultLambdas, result.BestLambdaX) >= 0, "Selected lambda X should come from the candidate list");
+        Check(Array.IndexOf(RidgeCalibrationTrainer.DefaultLambdas, result.BestLambdaY) >= 0, "Selected lambda Y should come from the candidate list");
+
+        //Fresh sample prediction through both refitted models
+        var fresh = new float[] { 0.25f, 250f, 0.0025f, 1920f, 1080f };
+        var expectedX = 0.4f * 0.25f + 0.0003f * 250f + 20f * 0.0025f + 0.05f;
+        var expectedY = -0.2f * 0.25f + 0.0001f * 250f - 10f * 0.0025f + 0.30f;
+        CheckClose(result.XModel.Predict(fresh), expectedX, 0.02f, "Trainer X model prediction");
+        CheckClose(result.YModel.Predict(fresh), expectedY, 0.02f, "Trainer Y model prediction");
+
+        //Same seed must give the same split and therefore the same result
+        var repeat = RidgeCalibrationTrainer.Train(
+            features, yX, yY,
+            rmseScaleX: 10f, rmseScaleY: 10f,
+            rng: new System.Random(7));
+        Check(repeat.XRmse == result.XRmse && repeat.YRmse == result.YRmse, "Training with the same seed should be deterministic");
+    }
+
+    private static void TestSpatiallyBalancedCalibrationSamples()
+    {
+        var x = new List<float>();
+        var y = new List<float>();
+        //A dense centre sweep and sparse corner fixation must contribute equally after balancing.
+        for (var i = 0; i < 100; i++) { x.Add(0.5f); y.Add(0.5f); }
+        x.Add(0.08f); y.Add(0.08f);
+        x.Add(0.08f); y.Add(0.08f);
+
+        var indices = RidgeCalibrationTrainer.SpatiallyBalancedIndices(
+            x, y, new System.Random(9), maxSamplesPerCell: 10);
+        Check(indices.Length == 20, "Spatial balancing should retain ten samples from each occupied cell");
+
+        var cornerCount = 0;
+        foreach (var index in indices)
+            if (x[index] < 1f / 3f && y[index] < 1f / 3f) cornerCount++;
+        Check(cornerCount == 10, "Spatial balancing should upweight sparse corner fixation samples");
+
+        var permutation = RidgeCalibrationTrainer.StratifiedRandomPermutation(x, y, new System.Random(9));
+        Check(permutation.Length == x.Count, "Stratified permutation should retain every sample");
+        var firstIsCorner = x[permutation[0]] < 1f / 3f && y[permutation[0]] < 1f / 3f;
+        var secondIsCorner = x[permutation[1]] < 1f / 3f && y[permutation[1]] < 1f / 3f;
+        Check(firstIsCorner != secondIsCorner, "Stratified permutation should interleave target cells");
+    }
+
+    private static void TestFeatureAugmentation()
+    {
+        var features = new[]
+        {
+            new[] { 1f, 10f, 5f },
+            new[] { 3f, 30f, 5f },
+            new[] { 5f, 50f, 5f },
+        };
+        var targets = new[] { 0.1f, 0.5f, 0.9f };
+
+        //Feature augmentation is now the DEFAULT calibration approach: a freshly constructed settings object
+        //must be enabled so calibration augments unless the user deliberately turns it off.
+        Check(new CalibrationFeatureAugmentationSettings().enabled,
+            "Feature augmentation should be enabled by default");
+        Check(CalibrationFeatureAugmentation.IsEnabled(new CalibrationFeatureAugmentationSettings()),
+            "Default feature augmentation settings should report as enabled");
+
+        var disabled = new CalibrationFeatureAugmentationSettings { enabled = false };
+        Check(ReferenceEquals(CalibrationFeatureAugmentation.Augment(features, disabled), features),
+            "Disabled augmentation should leave training features unchanged");
+
+        var settings = new CalibrationFeatureAugmentationSettings
+        {
+            enabled = true,
+            copiesPerSample = 2,
+            standardDeviationScale = 0.1f,
+            maximumStandardDeviations = 2f,
+            seed = 17,
+        };
+        var augmented = CalibrationFeatureAugmentation.Augment(features, settings);
+        var repeated = CalibrationFeatureAugmentation.Augment(features, settings);
+        var augmentedTargets = CalibrationFeatureAugmentation.DuplicateTargets(targets, settings);
+        Check(augmented.Length == features.Length * 3, "Augmentation should add the requested training copies");
+        Check(augmentedTargets.Length == augmented.Length, "Augmented features and labels should remain aligned");
+        for (var copy = 0; copy <= settings.copiesPerSample; copy++)
+            for (var i = 0; i < features.Length; i++)
+            {
+                var index = copy * features.Length + i;
+                Check(augmentedTargets[index] == targets[i], "Feature augmentation must not change calibration labels");
+                for (var feature = 0; feature < features[i].Length; feature++)
+                    Check(augmented[index][feature] == repeated[index][feature],
+                        "Fixed augmentation seed should produce deterministic feature jitter");
+            }
+        Check(augmented[features.Length][2] == features[0][2],
+            "Zero-variance features should not receive synthetic jitter");
+
+        //Extra head-pose jitter: a head-pose slot with zero captured variance still receives synthetic
+        //jitter when named (so the fit is not tied to the single calibration head pose), while an unnamed
+        //zero-variance feature stays fixed and the original (copy 0) samples are never jittered.
+        var headSettings = new CalibrationFeatureAugmentationSettings
+        {
+            enabled = true,
+            copiesPerSample = 1,
+            standardDeviationScale = 0.1f,
+            maximumStandardDeviations = 2f,
+            headPoseJitterDegrees = 3f,
+            seed = 17,
+            headPoseFeatureIndices = new[] { 1 }, // feature 1 is the "head-pose" slot; feature 2 is not
+        };
+        var headFeatures = new[]
+        {
+            new[] { 1f, 5f, 7f },
+            new[] { 3f, 5f, 7f },
+            new[] { 5f, 5f, 7f },
+        };
+        var headAug = CalibrationFeatureAugmentation.Augment(headFeatures, headSettings);
+        var headRepeat = CalibrationFeatureAugmentation.Augment(headFeatures, headSettings);
+        Check(headAug.Length == headFeatures.Length * 2, "Head-pose augmentation should still add the requested copies");
+        var anyHeadJitter = false;
+        for (var i = 0; i < headFeatures.Length; i++)
+        {
+            Check(headAug[i][1] == headFeatures[i][1], "The original (copy 0) samples must never be jittered");
+            var copyIndex = headFeatures.Length + i;
+            if (Mathf.Abs(headAug[copyIndex][1] - headFeatures[i][1]) > 1e-6f)
+                anyHeadJitter = true;
+            //Bound = proportional (0 for a zero-variance feature) + (jitterDegrees in radians) * maxStd.
+            //Head-pose features are radians, so the 3-degree jitter is converted before being applied.
+            Check(Mathf.Abs(headAug[copyIndex][1] - headFeatures[i][1]) <= 3f * Mathf.Deg2Rad * 2f + 1e-4f,
+                "Head-pose jitter must stay within its bound");
+            Check(headAug[copyIndex][2] == headFeatures[i][2],
+                "An unnamed zero-variance feature must not receive head-pose jitter");
+            Check(headAug[copyIndex][1] == headRepeat[copyIndex][1],
+                "Head-pose jitter should be deterministic for a fixed seed");
+        }
+        Check(anyHeadJitter, "A named zero-variance head-pose feature should receive synthetic jitter");
+
+        var (ridgeFeatures, yX, yY) = MakeSyntheticData(500, new System.Random(31), noise: 0.005f);
+        var result = RidgeCalibrationTrainer.Train(ridgeFeatures, yX, yY, 10f, 10f,
+            rng: new System.Random(7), augmentation: settings);
+        Check(result.TrainCount == 400 && result.TestCount == 100,
+            "Ridge augmentation must not duplicate the reported train or holdout counts");
+        Check(result.XRmse < 0.4f && result.YRmse < 0.4f,
+            "Ridge feature jitter should retain clean synthetic-data accuracy");
+    }
+
+    private static void TestHeadRotationPreset()
+    {
+        //Ordinary presets are not a head-movement stage; the new preset is, and dwells at its waypoints.
+        Check(!new CornerPreset(20f).IsHeadMovement, "Ordinary presets must not be flagged as head-movement");
+
+        var preset = new HeadRotationPreset(20f, 5f, 0.08f);
+        Check(preset.IsHeadMovement, "HeadRotationPreset should be a head-movement stage");
+        Check(preset.StopAtWaypoints, "HeadRotationPreset should dwell at its waypoints");
+        Check(Mathf.Approximately(preset.DwellSeconds, 5f), "HeadRotationPreset should honor its dwell seconds");
+        //The dwell floor keeps a too-short request usable for a full head roll.
+        Check(Mathf.Approximately(new HeadRotationPreset(20f, 0.5f).DwellSeconds, 2f),
+            "HeadRotationPreset should clamp the dwell to a sensible floor");
+
+        //centre approach + centre dwell + four corners + closing centre. The calibration dwells at
+        //points[1..n-2], i.e. the centre and the four corners, which is the head-pose coverage this stage
+        //is for. The head-pose feature indices the calibration jitters must match the runner layouts.
+        var points = preset.GetPoints();
+        Check(points.Count == 7, "HeadRotationPreset should produce centre + four corners with approach/close points");
+    }
+
+    private static float[][] ToArray(List<float[]> list) => list.ToArray();
+
+    private static void TestSimpleMLP()
+    {
+        //Nonlinear synthetic data (something ridge cannot fit) with pixel-scale targets,
+        //mimicking the calibration setup
+        var rng = new System.Random(99);
+        int n = 800;
+        var x = new float[n][];
+        var y = new Vector2[n];
+        for (int i = 0; i < n; i++)
+        {
+            float a = (float)rng.NextDouble() * 2f - 1f;
+            float b = (float)rng.NextDouble() * 2f - 1f;
+            x[i] = new float[] { a, b, a * b, 1920f };  //includes a constant feature
+            y[i] = new Vector2(
+                960f + 400f * a + 250f * (float)Math.Sin(2.5 * b),
+                540f + 300f * b + 200f * a * b);
+        }
+
+        var mlp = new SimpleMLP(seed: 42);
+        var message = mlp.Train(x, y);
+        Check(message.Contains("MLP Training done"), "SimpleMLP.Train should return the accuracy message");
+
+        //Holdout accuracy: target std is ~470px/380px, an MLP that learned should be far below that
+        double sx = 0, sy = 0;
+        var probeRng = new System.Random(7);
+        int probes = 200;
+        for (int i = 0; i < probes; i++)
+        {
+            float a = (float)probeRng.NextDouble() * 2f - 1f;
+            float b = (float)probeRng.NextDouble() * 2f - 1f;
+            var truth = new Vector2(960f + 400f * a + 250f * (float)Math.Sin(2.5 * b), 540f + 300f * b + 200f * a * b);
+            var p = mlp.Predict(new float[] { a, b, a * b, 1920f });
+            sx += (p.x - truth.x) * (p.x - truth.x);
+            sy += (p.y - truth.y) * (p.y - truth.y);
+        }
+        var rmseX = (float)Math.Sqrt(sx / probes);
+        var rmseY = (float)Math.Sqrt(sy / probes);
+        Check(rmseX < 100f && rmseY < 100f, $"SimpleMLP should fit nonlinear data (probe RMSE {rmseX:F1},{rmseY:F1}px)");
+
+        //Round-trip via the same JSON path Save/Load use
+        var json = JsonConvert.SerializeObject(mlp);
+        var loaded = JsonConvert.DeserializeObject<SimpleMLP>(json);
+        var probe = new float[] { 0.3f, -0.4f, -0.12f, 1920f };
+        var p1 = mlp.Predict(probe); var p2 = loaded.Predict(probe);
+        Check(Mathf.Abs(p1.x - p2.x) < 1e-3f && Mathf.Abs(p1.y - p2.y) < 1e-3f, "SimpleMLP prediction should survive the serialization round trip");
+
+        //Determinism with a seed
+        var mlp2 = new SimpleMLP(seed: 42);
+        mlp2.Train(x, y);
+        var q1 = mlp.Predict(probe); var q2 = mlp2.Predict(probe);
+        Check(q1 == q2, "SimpleMLP training should be deterministic for a fixed seed");
+
+        var augmentation = new CalibrationFeatureAugmentationSettings
+        {
+            enabled = true,
+            copiesPerSample = 1,
+            standardDeviationScale = 0.01f,
+            maximumStandardDeviations = 2f,
+            seed = 42,
+        };
+        var augmentedMlp = new SimpleMLP(seed: 42);
+        augmentedMlp.Train(x, y, augmentation);
+        var augmentedPrediction = augmentedMlp.Predict(probe);
+        Check(Mathf.Abs(augmentedPrediction.x - p1.x) < 100f && Mathf.Abs(augmentedPrediction.y - p1.y) < 100f,
+            "MLP feature jitter should retain clean synthetic-data accuracy");
+
+        //Feature/model mismatch returns NaN (raw-gaze fallback contract)
+        var mismatch = mlp.Predict(new float[] { 1f, 2f });
+        Check(float.IsNaN(mismatch.x), "SimpleMLP.Predict should return NaN on a dimensionality mismatch");
+    }
+
+    #endregion
+
+    #region GazeGridQuantizer
+
+    private static void TestGazeGridQuantizer()
+    {
+        var quantizer = new GazeGridQuantizer(columns: 3, rows: 3, hysteresisMargin: 0.15f, dwellSeconds: 0.1f);
+
+        Check(quantizer.CurrentCell == -1, "Quantizer should start without an active cell");
+
+        //First sample is adopted immediately
+        Check(quantizer.Update(new Vector2(0.10f, 0.10f), 0.00f), "First sample should activate a cell");
+        Check(quantizer.CurrentCell == 0 && quantizer.CurrentColumn == 0 && quantizer.CurrentRow == 0, "First sample should map to cell 0");
+
+        //Jitter across the border but inside the hysteresis margin must not switch
+        Check(!quantizer.Update(new Vector2(0.34f, 0.10f), 0.02f), "Jitter inside the hysteresis margin should not switch");
+        Check(quantizer.CurrentCell == 0, "Cell should still be 0 after margin jitter");
+
+        //A clear move switches only after the dwell time
+        Check(!quantizer.Update(new Vector2(0.50f, 0.10f), 0.04f), "A new cell should not be adopted instantly");
+        Check(!quantizer.Update(new Vector2(0.50f, 0.10f), 0.09f), "A new cell should not be adopted before the dwell time");
+        Check(quantizer.Update(new Vector2(0.50f, 0.10f), 0.15f), "A new cell should be adopted after the dwell time");
+        Check(quantizer.CurrentCell == 1, "Cell should be 1 after the dwell switch");
+
+        //Returning to the active cell resets the dwell candidate
+        Check(!quantizer.Update(new Vector2(0.90f, 0.10f), 2.00f), "Excursion sample should only start a candidate");
+        Check(!quantizer.Update(new Vector2(0.50f, 0.10f), 2.05f), "Returning to the active cell should not switch");
+        Check(!quantizer.Update(new Vector2(0.90f, 0.10f), 2.10f), "Second excursion should restart the candidate");
+        Check(!quantizer.Update(new Vector2(0.90f, 0.10f), 2.15f), "The restarted candidate should not use the old dwell start");
+        Check(quantizer.Update(new Vector2(0.90f, 0.10f), 2.21f), "The restarted candidate should switch after a full dwell");
+        Check(quantizer.CurrentCell == 2, "Cell should be 2 after the second dwell switch");
+
+        //Out of range samples are clamped onto the grid
+        quantizer.Update(new Vector2(1.5f, 1.5f), 5.0f);
+        Check(quantizer.Update(new Vector2(1.5f, 1.5f), 5.2f), "Clamped out of range samples should switch after dwell");
+        Check(quantizer.CurrentCell == 8, "Out of range samples should clamp to the last cell");
+
+        //NaN samples are ignored
+        Check(!quantizer.Update(new Vector2(float.NaN, 0.5f), 6.0f), "NaN samples should be ignored");
+        Check(quantizer.CurrentCell == 8, "NaN samples should not change the cell");
+
+        //Zero dwell switches immediately once outside the margin
+        var immediate = new GazeGridQuantizer(columns: 2, rows: 2, hysteresisMargin: 0.1f, dwellSeconds: 0f);
+        immediate.Update(new Vector2(0.2f, 0.2f), 0f);
+        Check(immediate.Update(new Vector2(0.9f, 0.9f), 1f), "Zero dwell should switch immediately");
+        Check(immediate.CurrentCell == 3, "Zero dwell switch should land in the sampled cell");
+
+        //Geometry helpers
+        Check(quantizer.CellAt(new Vector2(0.99f, 0.99f)) == 8, "CellAt should map the bottom right corner to the last cell");
+        var rect = quantizer.GetCellRect(4);
+        CheckClose(rect.x, 1f / 3f, 1e-5f, "Cell rect x of the center cell");
+        CheckClose(rect.y, 1f / 3f, 1e-5f, "Cell rect y of the center cell");
+    }
+
+    #endregion
+
+    #region Scenes and prefabs
+
+    private static void TestScenesAndPrefabsHaveNoMissingScripts()
+    {
+        //All scenes/prefabs are now expected to have zero missing scripts. (The HomulerGazeCalibration
+        //scene previously had five dangling landmark-annotation references; the MediaPipe 0.16.3 Task-API
+        //migration's cleanup pass (MigrationCleanup) stripped them along with the deleted Solution-era
+        //components.)
+        var knownMissingScripts = new Dictionary<string, int>();
+
+        //Validates that all scenes and prefabs shipped with the package still resolve their
+        //script and asset references, which guards against GUID breakage from restructuring
+        var sceneGuids = AssetDatabase.FindAssets("t:SceneAsset", new[] { "Packages/de.uniulm.uniteye/Scenes" });
+        Check(sceneGuids.Length > 0, "Package scenes should be found");
+
+        foreach (var guid in sceneGuids)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(guid);
+            var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+
+            var missingScripts = 0;
+            foreach (var root in scene.GetRootGameObjects())
+                missingScripts += CountMissingScriptsRecursive(root);
+
+            var expected = knownMissingScripts.TryGetValue(path, out var known) ? known : 0;
+            Check(missingScripts == expected, $"Scene {path} has {missingScripts} missing scripts (expected {expected})");
+        }
+
+        var prefabGuids = AssetDatabase.FindAssets("t:Prefab", new[] { "Packages/de.uniulm.uniteye/Prefabs" });
+        Check(prefabGuids.Length > 0, "Package prefabs should be found");
+
+        foreach (var guid in prefabGuids)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(guid);
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            Check(prefab != null, $"Prefab {path} should be loadable");
+            if (prefab == null) continue;
+
+            var missingScripts = CountMissingScriptsRecursive(prefab);
+            Check(missingScripts == 0, $"Prefab {path} has {missingScripts} missing scripts");
+        }
+
+        //Leave a fresh empty scene behind so no package scene stays open
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+    }
+
+    private static void TestEyeCropRect()
+    {
+        //Corners in MediaPipe convention (normalized, y-down): a 0.1-wide eye slightly above the
+        //vertical image center, 1280x720 source
+        var landmarks = new List<Mediapipe.NormalizedLandmark>
+        {
+            new Mediapipe.NormalizedLandmark { X = 0.45f, Y = 0.42f },
+            new Mediapipe.NormalizedLandmark { X = 0.55f, Y = 0.42f },
+        };
+
+        var rect = HomulerFunctions.GetEyeCropRect(landmarks, 0, 1, 1280, 720);
+        var rectAgain = HomulerFunctions.GetEyeCropRect(landmarks, 0, 1, 1280, 720);
+
+        //GetEyeCropRect must not modify the landmarks (the old in-place Y flip corrupted the
+        //EyeCorners model input and toggled the crop between eye and cheek on alternating frames)
+        CheckClose(landmarks[0].Y, 0.42f, 1e-6f, "GetEyeCropRect must not mutate landmark Y (left)");
+        CheckClose(landmarks[1].Y, 0.42f, 1e-6f, "GetEyeCropRect must not mutate landmark Y (right)");
+        Check(rect.Equals(rectAgain), "GetEyeCropRect must be deterministic across repeated calls");
+
+        //Pinned expected geometry: padded eyeLength 0.14 -> 179px square at (550, 316) bottom-left
+        Check(rect.width == 179 && rect.height == 179, $"Eye crop should be a 179px square, got {rect.width}x{rect.height}");
+        Check(rect.x == 550 && rect.y == 316, $"Eye crop origin should be (550, 316), got ({rect.x}, {rect.y})");
+
+        //The eye center (640, 417.6 in bottom-left pixels) must fall inside the crop, in its upper half
+        Check(rect.x <= 640 && 640 <= rect.x + rect.width, "Eye center X must be inside the crop");
+        Check(rect.y <= 417 && 418 <= rect.y + rect.height, "Eye center Y must be inside the crop");
+        Check(417.6f - rect.y > rect.height * 0.5f, "Eye center must sit above the crop's vertical midpoint");
+    }
+
+    private static int CountMissingScriptsRecursive(GameObject gameObject)
+    {
+        var missing = GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(gameObject);
+        foreach (Transform child in gameObject.transform)
+            missing += CountMissingScriptsRecursive(child.gameObject);
+        return missing;
+    }
+
+    #endregion
+
+    #region EyeMU model (Inference Engine)
+
+    private static void TestEyeMUModelLoadsAndRuns()
+    {
+        //Verifies the Barracuda->Inference Engine migration end-to-end at the model level:
+        //the EyeMU .onnx imports as a ModelAsset, the reference is bound (rebinder ran),
+        //the model loads, and it executes with the input/output names the runner relies on.
+        //NOTE: this proves the graph loads and runs and (via Schedule's shape validation) that the
+        //tensor layout is accepted — it does NOT prove the gaze output is numerically correct.
+        var resource = Resources.Load<EyeMUResource>("EyeMU");
+        Check(resource != null, "EyeMU resource should load from Resources");
+        if (resource == null) return;
+
+        Check(resource.modelAsset != null, "EyeMU modelAsset should be bound after the rebinder ran");
+        if (resource.modelAsset == null) return;
+
+        var model = ModelLoader.Load(resource.modelAsset);
+        Check(model != null, "EyeMU model should load under Inference Engine");
+        if (model == null) return;
+
+        //Execute once with blank NHWC inputs (1x128x128x3) using the model's actual I/O names.
+        //Pure-CPU tensors (no TextureConverter) so this runs under -nographics. This proves the model
+        //loads and runs and that the names/shapes the runner uses match the model (Schedule validates
+        //shapes). It does NOT prove the gaze output is numerically correct - that needs a live camera.
+        Worker worker = null;
+        Tensor<float> t1 = null, t2 = null, t4 = null, t5 = null;
+        try
+        {
+            worker = new Worker(model, BackendType.CPU);
+
+            t1 = new Tensor<float>(new TensorShape(1, 128, 128, 3), new float[128 * 128 * 3]);
+            t2 = new Tensor<float>(new TensorShape(1, 128, 128, 3), new float[128 * 128 * 3]);
+            t4 = new Tensor<float>(new TensorShape(1, 8), new float[8]);
+            t5 = new Tensor<float>(new TensorShape(1, 4), new float[4]);
+
+            worker.SetInput("input_1:0", t1);
+            worker.SetInput("input_2:0", t2);
+            worker.SetInput("input_4", t4);
+            worker.SetInput("input_5", t5);
+            worker.Schedule();
+
+            var outT = worker.PeekOutput("dense_8") as Tensor<float>;
+            Check(outT != null, "Output 'dense_8' should exist");
+            if (outT != null)
+            {
+                var data = outT.DownloadToArray();
+                Check(data.Length >= 2, $"dense_8 should produce at least 2 values (got {data.Length})");
+                if (data.Length >= 2)
+                    Check(!float.IsNaN(data[0]) && !float.IsInfinity(data[0]) && !float.IsNaN(data[1]) && !float.IsInfinity(data[1]),
+                        $"dense_8 output should be finite (got {data[0]}, {data[1]})");
+            }
+        }
+        finally
+        {
+            t1?.Dispose();
+            t2?.Dispose();
+            t4?.Dispose();
+            t5?.Dispose();
+            worker?.Dispose();
+        }
+    }
+
+    private static float[] GazeBinSpike(int index)
+    {
+        var b = new float[90];
+        b[index] = 100f;   // softmax -> ~one-hot at index
+        return b;
+    }
+
+    private static void TestCalibrationFileNames()
+    {
+        //Per-backbone calibration files: each backbone gets a distinct name so a calibration for one
+        //model never overwrites another's (their feature vectors differ). Save and Load share this helper.
+        Check(CalibrationModelStore.FileName("Reg_X.json", GazeBackbone.EyeMU) == "Reg_X_EyeMU.json",
+            "Ridge X calibration file name for EyeMU");
+        Check(CalibrationModelStore.FileName("MLP.json", GazeBackbone.GazeMobileOne) == "MLP_GazeMobileOne.json",
+            "MLP calibration file name for MobileOne");
+        var a = CalibrationModelStore.FileName("Reg_Y.json", GazeBackbone.EyeMU);
+        var b = CalibrationModelStore.FileName("Reg_Y.json", GazeBackbone.GazeMobileOne);
+        var c = CalibrationModelStore.FileName("Reg_Y.json", GazeBackbone.GazeMobileNetV2);
+        Check(a != b && b != c && a != c, "Calibration file names are distinct per backbone");
+    }
+
+    private static void TestGazeEstimationDecode()
+    {
+        //L2CS decode: softmax + expectation over 90 bins, index*4deg - 180deg -> radians. Pure math.
+        //Center bin (45) -> 45*4-180 = 0 deg; bin 0 -> -180 deg = -pi; bin 89 -> 176 deg.
+        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(45)), 0f, 0.02f, "Gaze decode: center bin ~ 0 rad");
+        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(0)), -Mathf.PI, 0.02f, "Gaze decode: bin 0 ~ -pi rad");
+        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(89)), (89f * 4f - 180f) * Mathf.Deg2Rad, 0.02f, "Gaze decode: bin 89");
+    }
+
+    private static void TestGazeFeaturePolynomial()
+    {
+        //The direction backbone must emit the polynomial-expanded calibration feature vector so a per-axis
+        //LINEAR ridge can bend to the corners (raw [yaw,pitch] can't: the angle->screen map is nonlinear
+        //with a yaw*pitch coupling). Pin the length + exact term layout so the basis isn't silently
+        //changed and train/predict stay in lockstep (both read this same vector).
+        Check(GazeEstimationRunner.FeatureCount == 11, "Gaze calibration feature vector is the 11-term polynomial");
+        var f = new float[GazeEstimationRunner.FeatureCount];
+        float yaw = 0.3f, pitch = -0.2f;
+        GazeEstimationRunner.FillGazeFeatures(f, yaw, pitch, 0.11f, 0.12f, 0.13f, 0.14f);
+        CheckClose(f[0], yaw, 1e-6f, "feature[0] = yaw");
+        CheckClose(f[1], pitch, 1e-6f, "feature[1] = pitch");
+        CheckClose(f[2], yaw * yaw, 1e-6f, "feature[2] = yaw^2");
+        CheckClose(f[3], pitch * pitch, 1e-6f, "feature[3] = pitch^2");
+        CheckClose(f[4], yaw * pitch, 1e-6f, "feature[4] = yaw*pitch (the cross term the corners need)");
+        CheckClose(f[5], yaw * yaw * yaw, 1e-6f, "feature[5] = yaw^3 (tan-reach term)");
+        CheckClose(f[6], pitch * pitch * pitch, 1e-6f, "feature[6] = pitch^3");
+        CheckClose(f[7], 0.11f, 1e-6f, "feature[7] = headYaw (linear)");
+        CheckClose(f[10], 0.14f, 1e-6f, "feature[10] = headArea (linear)");
+    }
+
+    private static void TestEyeMUFeaturePolynomial()
+    {
+        //EyeMU regresses a screen POINT trained on portrait phones; the map onto a desktop screen is
+        //nonlinear, so its calibration features now carry a polynomial of the normalized gaze point (like
+        //the direction backbones carry one of the gaze angles) — otherwise a linear ridge compresses the
+        //corners. Pin the length + exact layout so train/predict stay in lockstep, and so HeadPoseFeature-
+        //Indices (11/12/13) keeps matching.
+        Check(HomulerEyeMURunner.FeatureCount == 15, "EyeMU calibration feature vector is 15 terms (embedding + gaze polynomial + head pose)");
+        var f = new float[HomulerEyeMURunner.FeatureCount];
+        var emb = new[] { 0.1f, 0.2f, 0.3f, 0.4f };
+        float gx = 0.25f, gy = 0.75f;
+        HomulerEyeMURunner.FillEyeMUFeatures(f, emb, gx, gy, 0.11f, 0.12f, 0.13f, 0.14f);
+        CheckClose(f[0], 0.1f, 1e-6f, "feature[0] = embedding[0]");
+        CheckClose(f[3], 0.4f, 1e-6f, "feature[3] = embedding[3]");
+        CheckClose(f[4], gx, 1e-6f, "feature[4] = gx (normalized gaze x)");
+        CheckClose(f[5], gy, 1e-6f, "feature[5] = gy (normalized gaze y)");
+        CheckClose(f[6], gx * gx, 1e-6f, "feature[6] = gx^2");
+        CheckClose(f[7], gy * gy, 1e-6f, "feature[7] = gy^2");
+        CheckClose(f[8], gx * gy, 1e-6f, "feature[8] = gx*gy (the cross term the corners need)");
+        CheckClose(f[9], gx * gx * gx, 1e-6f, "feature[9] = gx^3 (reach term)");
+        CheckClose(f[10], gy * gy * gy, 1e-6f, "feature[10] = gy^3");
+        CheckClose(f[11], 0.11f, 1e-6f, "feature[11] = headYaw (matches HeadPoseFeatureIndices)");
+        CheckClose(f[12], 0.12f, 1e-6f, "feature[12] = headPitch");
+        CheckClose(f[13], 0.13f, 1e-6f, "feature[13] = headRoll");
+        CheckClose(f[14], 0.14f, 1e-6f, "feature[14] = headArea (linear)");
+    }
+
+    private static void TestCalibrationProfiles()
+    {
+        //Path safety: a crafted profile may only write "<knownSubfolder>/<file>.json" — never traverse out.
+        Check(CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/Reg_X_EyeMU.json"), "A normal ridge profile path is safe");
+        Check(CalibrationProfileStore.IsSafeRelativePath("MLP/MLP_EyeMU.json"), "A normal MLP profile path is safe");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("../evil.json"), "Path traversal is rejected");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/../../evil.json"), "Nested traversal is rejected");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("Unknown/x.json"), "An unknown subfolder is rejected");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/x.txt"), "A non-json profile entry is rejected");
+        Check(!CalibrationProfileStore.IsSafeRelativePath("RidgeRegression/Reg_X:evil.json"),
+            "Reserved name characters (NTFS alternate-data-stream ':') are rejected");
+
+        //Sanitize turns a name into a safe file stem.
+        Check(CalibrationProfileStore.Sanitize("MC-14-07-2026") == "MC-14-07-2026", "A clean profile name is unchanged");
+        Check(!CalibrationProfileStore.Sanitize("a/b:c*d").Contains("/"), "Sanitize strips invalid file-name characters");
+
+        //Serialize round-trip preserves the embedded calibration files verbatim.
+        var profile = new CalibrationProfile { name = "t", backbone = "EyeMU" };
+        profile.files["RidgeRegression/Reg_X_EyeMU.json"] = "{\"W\":[1,2,3]}";
+        var round = JsonConvert.DeserializeObject<CalibrationProfile>(JsonConvert.SerializeObject(profile));
+        Check(round.files["RidgeRegression/Reg_X_EyeMU.json"] == "{\"W\":[1,2,3]}",
+            "Profile serialization preserves the embedded calibration file content");
+
+        //The shipped MC-14-07-2026 profile must load from Resources AND still match the CURRENT EyeMU feature
+        //count (16 ridge weights = 15 features + the affine bias) — a guard that the committed profile stays
+        //compatible if the EyeMU feature vector is ever changed again.
+        var shipped = Resources.Load<TextAsset>($"{CalibrationProfileStore.ResourcesFolder}/MC-14-07-2026");
+        Check(shipped != null, "The shipped MC-14-07-2026 calibration profile should be in Resources");
+        if (shipped != null)
+        {
+            var mc = JsonConvert.DeserializeObject<CalibrationProfile>(shipped.text);
+            Check(mc.files.ContainsKey("RidgeRegression/Reg_X_EyeMU.json") &&
+                  mc.files.ContainsKey("RidgeRegression/Reg_Y_EyeMU.json"),
+                "MC-14-07-2026 profile contains the EyeMU ridge X/Y calibration files");
+            var rx = JsonConvert.DeserializeObject<RidgeRegression>(mc.files["RidgeRegression/Reg_X_EyeMU.json"]);
+            Check(rx.W != null && rx.W.Count == HomulerEyeMURunner.FeatureCount + 1,
+                $"MC-14-07-2026 ridge X matches the current EyeMU feature count ({HomulerEyeMURunner.FeatureCount} + affine bias)");
+        }
+    }
+
+    private static void TestGazeModelsLoadAndRun()
+    {
+        //Verifies both yakhyo/gaze-estimation ONNX models import and expose the I/O GazeEstimationRunner
+        //codes against: one input (1,3,448,448) named "input", two outputs "yaw"+"pitch" of 90 bins each.
+        //Runs once with a blank CPU input so it works under -nographics. Does NOT prove gaze accuracy.
+        foreach (var path in new[] { "ONNX/GazeEstimation/mobileone_s0_gaze", "ONNX/GazeEstimation/mobilenetv2_gaze", "ONNX/GazeEstimation/resnet34_gaze" })
+        {
+            var asset = Resources.Load<ModelAsset>(path);
+            Check(asset != null, $"Gaze model should load from Resources: {path}");
+            if (asset == null) continue;
+
+            var model = ModelLoader.Load(asset);
+            Check(model.inputs.Count == 1, $"{path}: should have 1 input");
+            Check(model.outputs.Count == 2, $"{path}: should have 2 outputs");
+
+            bool hasYaw = false, hasPitch = false;
+            foreach (var o in model.outputs)
+            {
+                if (o.name == "yaw") hasYaw = true;
+                if (o.name == "pitch") hasPitch = true;
+            }
+            Check(hasYaw && hasPitch, $"{path}: outputs should be named yaw + pitch");
+
+            Worker worker = null;
+            Tensor<float> input = null;
+            try
+            {
+                worker = new Worker(model, BackendType.CPU);
+                input = new Tensor<float>(new TensorShape(1, 3, 448, 448), new float[3 * 448 * 448]);
+                worker.SetInput("input", input);
+                worker.Schedule();
+
+                var yaw = worker.PeekOutput("yaw") as Tensor<float>;
+                Check(yaw != null, $"{path}: 'yaw' output should exist");
+                if (yaw != null)
+                {
+                    var bins = yaw.DownloadToArray();
+                    Check(bins.Length == 90, $"{path}: yaw should have 90 bins (got {bins.Length})");
+                }
+            }
+            finally
+            {
+                input?.Dispose();
+                worker?.Dispose();
+            }
+        }
+    }
+
+    #endregion
+
+    #region OneEuroFilter
+
+    private static void TestOneEuroFilter()
+    {
+        //Constant input converges to the input value
+        var filter = new OneEuroFilter<Vector2>(60f, 1.0f, 0f, 1.0f);
+        var result = Vector2.zero;
+        for (int i = 0; i < 100; i++)
+            result = filter.Filter(new Vector2(5f, 5f), i / 60f);
+        CheckClose(result.x, 5f, 0.01f, "One Euro filter should converge to a constant input");
+
+        //Alternating jitter around a fixed point is strongly attenuated
+        var jitterFilter = new OneEuroFilter<Vector2>(60f, 1.0f, 0f, 1.0f);
+        //Warm up to the center first
+        for (int i = 0; i < 100; i++)
+            jitterFilter.Filter(new Vector2(5f, 5f), i / 60f);
+        var maxDeviation = 0f;
+        for (int i = 100; i < 200; i++)
+        {
+            var raw = 5f + ((i % 2 == 0) ? 1f : -1f);
+            var filtered = jitterFilter.Filter(new Vector2(raw, raw), i / 60f);
+            maxDeviation = Mathf.Max(maxDeviation, Mathf.Abs(filtered.x - 5f));
+        }
+        Check(maxDeviation < 0.5f, $"One Euro filter should attenuate alternating jitter, max deviation was {maxDeviation}");
+    }
+
+    private static void TestOneEuroFilterVector2FastPath()
+    {
+        //FilterVector2 (the fast path the gaze pipeline uses every frame) must stay numerically
+        //identical to the generic Filter<Vector2> AND keep the documented public currValue/prevValue
+        //state in sync — the original fast path skipped the state update, so currValue silently read
+        //(0,0) forever once callers switched to it.
+        var generic = new OneEuroFilter<Vector2>(60f, 1.0f, 0.01f, 1.0f);
+        var fast = new OneEuroFilter<Vector2>(60f, 1.0f, 0.01f, 1.0f);
+        Vector2 g = Vector2.zero, f = Vector2.zero, fPrev = Vector2.zero;
+        for (int i = 0; i < 50; i++)
+        {
+            var input = new Vector2(Mathf.Sin(i * 0.3f) * 100f, Mathf.Cos(i * 0.2f) * 50f);
+            g = generic.Filter(input, i / 60f);
+            fPrev = f;
+            f = fast.FilterVector2(input, i / 60f);
+        }
+        CheckClose(f.x, g.x, 1e-4f, "FilterVector2 must match the generic Vector2 path (x)");
+        CheckClose(f.y, g.y, 1e-4f, "FilterVector2 must match the generic Vector2 path (y)");
+        CheckClose(fast.currValue.x, f.x, 1e-6f, "FilterVector2 must update currValue (was stuck at zero)");
+        CheckClose(fast.currValue.y, f.y, 1e-6f, "FilterVector2 must update currValue (y)");
+        CheckClose(fast.prevValue.x, fPrev.x, 1e-6f, "FilterVector2 must update prevValue");
+    }
+
+    #endregion
+}

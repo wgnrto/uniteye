@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: b71661eb555ce244b93482f756740e98
+ScriptedImporter:
+  internalIDToNameTable: []
+  externalObjects: {}
+  serializedVersion: 2
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+  script: {fileID: 11500000, guid: f22407ba6b4157b4a93d0a670bd3dd57, type: 3}
+  dynamicDimConfigs:
+  - name: unk__92
+    size: -1
+  - name: unk__93
+    size: -1
+  - name: unk__94
+    size: -1
+  - name: unk__95
+    size: -1

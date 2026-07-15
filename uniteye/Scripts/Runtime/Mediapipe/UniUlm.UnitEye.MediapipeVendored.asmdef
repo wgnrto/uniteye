@@ -1,0 +1,19 @@
+{
+    "name": "UniUlm.UnitEye.MediapipeVendored",
+    "rootNamespace": "",
+    "references": [
+        "Mediapipe.Runtime",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [
+        "WebGL"
+    ],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

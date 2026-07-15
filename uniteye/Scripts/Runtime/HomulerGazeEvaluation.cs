@@ -1,0 +1,551 @@
+using System;
+using System.Collections.Generic;
+using UnitEye;
+using UnityEngine;
+using UnityEngine.InputSystem;
+namespace UnitEye
+{
+
+    /// <summary>
+    /// This component is responsible for evaluating the UnitEye eye tracking.
+    /// The user is supposed to look at each appearing dot.
+    /// </summary>
+    // HomulerGaze has the default execution order (0). A small positive order (100) deliberately runs
+    // evaluation afterwards without imposing an order on unrelated host-game scripts, so it scores the
+    // fresh sample that corresponds to the displayed target.
+    [DefaultExecutionOrder(100)]
+    public class HomulerGazeEvaluation : MonoBehaviour
+    {
+        #region Private
+
+        private bool _isTimerRunning;
+        private float _timeRemaining;
+
+        private Vector2 _targetLocation = Vector2.zero;
+        private GUIStyle _guiStyle = new GUIStyle();
+        private GUIStyle _timerStyle = new GUIStyle();
+        private GUIStyle _heatmapStyle = new GUIStyle();
+        //Reused 1x1 white texture for the heatmap connector lines.
+        private static Texture2D _lineTex;
+        //Per-target heatmap entries, aggregated ONCE when the evaluation finishes. OnGUI runs 2+ passes per
+        //frame for as long as the results screen is up, so aggregating there allocated two dictionaries and
+        //re-grouped every sample on every pass.
+        private readonly List<(Vector2 target, Vector2 mean, Color color)> _heatmapEntries =
+            new List<(Vector2 target, Vector2 mean, Color color)>();
+
+        private List<Vector2> _points = new List<Vector2>();
+        private List<CalibrationPreset> _presets;
+
+        private List<Vector2> _predMLPData = new List<Vector2>();
+        private List<Vector2> _predRidgeData = new List<Vector2>();
+        private List<Vector2> _targetData = new List<Vector2>();
+        private List<ScreenRegion> _targetRegions = new List<ScreenRegion>();
+
+        private int _currentPoint;
+        private long _lastCapturedGazeSample = -1;
+
+        private bool _started = false;
+        private bool _finished = false;
+        private bool _earlyStop = false;
+        private bool _showMessage = true;
+
+        private string _guiMessage = "Click to start evaluation";
+
+        private HomulerGaze _gaze;
+
+        //Evaluation-owned model store with BOTH calibration types loaded (HomulerGaze's store only holds
+        //the ACTIVE type, so evaluating "the other" model through it silently fell back to the input gaze
+        //and its RMSE row was mislabeled). Loaded fresh on each evaluation start.
+        private readonly CalibrationModelStore _evalStore = new CalibrationModelStore();
+        private bool _hasMlpModel;
+        private bool _hasRidgeModel;
+
+        private enum ScreenRegion { Corner, Edge, Center }
+        private const float RegionBoundaryThreshold = 1f / 3f;
+        private const float RegionBoundaryUpperThreshold = 1f - RegionBoundaryThreshold;
+        //Evaluation dot pulse rate (Hz); one pulse per second, matching the calibration dot animation.
+        private const float EvalPulseHz = 1f;
+
+        #endregion
+
+        #region Public
+
+        [NonSerialized]
+        public bool returnAfter;
+        public bool Returned { get; private set; }
+        //Cleared by the owner (HomulerGaze) once it has handled the return, so LateUpdate does not re-run
+        //UnloadEvaluation every frame (which would stomp the UI toggles via RestoreSettings).
+        public void ClearReturned() => Returned = false;
+        //Default return message for cancellation
+        public string ReturnMessage { get; private set; } = "Cancelled evaluation";
+
+        public Texture2D evaluationDot;
+
+        public int duration = 4;
+
+        public int padding = 40;
+        [Range(0f, 0.25f)]
+        public float normalizedSafeMargin = 0.08f;
+        public int dotSize = 46;
+
+        public int rows = 5;
+        public int columns = 5;
+
+        public bool showAllPoints = false;
+        public bool applyBestCornerModel = true;
+        public bool quitAfterEvaluation = false;
+        [Tooltip("After the evaluation, draw arrows from each target to the mean measured gaze, colored by error, so you can see WHERE accuracy is good or bad.")]
+        public bool showHeatmap = true;
+
+        #endregion
+
+        private void OnEnable()
+        {
+            //Reset per-session state so a repeat evaluation in the same play session starts fresh instead
+            //of inheriting the previous run's finished/returned flags (which made the first click return
+            //immediately) and its recorded samples (which would contaminate the new run's RMSE). Mirrors
+            //HomulerGazeCalibration.OnEnable, which was added for exactly this bug. On the very first
+            //enable this runs before Start(), which does the one-time setup.
+            _started = false;
+            _finished = false;
+            _earlyStop = false;
+            _showMessage = true;
+            Returned = false;
+            _isTimerRunning = false;
+            _timeRemaining = 0f;
+            _currentPoint = 0;
+            _lastCapturedGazeSample = -1;
+            _predMLPData.Clear();
+            _predRidgeData.Clear();
+            _targetData.Clear();
+            _targetRegions.Clear();
+            _heatmapEntries.Clear();
+            _guiMessage = "Click to start evaluation" + (returnAfter ? "\nRight click to cancel and return" : "");
+        }
+
+        void Start()
+        {
+            //OnGUI here draws only labels/textures (no GUILayout); skipping the layout pass halves the
+            //per-frame IMGUI overhead during a run and while the results/heatmap screen is up.
+            useGUILayout = false;
+
+            //Get Gaze reference
+            _gaze = GetComponent<HomulerGaze>();
+
+            //If no crosshair is selected load the CalibrationDot Resource
+            if (evaluationDot == null)
+                evaluationDot = (Texture2D)Resources.Load("CalibrationDot");
+
+            //If can return after evaluation append string to GUI
+            if (returnAfter)
+                _guiMessage += "\nRight click to cancel and return";
+
+            //Initial point grid (rebuilt on start-click, when rows/columns are final)
+            BuildPoints();
+        }
+
+        /// <summary>
+        /// (Re)builds the evaluation dot grid from the CURRENT padding/rows/columns. Called on the
+        /// start-click rather than only in Start(): LoadEvaluation sets rows/columns AFTER enabling the
+        /// component, and Start() does not re-run on later enables, so building here is the only way those
+        /// values are honored on every run.
+        /// </summary>
+        private void BuildPoints()
+        {
+            _points.Clear();
+            _presets = new List<CalibrationPreset>
+            {
+                new EvaluationPreset(padding, rows, columns, normalizedSafeMargin)
+            };
+            foreach (var preset in _presets)
+                _points.AddRange(preset.GetPoints());
+
+            //Randomly shuffle list
+            _points.Shuffle();
+
+            _currentPoint = 0;
+            _targetLocation = new Vector2(_points[0].x, _points[0].y);
+        }
+
+        // This must run after HomulerGaze.LateUpdate: both the fresh-sample sequence and the provider
+        // values are updated there. Running in Update could pair a newly moved target with stale gaze.
+        void LateUpdate()
+        {
+            //If finished and leftclick, signal Returned (new Input System, matching HomulerGazeCalibration)
+            if (Mouse.current.leftButton.wasPressedThisFrame && returnAfter && _finished)
+                Returned = true;
+            //If rightclick, signal Returned
+            if (Mouse.current.rightButton.wasPressedThisFrame && returnAfter)
+                Returned = true;
+            //If finished don't run through evaluation anymore
+            if (_finished) return;
+
+            //Start on leftclick
+            if (Mouse.current.leftButton.wasPressedThisFrame && !_started)
+            {
+                //rows/columns/padding are final by now (LoadEvaluation sets them after enabling)
+                BuildPoints();
+                //Load BOTH calibration models for the active backbone into the evaluation's own store, so
+                //each RMSE row measures the model it claims to (HomulerGaze's store only holds the active
+                //type; the previous code silently evaluated the fallback for the other row).
+                _evalStore.Load(Calibrations.RidgeRegression, _gaze.GazeBackbone);
+                _evalStore.Load(Calibrations.MLCalibration, _gaze.GazeBackbone);
+                _hasRidgeModel = _evalStore.HasModel(Calibrations.RidgeRegression);
+                _hasMlpModel = _evalStore.HasModel(Calibrations.MLCalibration);
+
+                _started = true;
+                _showMessage = false;
+                _isTimerRunning = true;
+                _timeRemaining = duration;
+            }
+
+            //Stop evaluation early when pressing S
+            if (Keyboard.current[Key.S].wasPressedThisFrame && _started)
+            {
+                _earlyStop = true;
+            }
+
+            if (_isTimerRunning)
+            {
+                if (_timeRemaining > 0)
+                {
+                    //Reduce time by frametime
+                    _timeRemaining -= Time.deltaTime;
+
+                    var threeQuarterDuration = duration * 0.75f;
+                    var oneQuarterDuration = duration * 0.25f;
+                    //Only take data between one and three quarter duration
+                    if (_timeRemaining >= oneQuarterDuration && _timeRemaining <= threeQuarterDuration)
+                    {
+                        //Evaluate each model on the provider's RAW gaze + features (what the models
+                        //actually run on), NOT on _gaze.gazeLocation — that is already calibrated by the
+                        //ACTIVE model and filtered, so it measured the live pipeline, not the model under
+                        //test. No SmoothGazeLocation here either: it mutated the SAME stateful filter
+                        //instances the live pipeline uses (three interleaved signals per frame corrupted
+                        //both the on-screen gaze and these numbers). Samples are gated like the
+                        //Calibration capture: no-face frames pair stale features with the dot's position
+                        //and skew the RMSE. Do not gate on the EAR blink heuristic: downward gaze can
+                        //look like a blink, and calibration intentionally retains those edge samples.
+                        var provider = _gaze.Provider;
+                        if (provider != null && provider.IsFacePresent &&
+                            _gaze.GazeSampleSequence > 0 &&
+                            _gaze.GazeSampleSequence != _lastCapturedGazeSample)
+                        {
+                            var features = provider.GetFeatures();
+                            var raw = provider.RawGaze;
+                            _predMLPData.Add(_evalStore.Refine(raw, Calibrations.MLCalibration, features, Screen.width, Screen.height));
+                            _predRidgeData.Add(_evalStore.Refine(raw, Calibrations.RidgeRegression, features, Screen.width, Screen.height));
+                            _targetData.Add(_targetLocation);
+                            _targetRegions.Add(ClassifyRegion(_targetLocation));
+                            _lastCapturedGazeSample = _gaze.GazeSampleSequence;
+                        }
+                    }
+                }
+                else
+                {
+                    //Reset for next point
+                    _currentPoint++;
+                    if (_currentPoint < _points.Count)
+                    {
+                        _timeRemaining = duration;
+                        _targetLocation = new Vector2(_points[_currentPoint].x, _points[_currentPoint].y);
+                    }
+                }
+            }
+
+            //Only finish after the final target's duration increments _currentPoint from Count - 1 to Count.
+            //The bounds guard above therefore protects the lookup after the final target; it does not skip it.
+            if (_currentPoint >= _points.Count || _earlyStop)
+            {
+                _isTimerRunning = false;
+                _finished = true;
+                _showMessage = true;
+
+                //Calculate errors
+                _guiMessage = Evaluate();
+
+                //Aggregate the per-target heatmap once, here — not in OnGUI, which repeats 2+ passes/frame.
+                BuildHeatmapEntries();
+
+                //Append return hint to GUI
+                if (returnAfter)
+                    _guiMessage += $"Click to return.";
+
+                //Write message to debug
+                Debug.Log(_guiMessage);
+
+                //Quit if wanted
+                if (quitAfterEvaluation) Functions.Quit();
+
+                _gaze.showGazeUI = true;
+            }
+        }
+
+        private string Evaluate()
+        {
+            string message = $"Evaluation done.\nScreen size: {Functions.PixelsToMm(Screen.width) * 0.1f}x{Functions.PixelsToMm(Screen.height) * 0.1f}cm. Unity's built in DPI value might be wrong!\n";
+            ReturnMessage = "";
+
+            //All samples gated out (face never tracked) -> no data to score.
+            if (_targetData.Count == 0)
+            {
+                ReturnMessage = "Evaluation captured no valid samples (was the face tracked?). ";
+                return message + "No valid samples captured (was the face tracked?).\n";
+            }
+
+            //Only report an RMSE for models that were actually loaded — without a model, Refine falls
+            //back to the raw gaze and the number would be the RAW pipeline's error mislabeled as the model's.
+            string mlpLine = _hasMlpModel
+                ? FormatRmseLine("MLP", _predMLPData)
+                : $"MLP Evaluation: not calibrated for {_gaze.GazeBackbone} (no model file).";
+            string ridgeLine = _hasRidgeModel
+                ? FormatRmseLine("RidgeRegression", _predRidgeData)
+                : $"RidgeRegression Evaluation: not calibrated for {_gaze.GazeBackbone} (no model file).";
+
+            ReturnMessage += $"{mlpLine} {ridgeLine} ";
+            message += $"{mlpLine}\n{ridgeLine}\n";
+
+            if (_hasMlpModel && _hasRidgeModel)
+            {
+                var mlpCorner = CalculateRMSE(_predMLPData, ScreenRegion.Corner);
+                var ridgeCorner = CalculateRMSE(_predRidgeData, ScreenRegion.Corner);
+                var best = EuclideanError(mlpCorner) <= EuclideanError(ridgeCorner)
+                    ? Calibrations.MLCalibration : Calibrations.RidgeRegression;
+                var selection = $"Best corner model: {best}.";
+                if (applyBestCornerModel)
+                {
+                    _gaze.Calibrations = best;
+                    selection += " Applied.";
+                }
+                ReturnMessage += $" {selection}";
+                message += $"{selection}\n";
+            }
+
+            return message;
+        }
+
+        private string FormatRmseLine(string label, List<Vector2> predictions)
+        {
+            var all = CalculateRMSE(predictions, null);
+            var corner = CalculateRMSE(predictions, ScreenRegion.Corner);
+            var edge = CalculateRMSE(predictions, ScreenRegion.Edge);
+            var center = CalculateRMSE(predictions, ScreenRegion.Center);
+            return $"{label} Evaluation: all {FormatError(all)}; corners {FormatError(corner)}; " +
+                $"edges {FormatError(edge)}; center {FormatError(center)}.";
+        }
+
+        private static string FormatError((float x, float y) error)
+            => $"X {Functions.PixelsToMm(error.x) * 0.1f:F2}cm, Y {Functions.PixelsToMm(error.y) * 0.1f:F2}cm";
+
+        /// <summary>
+        /// Root-mean-square gaze error in pixels, per axis. This intentionally matches the calibration
+        /// holdout metric, independent of the visual dot size.
+        /// An optional screen region exposes corner, edge, and centre accuracy independently.
+        /// </summary>
+        private (float x, float y) CalculateRMSE(List<Vector2> predData, ScreenRegion? region)
+        {
+            var count = Mathf.Min(predData.Count, _targetData.Count);
+            var included = 0;
+            if (count == 0)
+                return (0f, 0f);
+
+            float errorX = 0.0f, errorY = 0.0f;
+            for (int i = 0; i < count; i++)
+            {
+                if (region.HasValue && _targetRegions[i] != region.Value)
+                    continue;
+                float dx = predData[i].x - _targetData[i].x;
+                float dy = predData[i].y - _targetData[i].y;
+                errorX += dx * dx;
+                errorY += dy * dy;
+                included++;
+            }
+
+            return included == 0 ? (0f, 0f) :
+                (Mathf.Sqrt(errorX / included), Mathf.Sqrt(errorY / included));
+        }
+
+        private static float EuclideanError((float x, float y) error)
+            => Mathf.Sqrt(error.x * error.x + error.y * error.y);
+
+        private static ScreenRegion ClassifyRegion(Vector2 target)
+        {
+            var x = target.x / Screen.width;
+            var y = target.y / Screen.height;
+            var horizontalEdge = x <= RegionBoundaryThreshold || x >= RegionBoundaryUpperThreshold;
+            var verticalEdge = y <= RegionBoundaryThreshold || y >= RegionBoundaryUpperThreshold;
+            if (horizontalEdge && verticalEdge) return ScreenRegion.Corner;
+            return horizontalEdge || verticalEdge ? ScreenRegion.Edge : ScreenRegion.Center;
+        }
+
+        void OnGUI()
+        {
+            //After the run, draw the accuracy heatmap (arrows from each target to the mean measured gaze,
+            //colored by error) behind the summary text so you can see WHERE it is accurate vs off.
+            if (_finished && showHeatmap)
+                DrawResultsHeatmap();
+
+            //Show message on screen. Scale the font with resolution so the message (and the final RMSE)
+            //stays legible on high-DPI displays; == baseline at 1080p, larger above it.
+            if (_showMessage)
+            {
+                float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
+                _guiStyle.fontSize = Mathf.RoundToInt((_finished ? 16 : 36) * uiScale);
+                GUI.Label(new Rect(Screen.width / 2 - Screen.width * (_finished ? 0.15f : 0.1f), Screen.height / 2 - 20, 100, 60), $"{_guiMessage}", _guiStyle);
+            }
+
+            if (evaluationDot != null)
+            {
+                // Draw faded out points
+                if (showAllPoints)
+                {
+                    var oldColor = GUI.color;
+                    GUI.color = new Color(oldColor.r, oldColor.g, oldColor.b, 0.2f);
+                    foreach (var point in _points)
+                    {
+                        GUI.DrawTexture(new Rect(point.x - 0.5f * dotSize,
+                            point.y - 0.5f * dotSize,
+                            dotSize,
+                            dotSize),
+                        evaluationDot);
+                    }
+                    GUI.color = oldColor;
+                }
+
+                // Expanding, fading pulse ring while a point is active, cueing the participant to hold a
+                // steady fixation on the dot (matches the calibration dot animation and the reference HTML).
+                if (_isTimerRunning)
+                {
+                    var prev = GUI.color;
+                    float phase = Mathf.Repeat(Time.time * EvalPulseHz, 1f);
+                    float ringSize = dotSize * (1f + phase * 1.6f);
+                    GUI.color = new Color(prev.r, prev.g, prev.b, (1f - phase) * 0.55f);
+                    GUI.DrawTexture(new Rect(_targetLocation.x - 0.5f * ringSize,
+                            _targetLocation.y - 0.5f * ringSize, ringSize, ringSize), evaluationDot);
+                    GUI.color = prev;
+                }
+
+                // Draw calibration dot
+                GUI.DrawTexture(new Rect(_targetLocation.x - 0.5f * dotSize,
+                        _targetLocation.y - 0.5f * dotSize,
+                        dotSize,
+                        dotSize),
+                    evaluationDot);
+
+                // Draw countdown
+                if (_isTimerRunning)
+                {
+                    _timerStyle.fixedHeight = _timerStyle.fixedWidth = dotSize;
+                    _timerStyle.normal.textColor = Color.red;
+                    _timerStyle.alignment = TextAnchor.MiddleCenter;
+                    GUI.Label(new Rect(_targetLocation.x - 0.5f * dotSize,
+                            _targetLocation.y - 0.5f * dotSize,
+                            dotSize,
+                            dotSize), String.Format("{0}s", Mathf.FloorToInt((_timeRemaining + 1) % 60)), _timerStyle);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Draws the post-evaluation accuracy heatmap: for each evaluated target, a line from the target to
+        /// the MEAN measured gaze for that target (a hollow-ish marker at the target, a filled marker at the
+        /// mean), colored green/amber/red by error as a fraction of the screen diagonal. Uses the
+        /// RidgeRegression predictions when available, else the MLP's — i.e. what the calibration produced.
+        /// </summary>
+        /// <summary>
+        /// Aggregates the evaluation samples into per-target (target, mean gaze, error color) entries.
+        /// Called once when the evaluation finishes; DrawResultsHeatmap then just renders the cached list.
+        /// </summary>
+        private void BuildHeatmapEntries()
+        {
+            _heatmapEntries.Clear();
+            var predictions = _hasRidgeModel ? _predRidgeData : (_hasMlpModel ? _predMLPData : null);
+            if (predictions == null || predictions.Count == 0 || _targetData.Count == 0)
+                return;
+
+            int count = Mathf.Min(predictions.Count, _targetData.Count);
+            var sum = new Dictionary<Vector2, Vector2>();
+            var counts = new Dictionary<Vector2, int>();
+            for (int i = 0; i < count; i++)
+            {
+                var target = _targetData[i];
+                sum.TryGetValue(target, out var s);
+                sum[target] = s + predictions[i];
+                counts.TryGetValue(target, out var c);
+                counts[target] = c + 1;
+            }
+
+            float diagonal = Mathf.Sqrt((float)Screen.width * Screen.width + (float)Screen.height * Screen.height);
+            foreach (var pair in sum)
+            {
+                var mean = pair.Value / counts[pair.Key];
+                _heatmapEntries.Add((pair.Key, mean, ErrorColor(Vector2.Distance(mean, pair.Key) / diagonal)));
+            }
+        }
+
+        private void DrawResultsHeatmap()
+        {
+            if (_heatmapEntries.Count == 0)
+                return;
+
+            float diagonal = Mathf.Sqrt((float)Screen.width * Screen.width + (float)Screen.height * Screen.height);
+            float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
+            float marker = 12f * uiScale;
+
+            var previousColor = GUI.color;
+            foreach (var (target, mean, color) in _heatmapEntries)
+            {
+                DrawLine(target, mean, color, Mathf.Max(2f, 3f * uiScale));
+                DrawMarker(target, marker, new Color(1f, 1f, 1f, 0.9f)); // where they were asked to look
+                DrawMarker(mean, marker * 0.9f, color);                  // where the gaze actually landed
+            }
+            GUI.color = previousColor;
+
+            //Legend, top-left, its own style so it doesn't disturb the summary text's style.
+            _heatmapStyle.fontSize = Mathf.RoundToInt(14 * uiScale);
+            _heatmapStyle.normal.textColor = Color.white;
+            _heatmapStyle.wordWrap = true;
+            GUI.Label(new Rect(Screen.width * 0.02f, Screen.height * 0.03f, Screen.width * 0.6f, Screen.height * 0.08f),
+                $"Accuracy heatmap — line = target → mean gaze.  " +
+                $"green < {0.02f * diagonal:F0}px   amber < {0.04f * diagonal:F0}px   red = worse", _heatmapStyle);
+        }
+
+        private static Color ErrorColor(float fractionOfDiagonal)
+        {
+            if (fractionOfDiagonal < 0.02f) return new Color(0.25f, 0.8f, 0.3f);   // good
+            if (fractionOfDiagonal < 0.04f) return new Color(0.95f, 0.8f, 0.2f);   // ok
+            return new Color(0.9f, 0.3f, 0.3f);                                    // poor
+        }
+
+        private void DrawMarker(Vector2 center, float size, Color color)
+        {
+            if (evaluationDot == null) return;
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(center.x - 0.5f * size, center.y - 0.5f * size, size, size), evaluationDot);
+        }
+
+        private static void DrawLine(Vector2 a, Vector2 b, Color color, float width)
+        {
+            if (_lineTex == null)
+            {
+                _lineTex = new Texture2D(1, 1);
+                //Not tied to any scene/asset: survives scene loads and never shows up as a leaked asset.
+                _lineTex.hideFlags = HideFlags.HideAndDontSave;
+                _lineTex.SetPixel(0, 0, Color.white);
+                _lineTex.Apply();
+            }
+            var delta = b - a;
+            float length = delta.magnitude;
+            if (length < 1f) return;
+            float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+
+            var matrix = GUI.matrix;
+            var color0 = GUI.color;
+            GUI.color = color;
+            GUIUtility.RotateAroundPivot(angle, a);
+            GUI.DrawTexture(new Rect(a.x, a.y - width * 0.5f, length, width), _lineTex);
+            GUI.matrix = matrix;
+            GUI.color = color0;
+        }
+    }
+}

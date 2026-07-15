@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "uniteye-web",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\Mark\\Desktop\\uniteye\\webgl\\serve-webgl.ps1"],
+      "port": 8123
+    }
+  ]
+}

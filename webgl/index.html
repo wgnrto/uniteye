@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>UnitEye Web — gaze + AOI logging demo</title>
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; overflow: hidden; }
+    #stage { position: fixed; inset: 0; }
+    .aoi { position: absolute; border: 2px solid #30363d; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #8b949e; transition: background .1s, border-color .1s; }
+    .aoi.focused { border-color: #58a6ff; background: rgba(88,166,255,.15); color: #58a6ff; }
+    #dot { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: #f778ba; box-shadow: 0 0 12px #f778ba; pointer-events: none; z-index: 10; }
+    #panel { position: fixed; top: 12px; left: 12px; z-index: 20; background: rgba(0,0,0,.55); padding: 10px 12px; border-radius: 8px; font-size: 13px; max-width: 320px; }
+    #panel button { font-size: 13px; margin: 4px 4px 4px 0; cursor: pointer; }
+    #log { position: fixed; bottom: 12px; left: 12px; z-index: 20; background: rgba(0,0,0,.55); padding: 8px 10px; border-radius: 8px; font: 12px monospace; max-height: 30vh; overflow: auto; width: 320px; }
+    #status { color: #7ee787; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div class="aoi" style="left:8%;  top:20%; width:24%; height:26%" data-name="Sky">Sky</div>
+    <div class="aoi" style="right:8%; top:20%; width:24%; height:26%" data-name="Tree">Tree</div>
+    <div class="aoi" style="left:8%;  bottom:12%; width:24%; height:26%" data-name="House">House</div>
+    <div class="aoi" style="right:8%; bottom:12%; width:24%; height:26%" data-name="Car">Car</div>
+    <div id="dot"></div>
+  </div>
+
+  <div id="panel">
+    <b>UnitEye Web demo</b><br>
+    <div id="status">idle</div>
+    <button id="btnMock">Start (mock / mouse)</button>
+    <button id="btnReal">Start (webcam)</button>
+    <button id="btnStop">Stop</button>
+    <div style="margin-top:6px;font-size:12px;color:#8b949e">Mock mode = move your mouse. Webcam mode needs camera permission (and a calibration for accuracy).</div>
+  </div>
+  <div id="log"></div>
+
+  <!-- shared consumer logic (classic global) + pipeline (module) -->
+  <script src="uniteye-core.js"></script>
+  <script type="module">
+    import { UnitEyeWeb } from './uniteye-cv.js';
+
+    const dot = document.getElementById('dot');
+    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('log');
+    const aois = Array.from(document.querySelectorAll('.aoi'));
+    let engine = null, focused = null;
+
+    // demo state exposed for automated testing
+    window.__demo = { gaze: { x: 0, y: 0 }, focused: null, blink: false, facePresent: false, logCount: 0 };
+
+    function log(msg) {
+      const line = document.createElement('div');
+      line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+      logEl.prepend(line);
+      window.__demo.logCount++;
+    }
+
+    // The "log when people look at objects" core: hit-test gaze against each AOI (via the ported
+    // UnitEyeCore.pointInBox, in normalized coords), highlight the focused one, and log focus changes.
+    function updateAOIs(gx, gy) {
+      const W = window.innerWidth, H = window.innerHeight;
+      const nx = gx / W, ny = gy / H;
+      let hit = null;
+      for (const el of aois) {
+        const r = el.getBoundingClientRect();
+        const inside = UnitEyeCore.pointInBox(nx, ny, r.left / W, r.top / H, r.right / W, r.bottom / H, false);
+        el.classList.toggle('focused', inside);
+        if (inside) hit = el.dataset.name;
+      }
+      if (hit !== focused) {
+        focused = hit;
+        window.__demo.focused = focused;
+        if (focused) log('look START: ' + focused);
+      }
+    }
+
+    function onGaze(gaze, raw, blink, facePresent) {
+      dot.style.left = gaze.x + 'px';
+      dot.style.top = gaze.y + 'px';
+      dot.style.opacity = facePresent ? 1 : 0.25;
+      window.__demo.gaze = gaze; window.__demo.blink = blink; window.__demo.facePresent = facePresent;
+      updateAOIs(gaze.x, gaze.y);
+    }
+
+    async function startMock() {
+      stop();
+      engine = new UnitEyeWeb({ mock: true, onGaze });
+      await engine.init();
+      engine.start();
+      window.__engine = engine;   // exposed for automated testing (set engine._mouse directly)
+      statusEl.textContent = 'running (mock / mouse)';
+      log('started mock mode');
+      window.__demo.ready = true;
+    }
+    async function startReal() {
+      stop();
+      statusEl.textContent = 'loading models + camera…';
+      try {
+        engine = new UnitEyeWeb({ mock: false, modelUrl: 'models/eyemu.onnx', onGaze });
+        await engine.init();
+        engine.start();
+        statusEl.textContent = 'running (webcam)';
+        log('started webcam mode');
+      } catch (e) {
+        statusEl.textContent = 'error: ' + e.message;
+        log('ERROR ' + e.message);
+      }
+    }
+    function stop() {
+      if (engine) { engine.stop(); engine = null; }
+      statusEl.textContent = 'idle';
+    }
+
+    document.getElementById('btnMock').onclick = startMock;
+    document.getElementById('btnReal').onclick = startReal;
+    document.getElementById('btnStop').onclick = stop;
+
+    // auto-start mock so the demo (and automated tests) work immediately
+    startMock();
+    // expose for testing
+    window.__startMock = startMock;
+  </script>
+</body>
+</html>

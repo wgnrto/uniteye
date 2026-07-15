@@ -1,0 +1,151 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &212319987667855090
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 190740876341052367}
+  - component: {fileID: 8076264650888145063}
+  - component: {fileID: 3541683212425647063}
+  m_Layer: 0
+  m_Name: UnitEyeUsingHomulerMediapipe
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &190740876341052367
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 212319987667855090}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7292519118812840166}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8076264650888145063
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 212319987667855090}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4b74be08913df3347a0855a6feeb81bc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _calibrationScript: {fileID: 0}
+  _mediaPipeGO: {fileID: 7956213792568627832}
+  _csvLogger: {fileID: 3541683212425647063}
+  gazeLocation: {x: 0, y: 0}
+  dot: {fileID: 2800000, guid: eb5d38b489ce2d54c905340366bccf6b, type: 3}
+  drawDot: 1
+  showEyes: 1
+  visualizeAOI: 0
+  showGazeUI: 1
+  showFaceMesh: 1
+  _gazeBackbone: 0
+  _calibrations: 1
+  _filtering: 5
+  easefactor: 0.4
+  Q: 0.00001
+  R: 0.0001
+  beta: 0.012
+  mincutoff: 1
+  dcutoff: 1
+  holdGazeDuringBlink: 1
+  maxBlinkHoldSeconds: 0.5
+  _frameRate: 30
+--- !u!114 &3541683212425647063
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 212319987667855090}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d486d78a19cbd5439f3343366ad7d0d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _baseFolderPath: 
+  _baseFileName: 
+  useDefaultFolder: 1
+  timeUntilWrite: 10
+  logsPerSecond: 999
+--- !u!1 &7956213792568627832
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7292519118812840166}
+  - component: {fileID: 8817224278118811634}
+  - component: {fileID: 7170499054878513874}
+  m_Layer: 0
+  m_Name: Mediapipe
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7292519118812840166
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7956213792568627832}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 190740876341052367}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8817224278118811634
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7956213792568627832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3dff2bce253b6a4eb6a6f7d95bda791, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _webCamSource: {fileID: 0}
+  _annotate: 1
+  maxNumFaces: 1
+  _flipHorizontally: 0
+  _flipVertically: 1
+--- !u!114 &7170499054878513874
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7956213792568627832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6afc91cef9c41a642abfb28517d4f828, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _preferableDefaultWidth: 1920
+  _name: HP HD Camera
