@@ -28,11 +28,16 @@ namespace UnitEye
         //and the CSV EyeFeature accessor instead of recomputing it 3x per frame.
         private float _eyeFeature = float.NaN;
 
-        public NativeGazeProvider(GameObject mediaPipeGO, GazeBackbone backbone = GazeBackbone.EyeMU)
+        //Whether the backbones pipeline their GPU readbacks (see HomulerGaze._asyncGpuReadback).
+        private readonly bool _asyncReadback;
+
+        public NativeGazeProvider(GameObject mediaPipeGO, GazeBackbone backbone = GazeBackbone.EyeMU,
+            bool asyncGpuReadback = false)
         {
             _webcam = mediaPipeGO.GetComponent<WebCamSource>();
             _faceMesh = mediaPipeGO.GetComponent<FaceMeshSolution>();
             _eyeHelper = new HomulerEyeHelper(_faceMesh, _webcam.name);
+            _asyncReadback = asyncGpuReadback;
 
             //Pick the gaze model behind the shared face-mesh/blink/distance stack.
             _backbone = CreateBackbone(backbone);
@@ -43,13 +48,18 @@ namespace UnitEye
             switch (backbone)
             {
                 case GazeBackbone.GazeMobileOne:
-                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobileone_s0_gaze");
+                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobileone_s0_gaze", _asyncReadback);
                 case GazeBackbone.GazeMobileNetV2:
-                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobilenetv2_gaze");
+                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobilenetv2_gaze", _asyncReadback);
                 case GazeBackbone.GazeResNet34:
-                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/resnet34_gaze");
+                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/resnet34_gaze", _asyncReadback);
+                case GazeBackbone.EyeMUPlusResNet34:
+                    //Ensemble: both models every frame, concatenated calibration features (~2x inference cost).
+                    return new CompositeGazeBackbone(
+                        new HomulerEyeMURunner(_faceMesh, _asyncReadback),
+                        new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/resnet34_gaze", _asyncReadback));
                 default:
-                    return new HomulerEyeMURunner(_faceMesh);
+                    return new HomulerEyeMURunner(_faceMesh, _asyncReadback);
             }
         }
 

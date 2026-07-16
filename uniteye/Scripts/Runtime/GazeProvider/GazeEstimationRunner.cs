@@ -64,9 +64,19 @@ namespace UnitEye
         private readonly float[] _features = new float[FeatureCount];
         private Vector2 _rawGaze;
 
-        public GazeEstimationRunner(FaceMeshSolution faceMesh, string modelResourcePath)
+        //Async (pipelined) readback state — same design as HomulerEyeMURunner: results publish on a later
+        //call once the readback completes, with the head/iris feature tail snapshotted at schedule time so
+        //the assembled vector stays internally consistent.
+        private readonly bool _asyncReadback;
+        private bool _pendingReadback;
+        private Tensor<float> _outYaw, _outPitch;   // worker-owned output refs (not disposed)
+        private readonly float[] _tailPending = new float[8];
+        private readonly float[] _tailPublished = new float[8];
+
+        public GazeEstimationRunner(FaceMeshSolution faceMesh, string modelResourcePath, bool asyncReadback = false)
         {
             _faceMesh = faceMesh;
+            _asyncReadback = asyncReadback;
 
             var modelAsset = Resources.Load<ModelAsset>(modelResourcePath);
             _preprocess = Resources.Load<ComputeShader>("PreprocessGazeEstimation");
@@ -104,17 +114,34 @@ namespace UnitEye
             if (!webcam.isPrepared || tex == null)
                 return false;
 
+            //Async mode: publish the previous inference first once its readback is done; never schedule
+            //over in-flight tensors (see HomulerEyeMURunner.PerformInference for the full rationale).
+            bool published = false;
+            if (_asyncReadback && _pendingReadback)
+            {
+                if (!_outYaw.IsReadbackRequestDone() || !_outPitch.IsReadbackRequestDone())
+                    return false;
+                float pendingYaw = DecodeAngleRadians(_outYaw.DownloadToArray());
+                float pendingPitch = DecodeAngleRadians(_outPitch.DownloadToArray());
+                System.Array.Copy(_tailPending, _tailPublished, _tailPublished.Length);
+                PublishResult(pendingYaw, pendingPitch, _tailPublished);
+                _outYaw = null;
+                _outPitch = null;
+                _pendingReadback = false;
+                published = true;
+            }
+
             // Crop from the FaceMesh LANDMARK bounding box, NOT FaceRects: in the (NonBlocking)Sync
             // running mode this project uses, FaceMeshSolution only populates FaceLandmarks (via
             // WaitForNextValue) and leaves FaceRects null (it's only set on the async event path), so
             // relying on FaceRects made PerformInference return false every frame (stuck crosshair, no crop).
             var landmarks = _faceMesh.FaceLandmarks;
             if (landmarks == null || landmarks.Count == 0)
-                return false;
+                return published;
 
             int srcW = tex.width, srcH = tex.height;
             if (srcW <= 0 || srcH <= 0)
-                return false;
+                return published;
 
             // Face landmark bounding box (normalized, y-down), cached per frame by FaceMeshSolution —
             // no need to re-loop the 468 landmarks here.
@@ -127,7 +154,7 @@ namespace UnitEye
             float cyPx = (minY + maxY) * 0.5f * srcH;                   // y-down
             float sidePx = Mathf.Max((maxX - minX) * srcW, (maxY - minY) * srcH) * FACE_CROP_SCALE;
             if (sidePx <= 1f)
-                return false;
+                return published;
             // Keep the crop inside the frame: with the 1.4x padding the square leaves the source whenever
             // the face nears an edge, and out-of-range UVs sample wrap-around/clamp-smeared pixels — the
             // model then sees the opposite frame edge inside the "face". Shrink to fit if the frame is
@@ -153,24 +180,68 @@ namespace UnitEye
             var yawT = _worker.PeekOutput(OUTPUT_YAW) as Tensor<float>;
             var pitchT = _worker.PeekOutput(OUTPUT_PITCH) as Tensor<float>;
             if (yawT == null || pitchT == null)
-                return false;
+                return published;
 
+            if (_asyncReadback)
+            {
+                //Kick off the non-blocking readbacks; results publish on a later call.
+                yawT.ReadbackRequest();
+                pitchT.ReadbackRequest();
+                _outYaw = yawT;
+                _outPitch = pitchT;
+                CaptureFeatureTail(_tailPending);
+                _pendingReadback = true;
+                return published;
+            }
+
+            //Sync mode: block on the results now.
             float yaw = DecodeAngleRadians(yawT.DownloadToArray());
             float pitch = DecodeAngleRadians(pitchT.DownloadToArray());
+            CaptureFeatureTail(_tailPublished);
+            PublishResult(yaw, pitch, _tailPublished);
+            return true;
+        }
 
+        //Snapshot the non-inference feature tail (head pose + iris offsets) from the CURRENT landmarks.
+        private void CaptureFeatureTail(float[] dest)
+        {
+            dest[0] = _faceMesh.HeadYaw;
+            dest[1] = _faceMesh.HeadPitch;
+            dest[2] = _faceMesh.HeadRoll;
+            dest[3] = _faceMesh.HeadArea;
+            HomulerFunctions.FillIrisFeatures(_faceMesh.FaceLandmarks, dest, 4);
+        }
+
+        //Turns decoded gaze angles + the matching feature tail into RawGaze and the calibration features.
+        private void PublishResult(float yaw, float pitch, float[] tail)
+        {
             // Rough pre-calibration screen point (calibration refines from Features). yaw -> x, pitch -> y.
             float nx = Mathf.Clamp01(0.5f + yaw * ANGLE_TO_SCREEN_GAIN);
             float ny = Mathf.Clamp01(0.5f - pitch * ANGLE_TO_SCREEN_GAIN);
             _rawGaze = new Vector2(nx * Screen.width, ny * Screen.height);
 
             // Polynomial feature vector for calibration (see FillGazeFeatures / the field comment).
-            FillGazeFeatures(_features, yaw, pitch,
-                _faceMesh.HeadYaw, _faceMesh.HeadPitch, _faceMesh.HeadRoll, _faceMesh.HeadArea);
-            return true;
+            FillGazeFeatures(_features, yaw, pitch, tail[0], tail[1], tail[2], tail[3]);
+            // Direct geometric gaze cue: normalized iris position within each eye (see FillIrisFeatures).
+            _features[IrisFeatureStart] = tail[4];
+            _features[IrisFeatureStart + 1] = tail[5];
+            _features[IrisFeatureStart + 2] = tail[6];
+            _features[IrisFeatureStart + 3] = tail[7];
         }
 
-        /// <summary>Length of the calibration feature vector FillGazeFeatures produces.</summary>
-        public const int FeatureCount = 11;
+        /// <summary>
+        /// Length of the calibration feature vector: FillGazeFeatures' 11 terms [gaze-angle polynomial 7,
+        /// head pose 4] plus the 4 iris-offset features appended at the end (indices 11..14,
+        /// HomulerFunctions.FillIrisFeatures) — appended so the head-pose slots (7/8/9, targeted by the
+        /// augmentation jitter) keep their positions. The iris cue is complementary here: the model sees a
+        /// 448px FACE crop, where the iris is only a few pixels, while the landmarks resolve it directly.
+        /// Changing this length stales saved calibrations (NaN -> raw fallback); recalibrate.
+        /// </summary>
+        public const int FeatureCount = 15;
+        /// <summary>Number of leading gaze-angle polynomial terms (used by the ensemble backbone).</summary>
+        public const int GazeAngleTermCount = 7;
+        /// <summary>Index of the first iris-offset feature.</summary>
+        public const int IrisFeatureStart = 11;
 
         /// <summary>
         /// Fills the calibration feature vector with a low-order polynomial of the gaze angles plus linear
@@ -230,6 +301,9 @@ namespace UnitEye
         {
             _worker?.Dispose();
             _worker = null;
+            _outYaw = null;
+            _outPitch = null;
+            _pendingReadback = false;
             _inputTensor?.Dispose();
             _inputTensor = null;
             if (_faceCrop != null) { _faceCrop.Release(); Object.Destroy(_faceCrop); }

@@ -36,6 +36,14 @@ namespace Mediapipe.Unity.FaceMesh
         [SerializeField] private bool _flipHorizontally = false;
         [SerializeField] private bool _flipVertically = true;
 
+        // The Task API dropped the old graph's landmark-smoothing calculators, so the raw landmarks jitter
+        // frame to frame — which shakes the eye crops, the EyeCorners model input and the iris gaze
+        // features. Smooth ONLY the six gaze-relevant landmarks (4 eye corners + 2 iris centers) with a
+        // light One-Euro filter: fixation jitter is damped, fast head/eye motion passes through. Head-pose
+        // and eyelid landmarks are untouched.
+        [Tooltip("One-Euro-smooth the 6 gaze landmarks (eye corners + iris centers) to reduce crop/feature jitter. Off = raw Task-API landmarks.")]
+        [SerializeField] private bool _smoothGazeLandmarks = true;
+
         [Header("Debug preview (IMGUI)")]
         // The old Solution API showed the webcam on a Canvas "Screen" RawImage with the facemesh drawn on
         // top; the Task-API migration deleted that display stack (and the now-dead white RawImage was
@@ -66,6 +74,48 @@ namespace Mediapipe.Unity.FaceMesh
         private FaceLandmarkerResult _result;
         private readonly System.Diagnostics.Stopwatch _stopwatch = new System.Diagnostics.Stopwatch();
         private bool _warnedRotation;
+
+        // Gaze-landmark smoothing state. This assembly cannot reference UnitEye.OneEuroFilter (the UnitEye
+        // runtime assembly references THIS one), so a minimal scalar One-Euro lives here. Parameters are in
+        // NORMALIZED landmark units: velocities are ~100-1000x smaller than the pixel-space values the
+        // classic 1-euro defaults were tuned for, hence the much larger beta. Filters reset on face loss so
+        // a reacquired face doesn't get dragged from its last position.
+        private const float LandmarkMinCutoff = 1.5f;   // Hz: fixation-jitter damping floor
+        private const float LandmarkBeta = 5f;          // opens the cutoff during fast (saccade/head) motion
+        private const float LandmarkDCutoff = 1f;
+        private static readonly int[] SmoothedLandmarkIndices = { 362, 263, 33, 133, LeftIrisStart, RightIrisStart };
+        private readonly OneEuroScalar[] _landmarkFilters = new OneEuroScalar[SmoothedLandmarkIndices.Length * 2];
+        private long _lastLandmarkTimestampMs = -1;
+
+        private struct OneEuroScalar
+        {
+            private float _value, _derivative;
+            private bool _initialized;
+
+            public void Reset() => _initialized = false;
+
+            public float Filter(float sample, float dt)
+            {
+                if (!_initialized || dt <= 0f)
+                {
+                    _initialized = true;
+                    _value = sample;
+                    _derivative = 0f;
+                    return sample;
+                }
+                float rawDerivative = (sample - _value) / dt;
+                _derivative += Alpha(LandmarkDCutoff, dt) * (rawDerivative - _derivative);
+                float cutoff = LandmarkMinCutoff + LandmarkBeta * Mathf.Abs(_derivative);
+                _value += Alpha(cutoff, dt) * (sample - _value);
+                return _value;
+            }
+
+            private static float Alpha(float cutoff, float dt)
+            {
+                float tau = 1f / (2f * Mathf.PI * cutoff);
+                return 1f / (1f + tau / dt);
+            }
+        }
         // Face landmark bbox, computed once per detected frame in CopyLandmarks (which already iterates
         // all landmarks) instead of per HeadArea access — HeadArea is read 2-4x per frame downstream.
         private float _bboxMinX, _bboxMinY, _bboxMaxX, _bboxMaxY;
@@ -277,6 +327,9 @@ namespace Mediapipe.Unity.FaceMesh
             if (detected && _result.faceLandmarks != null && _result.faceLandmarks.Count > 0)
             {
                 CopyLandmarks(_result.faceLandmarks[0].landmarks);
+                if (_smoothGazeLandmarks)
+                    SmoothGazeLandmarks(timestampMs);
+                _lastLandmarkTimestampMs = timestampMs;
                 IsFaceDetected = true;
                 FaceLandmarks = _mpLandmarks;
                 LeftIrisLandmarks = _leftIris;
@@ -293,6 +346,25 @@ namespace Mediapipe.Unity.FaceMesh
                 FaceLandmarks = null;
                 LeftIrisLandmarks = null;
                 RightIrisLandmarks = null;
+                //Reset the gaze-landmark filters: after a face loss the next detection may be anywhere, and
+                //filter state from the old position would drag the fresh landmarks toward it.
+                for (int i = 0; i < _landmarkFilters.Length; i++)
+                    _landmarkFilters[i].Reset();
+                _lastLandmarkTimestampMs = -1;
+            }
+        }
+
+        //Applies the One-Euro filters to the six gaze landmarks IN PLACE (the reused protobuf objects the
+        //consumers read). Downstream this stabilizes the eye-crop rects, the EyeCorners model input and the
+        //iris gaze features. Z stays raw (no gaze consumer reads Z of these landmarks).
+        private void SmoothGazeLandmarks(long timestampMs)
+        {
+            float dt = _lastLandmarkTimestampMs >= 0 ? (timestampMs - _lastLandmarkTimestampMs) / 1000f : 0f;
+            for (int i = 0; i < SmoothedLandmarkIndices.Length; i++)
+            {
+                var landmark = _mpLandmarks[SmoothedLandmarkIndices[i]];
+                landmark.X = _landmarkFilters[i * 2].Filter(landmark.X, dt);
+                landmark.Y = _landmarkFilters[i * 2 + 1].Filter(landmark.Y, dt);
             }
         }
 

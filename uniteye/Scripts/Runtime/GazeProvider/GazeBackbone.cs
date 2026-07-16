@@ -21,5 +21,10 @@ namespace UnitEye
         /// pitch/yaw. Larger + more accurate than the mobile nets (uniface's default), same 448x448 /
         /// 90-bin I/O. Uses Resources/ONNX/GazeEstimation/resnet34_gaze.onnx.</summary>
         GazeResNet34,
+
+        /// <summary>Ensemble: EyeMU AND ResNet-34 run every frame and the calibration trains on their
+        /// CONCATENATED features (eye crops and the face-direction signal are complementary). Highest
+        /// accuracy potential at roughly double the inference cost. See CompositeGazeBackbone.</summary>
+        EyeMUPlusResNet34,
     }
 }
