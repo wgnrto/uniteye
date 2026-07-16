@@ -47,6 +47,18 @@ namespace UnitEye
         //fixations, and would otherwise throw away exactly the head-pose variance this stage collects.
         private List<bool> _sampleFromHeadRotation = new List<bool>();
 
+        //Recent dot positions (time-stamped) for pursuit-lag label correction: while the dot sweeps, the eye
+        //trails it by ~100ms, so pairing the CURRENT dot position with the current gaze bakes a systematic
+        //error along the sweep direction into every moving sample. Sweep samples are instead labeled with
+        //the dot position pursuitLagSeconds ago. Kept trimmed to well under a second of history.
+        private readonly List<(float time, Vector2 pos)> _dotTrail = new List<(float time, Vector2 pos)>();
+        //Recent raw-gaze samples (time-stamped) for the dwell fixation gate.
+        private readonly List<(float time, Vector2 pos)> _gazeTrail = new List<(float time, Vector2 pos)>();
+        //Per-dwell fixation-gate accounting; the gate bypasses itself mid-dwell rather than starve a target.
+        private int _dwellGateAccepts, _dwellGateRejects;
+        private bool _dwellGateBypassed;
+        private bool _warnedGateBypass;
+
         private int _currentPoint = 0;
 
         private Vector2 _crossHairPos = Vector2.zero;
@@ -108,6 +120,16 @@ namespace UnitEye
         public int minimumCornerSamples = 15;
         [Range(1f, 6f)]
         public float cornerOutlierZScore = 3f;
+        [Tooltip("Smooth-pursuit latency compensation: while the dot SWEEPS, the eye trails it by roughly this long, so moving samples are labeled with the dot position this many seconds AGO. 0 disables.")]
+        [Range(0f, 0.3f)]
+        public float pursuitLagSeconds = 0.1f;
+        [Tooltip("During dwells, only capture once the raw gaze has been stable (fixation detected). Auto-bypasses within a dwell if it would starve the target of samples.")]
+        public bool fixationGate = true;
+        [Range(0.05f, 1f)]
+        public float fixationWindowSeconds = 0.3f;
+        [Tooltip("Maximum raw-gaze spread (fraction of the screen diagonal) still counted as a fixation.")]
+        [Range(0.01f, 0.15f)]
+        public float fixationDispersionFraction = 0.035f;
 
         public bool drawCheckpoints;
 
@@ -119,6 +141,8 @@ namespace UnitEye
         public bool save = true;
         [Tooltip("Optional bounded jitter of numerical calibration features during training only. Image augmentation is not label-preserving for screen targets.")]
         public CalibrationFeatureAugmentationSettings featureAugmentation = new CalibrationFeatureAugmentationSettings();
+        [Tooltip("After ridge training, fit a thin-plate-spline LOCAL correction on the dwell anchors; it is kept only when it improves the held-out samples, otherwise discarded (overfit guard).")]
+        public bool enableRidgeWarp = true;
 
         public bool stopAfterPoints = true;
         public bool quitAfterCalibration = false;
@@ -164,6 +188,11 @@ namespace UnitEye
             _sampleTargets.Clear();
             _sampleCapturedAtDwell.Clear();
             _sampleFromHeadRotation.Clear();
+            _dotTrail.Clear();
+            _gazeTrail.Clear();
+            _dwellGateAccepts = _dwellGateRejects = 0;
+            _dwellGateBypassed = false;
+            _warnedGateBypass = false;
             if (_presets != null)
             {
                 //REBUILD the presets, not just reset the position: Start() runs once per component, so a
@@ -299,6 +328,10 @@ namespace UnitEye
                         //Wait at the location so the eye settles and samples accumulate on the target
                         _isYielding = true;
                         _currentTime = _presets[_currentPreset].DwellSeconds;
+                        //Fresh fixation-gate state for this dwell (see CaptureNetworkOutput).
+                        _gazeTrail.Clear();
+                        _dwellGateAccepts = _dwellGateRejects = 0;
+                        _dwellGateBypassed = false;
                     }
 
                     if (_currentPoint >= points.Count)
@@ -329,6 +362,12 @@ namespace UnitEye
                 }
             }
 
+            //Record the dot's position history for the pursuit-lag label correction, trimmed to a short
+            //window (the lag lookup never needs more than pursuitLagSeconds of history).
+            _dotTrail.Add((Time.unscaledTime, _crossHairPos));
+            while (_dotTrail.Count > 0 && _dotTrail[0].time < Time.unscaledTime - 0.6f)
+                _dotTrail.RemoveAt(0);
+
             //Add data from raw neural network output
             CaptureNetworkOutput();
 
@@ -347,6 +386,10 @@ namespace UnitEye
                     : "";
                 _guiMessage = $"Click to start next round\nRound {currentRound}/{_presets.Count * maxRoundsPerPreset}{headTurnNote}\nRight click to cancel calibration and return";
                 _isYielding = false;
+                //The dot teleports to the next preset's start; stale trail entries would give the first
+                //sweep samples of the new round a wrong (pre-jump) pursuit-lag label.
+                _dotTrail.Clear();
+                _gazeTrail.Clear();
                 DrawPath(points);
             }
 
@@ -424,21 +467,67 @@ namespace UnitEye
             if (features == null || features.Length == 0)
                 return;
 
+            //Consume the sample NOW (not only on a successful capture): every return below is a decision
+            //about THIS camera sample. Leaving it unconsumed made repeated render frames (render faster
+            //than camera) re-run the fixation gate with the identical RawGaze, and those duplicates have
+            //zero spread — deflating the measured dispersion and letting an unstable eye pass the gate.
+            _lastCapturedGazeSample = _gaze.GazeSampleSequence;
+
             //During a dwell, skip the first ~0.3s: the dot just jumped to the waypoint and the eye is still
             //saccading to it, so those frames would pair the new (corner) label with mid-flight gaze.
             if (_isYielding && _currentTime > _presets[_currentPreset].DwellSeconds - settleSeconds)
                 return;
 
+            //Label selection. While the dot SWEEPS, the eye pursues it with ~100ms latency — the gaze
+            //measured NOW corresponds to where the dot was pursuitLagSeconds ago, so that older position is
+            //the honest label. During a dwell the dot is parked (current == delayed) and the settle-skip
+            //above already discards the saccade, so the current position is used directly.
+            Vector2 label = _crossHairPos;
+            if (!_isYielding && pursuitLagSeconds > 0f)
+                label = DelayedDotPosition(_dotTrail, Time.unscaledTime, pursuitLagSeconds, _crossHairPos);
+
+            //Dwell fixation gate: commercial calibrations only accept samples once the eye has actually
+            //settled ON the target. Gate on the raw-gaze dispersion over a short window; if the raw signal
+            //is too noisy to ever pass (dispersion threshold is in screen-diagonal fractions), the gate
+            //bypasses itself for the rest of the dwell rather than starve the target — the post-hoc
+            //z-score rejection in BuildBalancedTrainingData still guards those samples. Head-movement
+            //dwells are exempt: raw gaze legitimately wanders there while the head turns.
+            if (_isYielding && fixationGate && !_dwellGateBypassed && !_presets[_currentPreset].IsHeadMovement)
+            {
+                _gazeTrail.Add((Time.unscaledTime, provider.RawGaze));
+                while (_gazeTrail.Count > 0 && _gazeTrail[0].time < Time.unscaledTime - fixationWindowSeconds)
+                    _gazeTrail.RemoveAt(0);
+
+                float diagonal = Mathf.Sqrt((float)Screen.width * Screen.width + (float)Screen.height * Screen.height);
+                if (!IsFixationStable(_gazeTrail, fixationDispersionFraction * diagonal))
+                {
+                    _dwellGateRejects++;
+                    //Bypass when the gate has rejected most of the dwell so far and the dwell is half over.
+                    var dwellSeconds = _presets[_currentPreset].DwellSeconds;
+                    if (_currentTime < dwellSeconds * 0.5f && _dwellGateRejects > 3 * Mathf.Max(1, _dwellGateAccepts))
+                    {
+                        _dwellGateBypassed = true;
+                        if (!_warnedGateBypass)
+                        {
+                            _warnedGateBypass = true;
+                            UnitEyeLog.Warn("Calibration fixation gate: raw gaze too unstable at a dwell target; " +
+                                "capturing ungated for the rest of that dwell (warned once per run — consider better lighting/camera position).");
+                        }
+                    }
+                    return;
+                }
+                _dwellGateAccepts++;
+            }
+
             //Clone: GetFeatures() returns the provider's reused per-frame buffer, so the retained training
             //sample must be an owned copy (otherwise every captured sample would alias the latest frame).
             _xData.Add((float[])features.Clone());
-            _yXData.Add(_crossHairPos.x / Screen.width);
-            _yYData.Add(_crossHairPos.y / Screen.height);
-            _yData.Add(new Vector2(_crossHairPos.x /*/ Screen.width*/, _crossHairPos.y /*/ Screen.height*/));
-            _sampleTargets.Add(_crossHairPos);
+            _yXData.Add(label.x / Screen.width);
+            _yYData.Add(label.y / Screen.height);
+            _yData.Add(new Vector2(label.x /*/ Screen.width*/, label.y /*/ Screen.height*/));
+            _sampleTargets.Add(label);
             _sampleCapturedAtDwell.Add(_isYielding);
             _sampleFromHeadRotation.Add(_presets[_currentPreset].IsHeadMovement);
-            _lastCapturedGazeSample = _gaze.GazeSampleSequence;
         }
 
         private string ProcessDataNeural()
@@ -473,15 +562,107 @@ namespace UnitEye
             Debug.Log($"Total Count: {_xData.Count}, Train Count: {result.TrainCount}, Test Count: {result.TestCount}, " +
                       $"Lambda X: {result.BestLambdaX}, Lambda Y: {result.BestLambdaY}");
 
+            //Optional thin-plate-spline local correction, validated on the holdout (kept only if better).
+            //The reported ridge RMSE stays warp-free; the warp's own holdout numbers go in the note.
+            ThinPlateSplineWarp warp = null;
+            var warpNote = "";
+            if (enableRidgeWarp)
+                warp = TryBuildValidatedWarp(result, out warpNote);
+
             if (save)
             {
                 Debug.Log("Saving best models");
                 //Save under the active backbone's name so each gaze model keeps its own calibration.
                 result.XModel.Save(CalibrationModelStore.FileName("Reg_X.json", _gaze.GazeBackbone));
                 result.YModel.Save(CalibrationModelStore.FileName("Reg_Y.json", _gaze.GazeBackbone));
+                //A warp is only valid for the ridge pair it was fitted on: save the kept one, and DELETE
+                //any previous warp otherwise, so a stale warp never pairs with this fresh ridge.
+                var warpFile = CalibrationModelStore.FileName("Warp.json", _gaze.GazeBackbone);
+                if (warp != null)
+                    warp.Save(warpFile);
+                else
+                    ThinPlateSplineWarp.Delete(warpFile);
             }
 
-            return $"RidgeRegression Training done. Best RMSE X: {result.XRmse}cm | Best RMSE Y: {result.YRmse}cm.";
+            return $"RidgeRegression Training done. Best RMSE X: {result.XRmse}cm | Best RMSE Y: {result.YRmse}cm.{warpNote}";
+        }
+
+        /// <summary>
+        /// Fits the thin-plate-spline correction on the sit-still dwell anchors (mean ridge prediction →
+        /// true target, normalized) and validates it on the trainer's untouched holdout: the warp is
+        /// returned only when it clearly improves samples the ridge never trained on, otherwise null.
+        /// With ~9-13 anchors an unvalidated spline can bend the space between anchors in wrong ways —
+        /// this gate is what makes the "local calibration" lever safe to ship enabled.
+        /// </summary>
+        private ThinPlateSplineWarp TryBuildValidatedWarp(RidgeCalibrationTrainer.Result result, out string note)
+        {
+            if (result.HoldoutFeatures == null || result.HoldoutFeatures.Length < 10)
+            {
+                note = " Corner warp skipped (holdout too small).";
+                return null;
+            }
+
+            //Anchors: one per unique sit-still dwell target. Head-movement dwells are excluded — their
+            //deliberate head-pose variance would smear the anchor's mean prediction.
+            var sums = new Dictionary<Vector2, Vector2>();
+            var counts = new Dictionary<Vector2, int>();
+            for (var i = 0; i < _xData.Count; i++)
+            {
+                if (!_sampleCapturedAtDwell[i] || _sampleFromHeadRotation[i])
+                    continue;
+                var prediction = new Vector2(result.XModel.Predict(_xData[i]), result.YModel.Predict(_xData[i]));
+                if (float.IsNaN(prediction.x) || float.IsNaN(prediction.y))
+                    continue;
+                var key = new Vector2(_sampleTargets[i].x / Screen.width, _sampleTargets[i].y / Screen.height);
+                sums.TryGetValue(key, out var s);
+                sums[key] = s + prediction;
+                counts.TryGetValue(key, out var c);
+                counts[key] = c + 1;
+            }
+            if (sums.Count < ThinPlateSplineWarp.MinimumAnchors)
+            {
+                note = " Corner warp skipped (too few dwell anchors).";
+                return null;
+            }
+
+            var source = new Vector2[sums.Count];
+            var destination = new Vector2[sums.Count];
+            var k = 0;
+            foreach (var pair in sums)
+            {
+                destination[k] = pair.Key;
+                source[k] = pair.Value / counts[pair.Key];
+                k++;
+            }
+
+            var warp = ThinPlateSplineWarp.Fit(source, destination);
+            if (warp == null)
+            {
+                note = " Corner warp skipped (fit failed).";
+                return null;
+            }
+
+            //Holdout comparison in normalized units; require a clear (>2% MSE) improvement to keep.
+            double before = 0, after = 0;
+            var n = result.HoldoutFeatures.Length;
+            for (var i = 0; i < n; i++)
+            {
+                var p = new Vector2(result.XModel.Predict(result.HoldoutFeatures[i]),
+                    result.YModel.Predict(result.HoldoutFeatures[i]));
+                var warped = warp.Apply(p);
+                double ex = p.x - result.HoldoutTargetsX[i], ey = p.y - result.HoldoutTargetsY[i];
+                before += ex * ex + ey * ey;
+                ex = warped.x - result.HoldoutTargetsX[i];
+                ey = warped.y - result.HoldoutTargetsY[i];
+                after += ex * ex + ey * ey;
+            }
+            if (after < before * 0.98)
+            {
+                note = $" Corner warp kept (holdout error {Math.Sqrt(before / n):F4}→{Math.Sqrt(after / n):F4} normalized).";
+                return warp;
+            }
+            note = " Corner warp discarded (no holdout improvement).";
+            return null;
         }
 
         private void BuildBalancedTrainingData(out float[][] features, out float[] targetsX,
@@ -593,6 +774,44 @@ namespace UnitEye
         }
 
         /// <summary>
+        /// The newest dot position at least <paramref name="lagSeconds"/> old — the pursuit-lag corrected
+        /// label for a sweep sample (see CaptureNetworkOutput). Falls back to <paramref name="fallback"/>
+        /// (the current position) when the trail has no entry that old yet, e.g. right after a round starts.
+        /// </summary>
+        public static Vector2 DelayedDotPosition(IReadOnlyList<(float time, Vector2 pos)> trail,
+            float now, float lagSeconds, Vector2 fallback)
+        {
+            var cutoff = now - lagSeconds;
+            for (var i = trail.Count - 1; i >= 0; i--)
+                if (trail[i].time <= cutoff)
+                    return trail[i].pos;
+            return fallback;
+        }
+
+        /// <summary>
+        /// Simple dispersion-based fixation test (I-DT style): the window counts as a stable fixation when
+        /// it holds at least 3 samples and the bounding-box diagonal of the gaze points is within
+        /// <paramref name="maxDispersionPixels"/>. The caller trims the sample window by time.
+        /// </summary>
+        public static bool IsFixationStable(IReadOnlyList<(float time, Vector2 pos)> samples, float maxDispersionPixels)
+        {
+            if (samples.Count < 3)
+                return false;
+            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+            for (var i = 0; i < samples.Count; i++)
+            {
+                var p = samples[i].pos;
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.y > maxY) maxY = p.y;
+            }
+            var dx = maxX - minX;
+            var dy = maxY - minY;
+            return dx * dx + dy * dy <= maxDispersionPixels * maxDispersionPixels;
+        }
+
+        /// <summary>
         /// The indices of the head yaw/pitch/roll slots in the active backbone's feature vector, used to
         /// aim the augmentation's extra head-pose jitter. EyeMU emits [embedding4, gaze polynomial (gx, gy,
         /// gx², gy², gx·gy, gx³, gy³), headYaw, headPitch, headRoll, headArea] so head pose is at 11/12/13;
@@ -608,7 +827,7 @@ namespace UnitEye
                 case GazeBackbone.GazeMobileNetV2:
                 case GazeBackbone.GazeResNet34:
                     return new[] { 7, 8, 9 };
-                default: // EyeMU
+                default: // EyeMU + the ensemble (whose vector STARTS with the full EyeMU block)
                     return new[] { 11, 12, 13 };
             }
         }

@@ -12,6 +12,9 @@ namespace UnitEye
     {
         private RidgeRegression _xModel, _yModel;
         private SimpleMLP _mlp;
+        //Optional local residual correction fitted on top of THIS ridge pair (saved/deleted together with
+        //it by the calibration). Applied only when the ridge actually predicted — never to the raw fallback.
+        private ThinPlateSplineWarp _ridgeWarp;
 
         /// <summary>
         /// Per-backbone calibration filename, e.g. ("Reg_X.json", EyeMU) -> "Reg_X_EyeMU.json". Each gaze
@@ -43,6 +46,8 @@ namespace UnitEye
                     case Calibrations.RidgeRegression:
                         _xModel = RidgeRegression.LoadX(FileName("Reg_X.json", backbone));
                         _yModel = RidgeRegression.LoadY(FileName("Reg_Y.json", backbone));
+                        //Null when no warp was kept for this ridge (the common case).
+                        _ridgeWarp = ThinPlateSplineWarp.Load(FileName("Warp.json", backbone));
                         break;
                     case Calibrations.MLCalibration:
                         _mlp = SimpleMLP.Load(FileName("MLP.json", backbone));
@@ -93,8 +98,15 @@ namespace UnitEye
                     //Fall back to the raw gaze location if no calibration model is loaded
                     if (_xModel == null || _yModel == null)
                         return rawGaze;
-                    refinedGaze.x = _xModel.Predict(features) * screenWidth;
-                    refinedGaze.y = _yModel.Predict(features) * screenHeight;
+                    //Predict in NORMALIZED coords, apply the optional local warp there (it was fitted in
+                    //that space), then scale. The warp must not touch the NaN fallback: check first.
+                    var normalized = new Vector2(_xModel.Predict(features), _yModel.Predict(features));
+                    if (float.IsNaN(normalized.x) || float.IsNaN(normalized.y))
+                        return rawGaze;
+                    if (_ridgeWarp != null)
+                        normalized = _ridgeWarp.Apply(normalized);
+                    refinedGaze.x = normalized.x * screenWidth;
+                    refinedGaze.y = normalized.y * screenHeight;
                     break;
                 case Calibrations.MLCalibration:
                     //Fall back to the raw gaze location if no calibration model is loaded

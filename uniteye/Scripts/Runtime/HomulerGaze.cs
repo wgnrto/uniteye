@@ -118,9 +118,18 @@ namespace UnitEye
         //ONNX + hand-test, see docs/GAZE-BACKBONES.md). Read at Start; can also be switched at runtime via
         //SetBackbone / the Gaze UI. The current value is kept in sync when switched.
         [SerializeField] private GazeBackbone _gazeBackbone = GazeBackbone.EyeMU;
+        //EXPERIMENTAL: pipeline the inference result readback instead of stalling the CPU on the GPU every
+        //frame. Gaze is published one camera frame later (~33-66ms extra latency at 15-30fps camera rates)
+        //but the main thread no longer blocks in DownloadToArray. Verify gaze quality after enabling.
+        [Tooltip("EXPERIMENTAL: async GPU readback — higher throughput, gaze arrives one camera frame later. Verify with a webcam before shipping.")]
+        [SerializeField] private bool _asyncGpuReadback = false;
         public GazeBackbone GazeBackbone => _gazeBackbone;
         //The direction-based backbones feed the model a FACE crop (shown as one thumbnail), not eye crops.
-        private bool UsesFaceCrop => _gazeBackbone != GazeBackbone.EyeMU;
+        //Only the PURE direction backbones show a single face-crop thumbnail; EyeMU and the ensemble
+        //(whose debug textures are EyeMU's) show the two eye crops.
+        private bool UsesFaceCrop => _gazeBackbone == GazeBackbone.GazeMobileOne ||
+                                     _gazeBackbone == GazeBackbone.GazeMobileNetV2 ||
+                                     _gazeBackbone == GazeBackbone.GazeResNet34;
 
         /// <summary>
         /// Switch the gaze model at runtime. Rebuilds the provider's backbone; the shared face-mesh /
@@ -264,7 +273,7 @@ namespace UnitEye
     #if UNITY_WEBGL && !UNITY_EDITOR
             _provider = new WebGLGazeProvider();
     #else
-            _provider = new NativeGazeProvider(_mediaPipeGO, _gazeBackbone);
+            _provider = new NativeGazeProvider(_mediaPipeGO, _gazeBackbone, _asyncGpuReadback);
     #endif
 
             //Apply the initial face-mesh overlay preference
@@ -811,6 +820,7 @@ namespace UnitEye
                 case GazeBackbone.GazeMobileOne: return "MobileOne";
                 case GazeBackbone.GazeMobileNetV2: return "MobileNetV2";
                 case GazeBackbone.GazeResNet34: return "ResNet34";
+                case GazeBackbone.EyeMUPlusResNet34: return "Ensemble";
                 default: return backbone.ToString();
             }
         }

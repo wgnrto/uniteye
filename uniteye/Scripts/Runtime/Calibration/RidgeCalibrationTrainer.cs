@@ -28,6 +28,12 @@ namespace UnitEye
             public float BestLambdaY;
             public int TrainCount;
             public int TestCount;
+            //The untouched holdout split itself (empty when TestCount == 0). Exposed so a post-fit
+            //correction (the thin-plate-spline warp) can be VALIDATED on data the ridge never trained on
+            //and discarded when it does not generalize.
+            public float[][] HoldoutFeatures;
+            public float[] HoldoutTargetsX;
+            public float[] HoldoutTargetsY;
         }
 
         /// <summary>
@@ -226,6 +232,9 @@ namespace UnitEye
                 BestLambdaY = bestLambdaY,
                 TrainCount = trainCount,
                 TestCount = testCount,
+                HoldoutFeatures = xTest,
+                HoldoutTargetsX = yXTest,
+                HoldoutTargetsY = yYTest,
             };
         }
 

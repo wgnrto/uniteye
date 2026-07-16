@@ -56,6 +56,58 @@ namespace UnitEye
             return new RectInt(leftPx, yBot, cropSize, cropSize);
         }
 
+        //Face-mesh landmark indices for the iris gaze features (face_landmarker_v2, 478 landmarks:
+        //0..467 mesh, 468..472 left iris, 473..477 right iris; index 468/473 is each iris CENTER).
+        public const int LeftEyeInnerCorner = 362;
+        public const int LeftEyeOuterCorner = 263;
+        public const int RightEyeOuterCorner = 33;
+        public const int RightEyeInnerCorner = 133;
+        public const int LeftIrisCenter = 468;
+        public const int RightIrisCenter = 473;
+
+        /// <summary>
+        /// Fills 4 calibration features with the per-eye NORMALIZED iris offset — the position of the iris
+        /// center relative to the eye-corner midpoint, divided by the corner distance:
+        ///   [leftOffsetX, leftOffsetY, rightOffsetX, rightOffsetY]  written at dest[start..start+3].
+        /// The iris position within the eye opening is the classic direct webcam gaze cue (it is what
+        /// model-based trackers regress on); MediaPipe tracks it every frame but until now it was only used
+        /// for blink/distance, never fed to the gaze calibration. Normalizing by the corner distance makes
+        /// the features scale-invariant (head distance / face size cancel out). Coordinates are MediaPipe
+        /// normalized (y-down); x and y are normalized by different frame axes, so the offsets fold in the
+        /// camera aspect — constant within a session, absorbed by the calibration's standardization.
+        /// Writes zeros when landmarks are missing or an eye is degenerate (corner distance ~ 0).
+        /// </summary>
+        public static void FillIrisFeatures(IList<NormalizedLandmark> landmarks, float[] dest, int start)
+        {
+            if (landmarks == null || landmarks.Count <= RightIrisCenter)
+            {
+                dest[start] = dest[start + 1] = dest[start + 2] = dest[start + 3] = 0f;
+                return;
+            }
+
+            FillOneEyeIrisOffset(landmarks[LeftEyeInnerCorner], landmarks[LeftEyeOuterCorner],
+                landmarks[LeftIrisCenter], dest, start);
+            FillOneEyeIrisOffset(landmarks[RightEyeOuterCorner], landmarks[RightEyeInnerCorner],
+                landmarks[RightIrisCenter], dest, start + 2);
+        }
+
+        private static void FillOneEyeIrisOffset(NormalizedLandmark cornerA, NormalizedLandmark cornerB,
+            NormalizedLandmark iris, float[] dest, int index)
+        {
+            float midX = (cornerA.X + cornerB.X) * 0.5f;
+            float midY = (cornerA.Y + cornerB.Y) * 0.5f;
+            float dx = cornerB.X - cornerA.X;
+            float dy = cornerB.Y - cornerA.Y;
+            float cornerDistance = Mathf.Sqrt(dx * dx + dy * dy);
+            if (cornerDistance < 1e-5f)
+            {
+                dest[index] = dest[index + 1] = 0f;
+                return;
+            }
+            dest[index] = (iris.X - midX) / cornerDistance;
+            dest[index + 1] = (iris.Y - midY) / cornerDistance;
+        }
+
         //Note: PixelsToMm and Quit were dead duplicates of the versions in Functions (which callers use)
         //and were removed. This class keeps only the MediaPipe/inference-specific helpers.
 

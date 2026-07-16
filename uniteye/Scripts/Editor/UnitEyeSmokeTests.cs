@@ -38,11 +38,13 @@ public static class UnitEyeSmokeTests
             TestSpatiallyBalancedCalibrationSamples();
             TestFeatureAugmentation();
             TestHeadRotationPreset();
+            TestCalibrationCaptureHelpers();
             TestSimpleMLP();
             TestGazeGridQuantizer();
             TestOneEuroFilter();
             TestOneEuroFilterVector2FastPath();
             TestEyeCropRect();
+            TestIrisFeatures();
             TestScenesAndPrefabsHaveNoMissingScripts();
             TestEyeMUModelLoadsAndRuns();
             TestGazeEstimationDecode();
@@ -51,6 +53,7 @@ public static class UnitEyeSmokeTests
             TestGazeModelsLoadAndRun();
             TestCalibrationFileNames();
             TestCalibrationProfiles();
+            TestThinPlateSplineWarp();
         }
         catch (Exception e)
         {
@@ -448,6 +451,32 @@ public static class UnitEyeSmokeTests
         Check(points.Count == 7, "HeadRotationPreset should produce centre + four corners with approach/close points");
     }
 
+    private static void TestCalibrationCaptureHelpers()
+    {
+        //Pursuit-lag lookup: the label for a sweep sample is the newest dot position at least lag seconds old.
+        var trail = new List<(float time, Vector2 pos)>
+        {
+            (1.00f, new Vector2(100, 0)),
+            (1.05f, new Vector2(110, 0)),
+            (1.10f, new Vector2(120, 0)),
+            (1.15f, new Vector2(130, 0)),
+        };
+        var lagged = HomulerGazeCalibration.DelayedDotPosition(trail, 1.15f, 0.1f, new Vector2(-1, -1));
+        Check(lagged == new Vector2(110, 0), "Pursuit-lag label is the newest dot position at least lag seconds old");
+        var fallback = HomulerGazeCalibration.DelayedDotPosition(trail, 1.05f, 0.5f, new Vector2(-1, -1));
+        Check(fallback == new Vector2(-1, -1), "Pursuit-lag lookup falls back when the trail has no entry that old");
+
+        //Fixation gate: tight cluster passes, spread window and too-few samples fail.
+        var tight = new List<(float time, Vector2 pos)>
+            { (0f, new Vector2(500, 500)), (0.1f, new Vector2(505, 498)), (0.2f, new Vector2(498, 503)) };
+        Check(HomulerGazeCalibration.IsFixationStable(tight, 20f), "A tight gaze cluster counts as a fixation");
+        var spread = new List<(float time, Vector2 pos)>
+            { (0f, new Vector2(500, 500)), (0.1f, new Vector2(700, 500)), (0.2f, new Vector2(500, 700)) };
+        Check(!HomulerGazeCalibration.IsFixationStable(spread, 20f), "A spread-out window is not a fixation");
+        var few = new List<(float time, Vector2 pos)> { (0f, new Vector2(500, 500)), (0.1f, new Vector2(500, 500)) };
+        Check(!HomulerGazeCalibration.IsFixationStable(few, 20f), "Fewer than 3 samples never count as a fixation");
+    }
+
     private static float[][] ToArray(List<float[]> list) => list.ToArray();
 
     private static void TestSimpleMLP()
@@ -623,6 +652,38 @@ public static class UnitEyeSmokeTests
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
     }
 
+    private static void TestIrisFeatures()
+    {
+        //Synthetic 478-landmark face: both eyes 0.1 wide and level. The LEFT iris sits a quarter eye-width
+        //toward the outer corner and a fifth eye-width below the corner line; the RIGHT iris is perfectly
+        //centered. FillIrisFeatures must produce the normalized offsets [0.25, 0.2, 0, 0].
+        var landmarks = new List<Mediapipe.NormalizedLandmark>(478);
+        for (int i = 0; i < 478; i++)
+            landmarks.Add(new Mediapipe.NormalizedLandmark { X = 0f, Y = 0f });
+        landmarks[HomulerFunctions.LeftEyeInnerCorner] = new Mediapipe.NormalizedLandmark { X = 0.60f, Y = 0.50f };
+        landmarks[HomulerFunctions.LeftEyeOuterCorner] = new Mediapipe.NormalizedLandmark { X = 0.70f, Y = 0.50f };
+        landmarks[HomulerFunctions.LeftIrisCenter] = new Mediapipe.NormalizedLandmark { X = 0.675f, Y = 0.52f };
+        landmarks[HomulerFunctions.RightEyeOuterCorner] = new Mediapipe.NormalizedLandmark { X = 0.30f, Y = 0.50f };
+        landmarks[HomulerFunctions.RightEyeInnerCorner] = new Mediapipe.NormalizedLandmark { X = 0.40f, Y = 0.50f };
+        landmarks[HomulerFunctions.RightIrisCenter] = new Mediapipe.NormalizedLandmark { X = 0.35f, Y = 0.50f };
+
+        var f = new float[4];
+        HomulerFunctions.FillIrisFeatures(landmarks, f, 0);
+        CheckClose(f[0], 0.25f, 1e-5f, "Left iris offset x = (iris - corner mid) / corner distance");
+        CheckClose(f[1], 0.20f, 1e-5f, "Left iris offset y uses the same normalization");
+        CheckClose(f[2], 0f, 1e-5f, "A centered right iris gives zero x offset");
+        CheckClose(f[3], 0f, 1e-5f, "A centered right iris gives zero y offset");
+
+        //Missing landmarks and a degenerate eye must yield zeros, never NaN/Infinity.
+        var g = new float[4] { 9f, 9f, 9f, 9f };
+        HomulerFunctions.FillIrisFeatures(null, g, 0);
+        Check(g[0] == 0f && g[1] == 0f && g[2] == 0f && g[3] == 0f, "Missing landmarks give zero iris features");
+        landmarks[HomulerFunctions.LeftEyeOuterCorner] = new Mediapipe.NormalizedLandmark { X = 0.60f, Y = 0.50f };
+        HomulerFunctions.FillIrisFeatures(landmarks, g, 0);
+        Check(!float.IsNaN(g[0]) && !float.IsInfinity(g[0]) && g[0] == 0f && g[1] == 0f,
+            "A degenerate (zero-width) eye gives zeros, not NaN");
+    }
+
     private static void TestEyeCropRect()
     {
         //Corners in MediaPipe convention (normalized, y-down): a 0.1-wide eye slightly above the
@@ -705,13 +766,40 @@ public static class UnitEyeSmokeTests
 
             var outT = worker.PeekOutput("dense_8") as Tensor<float>;
             Check(outT != null, "Output 'dense_8' should exist");
+            float syncX = float.NaN, syncY = float.NaN;
             if (outT != null)
             {
                 var data = outT.DownloadToArray();
                 Check(data.Length >= 2, $"dense_8 should produce at least 2 values (got {data.Length})");
                 if (data.Length >= 2)
+                {
+                    syncX = data[0];
+                    syncY = data[1];
                     Check(!float.IsNaN(data[0]) && !float.IsInfinity(data[0]) && !float.IsNaN(data[1]) && !float.IsInfinity(data[1]),
                         $"dense_8 output should be finite (got {data[0]}, {data[1]})");
+                }
+            }
+
+            //Async-readback API path (what the runners use with _asyncGpuReadback on): schedule again,
+            //request a readback, poll for completion, then a non-blocking download. On the CPU backend the
+            //readback completes promptly; this verifies the API sequence compiles/works and that the
+            //pipelined result matches the synchronous one for identical inputs.
+            worker.Schedule();
+            var asyncOut = worker.PeekOutput("dense_8") as Tensor<float>;
+            Check(asyncOut != null, "Output 'dense_8' should exist for the async-readback pass");
+            if (asyncOut != null)
+            {
+                asyncOut.ReadbackRequest();
+                var done = false;
+                for (var spin = 0; spin < 100000 && !done; spin++)
+                    done = asyncOut.IsReadbackRequestDone();
+                Check(done, "ReadbackRequest should complete (CPU backend)");
+                if (done)
+                {
+                    var data = asyncOut.DownloadToArray();
+                    Check(data.Length >= 2 && data[0] == syncX && data[1] == syncY,
+                        "Async readback returns the same result as the synchronous download for identical inputs");
+                }
             }
         }
         finally
@@ -760,7 +848,8 @@ public static class UnitEyeSmokeTests
         //LINEAR ridge can bend to the corners (raw [yaw,pitch] can't: the angle->screen map is nonlinear
         //with a yaw*pitch coupling). Pin the length + exact term layout so the basis isn't silently
         //changed and train/predict stay in lockstep (both read this same vector).
-        Check(GazeEstimationRunner.FeatureCount == 11, "Gaze calibration feature vector is the 11-term polynomial");
+        Check(GazeEstimationRunner.FeatureCount == 15, "Gaze calibration feature vector is 15 terms (polynomial + head pose + iris offsets)");
+        Check(GazeEstimationRunner.IrisFeatureStart == 11, "Direction-model iris block starts after the head pose (7/8/9 stay stable)");
         var f = new float[GazeEstimationRunner.FeatureCount];
         float yaw = 0.3f, pitch = -0.2f;
         GazeEstimationRunner.FillGazeFeatures(f, yaw, pitch, 0.11f, 0.12f, 0.13f, 0.14f);
@@ -782,7 +871,8 @@ public static class UnitEyeSmokeTests
         //the direction backbones carry one of the gaze angles) — otherwise a linear ridge compresses the
         //corners. Pin the length + exact layout so train/predict stay in lockstep, and so HeadPoseFeature-
         //Indices (11/12/13) keeps matching.
-        Check(HomulerEyeMURunner.FeatureCount == 15, "EyeMU calibration feature vector is 15 terms (embedding + gaze polynomial + head pose)");
+        Check(HomulerEyeMURunner.FeatureCount == 19, "EyeMU calibration feature vector is 19 terms (embedding + gaze polynomial + head pose + iris offsets)");
+        Check(HomulerEyeMURunner.IrisFeatureStart == 15, "EyeMU iris block starts after the head pose (11/12/13 stay stable)");
         var f = new float[HomulerEyeMURunner.FeatureCount];
         var emb = new[] { 0.1f, 0.2f, 0.3f, 0.4f };
         float gx = 0.25f, gy = 0.75f;
@@ -800,6 +890,70 @@ public static class UnitEyeSmokeTests
         CheckClose(f[12], 0.12f, 1e-6f, "feature[12] = headPitch");
         CheckClose(f[13], 0.13f, 1e-6f, "feature[13] = headRoll");
         CheckClose(f[14], 0.14f, 1e-6f, "feature[14] = headArea (linear)");
+
+        //Ensemble backbone: EyeMU's full vector leads (head-pose slots keep their indices), followed by the
+        //direction model's leading gaze-angle polynomial block.
+        Check(CompositeGazeBackbone.FeatureCount ==
+              HomulerEyeMURunner.FeatureCount + GazeEstimationRunner.GazeAngleTermCount,
+            "Ensemble feature vector = EyeMU block + direction gaze-angle polynomial");
+        var eyeMu = new float[HomulerEyeMURunner.FeatureCount];
+        var direction = new float[GazeEstimationRunner.FeatureCount];
+        for (var i = 0; i < eyeMu.Length; i++) eyeMu[i] = i;
+        for (var i = 0; i < direction.Length; i++) direction[i] = 100 + i;
+        var combined = new float[CompositeGazeBackbone.FeatureCount];
+        CompositeGazeBackbone.ConcatFeatures(eyeMu, direction, combined);
+        Check(combined[0] == 0f && combined[HomulerEyeMURunner.FeatureCount - 1] == HomulerEyeMURunner.FeatureCount - 1,
+            "Ensemble vector starts with the EyeMU block in order");
+        Check(combined[HomulerEyeMURunner.FeatureCount] == 100f &&
+              combined[CompositeGazeBackbone.FeatureCount - 1] == 100 + GazeEstimationRunner.GazeAngleTermCount - 1,
+            "Ensemble vector ends with the direction model's first gaze-angle terms only");
+    }
+
+    private static void TestThinPlateSplineWarp()
+    {
+        //3x3 anchor grid in normalized screen coords.
+        var grid = new List<Vector2>();
+        foreach (var y in new[] { 0.1f, 0.5f, 0.9f })
+            foreach (var x in new[] { 0.1f, 0.5f, 0.9f })
+                grid.Add(new Vector2(x, y));
+        var source = grid.ToArray();
+
+        //Identity: mapping the grid onto itself must reproduce any probe (affine part carries it exactly).
+        var identity = ThinPlateSplineWarp.Fit(source, (Vector2[])source.Clone());
+        Check(identity != null, "TPS fits an identity mapping");
+        var probe = new Vector2(0.37f, 0.62f);
+        Check(Vector2.Distance(identity.Apply(probe), probe) < 1e-3f, "Identity TPS leaves points unchanged");
+
+        //Pure translation: affine part must carry it everywhere, not just at anchors.
+        var shifted = new Vector2[source.Length];
+        var offset = new Vector2(0.1f, -0.05f);
+        for (var i = 0; i < source.Length; i++) shifted[i] = source[i] + offset;
+        var translation = ThinPlateSplineWarp.Fit(source, shifted);
+        Check(Vector2.Distance(translation.Apply(probe), probe + offset) < 1e-3f,
+            "A pure translation is reproduced everywhere");
+
+        //LOCAL correction: move only the top-left anchor. The warp must correct strongly there while
+        //leaving the far side of the screen essentially untouched — the local behavior the global
+        //polynomial cannot express.
+        var local = (Vector2[])source.Clone();
+        local[0] = source[0] + new Vector2(0.08f, 0.06f);
+        var warp = ThinPlateSplineWarp.Fit(source, local);
+        Check(Vector2.Distance(warp.Apply(source[0]), local[0]) < 0.02f,
+            "TPS corrects the displaced anchor toward its target");
+        Check(Vector2.Distance(warp.Apply(source[8]), source[8]) < 0.02f,
+            "TPS leaves the opposite corner essentially unchanged (local, not global)");
+
+        //Serialization round trip (same JSON path Save/Load use).
+        var json = JsonConvert.SerializeObject(warp);
+        var loaded = JsonConvert.DeserializeObject<ThinPlateSplineWarp>(json);
+        Check(Vector2.Distance(loaded.Apply(probe), warp.Apply(probe)) < 1e-5f,
+            "TPS warp survives the serialization round trip");
+
+        //Guards: too few anchors -> null; a malformed warp applies as identity.
+        Check(ThinPlateSplineWarp.Fit(new[] { Vector2.zero, Vector2.one }, new[] { Vector2.zero, Vector2.one }) == null,
+            "TPS refuses to fit on too few anchors");
+        var malformed = new ThinPlateSplineWarp();
+        Check(malformed.Apply(probe) == probe, "A malformed warp falls back to identity");
     }
 
     private static void TestCalibrationProfiles()
@@ -825,9 +979,11 @@ public static class UnitEyeSmokeTests
         Check(round.files["RidgeRegression/Reg_X_EyeMU.json"] == "{\"W\":[1,2,3]}",
             "Profile serialization preserves the embedded calibration file content");
 
-        //The shipped MC-14-07-2026 profile must load from Resources AND still match the CURRENT EyeMU feature
-        //count (16 ridge weights = 15 features + the affine bias) — a guard that the committed profile stays
-        //compatible if the EyeMU feature vector is ever changed again.
+        //The shipped MC-14-07-2026 profile must load and parse from Resources. It was saved with the
+        //15-feature EyeMU vector (16 ridge weights incl. affine bias); the vector is now 19 (iris features),
+        //so the profile is a LEGACY one — the contract is that it must load without error and its model must
+        //return NaN on current-length features (RefineGazeLocation's raw-gaze fallback), never garbage.
+        //Re-save the profile after recalibrating to make it current again.
         var shipped = Resources.Load<TextAsset>($"{CalibrationProfileStore.ResourcesFolder}/MC-14-07-2026");
         Check(shipped != null, "The shipped MC-14-07-2026 calibration profile should be in Resources");
         if (shipped != null)
@@ -837,8 +993,10 @@ public static class UnitEyeSmokeTests
                   mc.files.ContainsKey("RidgeRegression/Reg_Y_EyeMU.json"),
                 "MC-14-07-2026 profile contains the EyeMU ridge X/Y calibration files");
             var rx = JsonConvert.DeserializeObject<RidgeRegression>(mc.files["RidgeRegression/Reg_X_EyeMU.json"]);
-            Check(rx.W != null && rx.W.Count == HomulerEyeMURunner.FeatureCount + 1,
-                $"MC-14-07-2026 ridge X matches the current EyeMU feature count ({HomulerEyeMURunner.FeatureCount} + affine bias)");
+            Check(rx.W != null, "MC-14-07-2026 ridge X parses with weights");
+            if (rx.W != null && rx.W.Count != HomulerEyeMURunner.FeatureCount + 1)
+                Check(float.IsNaN(rx.Predict(new float[HomulerEyeMURunner.FeatureCount])),
+                    "A legacy-length profile model must NaN on current features (raw-gaze fallback), not mispredict");
         }
     }
 
