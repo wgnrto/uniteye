@@ -71,10 +71,29 @@ Console markers prove the chain end-to-end: `UNITEYE_JSLIB_STARTED` (receiver �
 Note: the scene logs missing-script warnings for the `Mediapipe`/annotation objects on WebGL — expected,
 those are the native-only components excluded from WebGL builds; the browser pipeline replaces them.
 
+## Calibration feature vector (19) — matches native
+
+The browser builds the **same 19-feature calibration vector** as `HomulerEyeMURunner.Features`, in the
+same order, via shared ports in `uniteye-core.js` (`buildEyeMUFeatures` = `fillEyeMUFeatures` +
+`fillIrisFeatures`):
+
+| Index | Feature |
+| --- | --- |
+| 0–3 | EyeMU embedding (`dense_7`) |
+| 4–10 | polynomial of the **normalized** gaze point: `gx, gy, gx², gy², gx·gy, gx³, gy³` |
+| 11–14 | head pose: yaw, pitch, roll, area |
+| 15–18 | per-eye normalized iris offsets |
+
+This matters for the Unity WebGL build in particular: `uniteye-webgl-boot.js` streams this vector into
+C#, and a length mismatch makes the EyeMU calibration NaN out and silently fall back to raw gaze. The
+gaze terms use the model's normalized 0..1 output, **not** pixels — squaring/cubing pixel values would
+blow the terms up. (This replaced an older 12-feature vector that fed raw pixels plus two constant
+screen-size features; the polynomial is what lets a per-axis linear ridge reach the screen corners.)
+
 ## Calibration does not transfer across platforms
 
 Calibrate **per platform** (browser users calibrate in the browser; desktop users in the desktop build).
-The raw gaze and most features match the native pipeline, but two features have slightly different
+The vector layout now matches native exactly, but two of its features still have slightly different
 distributions in the browser (head-area uses a landmark bounding box instead of MediaPipe's expanded
 face ROI, and blink/EAR scaling differs) — so a calibration file trained natively will carry a bias if
 loaded in the browser, and vice versa. Per-user, per-setup calibration is required for accuracy anyway.
@@ -82,4 +101,16 @@ loaded in the browser, and vice versa. Per-user, per-setup calibration is requir
 ## Pinned versions (confirmed working)
 
 - `onnxruntime-web@1.20.1`
-- `@mediapipe/tasks-vision@0.10.35` + MediaPipe `face_landmarker.task` (float16/1)
+- `@mediapipe/tasks-vision@1.0.0` + MediaPipe `face_landmarker.task` (float16/1)
+
+`tasks-vision` was moved from `0.10.35` to **1.0.0** (Google's first stable MediaPipe release, July 2026).
+The bump is behaviour-preserving and was verified rather than assumed: feeding both versions the same
+face image produces 478 landmarks with **bit-identical** coordinates (max abs difference `0`) at the eye
+corners and iris centres the pipeline reads. Only the WASM runtime moved — the `.task` model URL is
+pinned to `float16/1`, so the weights are unchanged. Keep the versions pinned; `@latest` can break
+without notice.
+
+Note that the **native** (Unity) path is *not* on MediaPipe 1.0.0: it goes through the
+[MediaPipe Unity Plugin](https://github.com/homuler/MediaPipeUnityPlugin), whose latest release
+(v0.16.3) still bundles MediaPipe v0.10.22. The two paths are independently versioned and always have
+been — they already require separate calibration (see above), so this adds no new divergence.

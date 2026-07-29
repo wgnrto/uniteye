@@ -20,7 +20,13 @@ namespace Mediapipe.Unity.FaceMesh
         // Copied into StreamingAssets by MediaPipeAssetInstaller.
         public const string ModelFileName = "face_landmarker_v2.bytes";
 
-        // face_landmarker_v2 outputs 478 landmarks: 0..467 face mesh, 468..472 left-eye iris, 473..477 right.
+        // face_landmarker_v2 outputs 478 landmarks: 0..467 face mesh, then two 5-point iris blocks.
+        // NOTE the Left/Right names here follow MediaPipe's own IMAGE-relative naming, which is mirrored
+        // relative to the SUBJECT-relative naming used by the eye-corner constants in HomulerFunctions
+        // (468.. actually lies in the eye whose corners are 33/133). That only matters when pairing an
+        // iris with a specific eye — the sole consumer of these two blocks is HomulerEyeHelper's iris
+        // SIZE, which takes whichever eye is bigger, so the labels do not affect any result here.
+        // HomulerFunctions.Left/RightIrisCenter carry the corrected, eye-accurate mapping.
         private const int FaceLandmarkCount = 468;
         private const int LeftIrisStart = 468;
         private const int RightIrisStart = 473;

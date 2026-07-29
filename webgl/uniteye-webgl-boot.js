@@ -3,8 +3,10 @@
  *
  * Include this in your Unity WebGL template (after uniteye-core.js), alongside uniteye-cv.js, and serve
  * the EyeMU model at models/eyemu.onnx (adjust modelUrl below). It defines window.UnitEyeStartPipeline,
- * which UnitEyeWebGL.jslib calls once Unity starts. It streams RAW gaze + the 12-feature vector into
+ * which UnitEyeWebGL.jslib calls once Unity starts. It streams RAW gaze + the 19-feature vector into
  * Unity, so Unity's own C# calibration + One-Euro filter + AOI logging run unchanged (the shared layer).
+ * The 19 features match HomulerEyeMURunner.FeatureCount exactly, so the C# side's EyeMU calibration
+ * accepts them without a length mismatch (a wrong length NaNs and silently falls back to raw gaze).
  */
 window.UnitEyeStartPipeline = async function (send) {
   // Idempotent: a second receiver (e.g. after a scene reload) reuses the running pipeline instead of

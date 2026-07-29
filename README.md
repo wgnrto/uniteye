@@ -54,12 +54,12 @@ Full details, the ONNX I/O, and the finish/hand-test steps are in [`docs/GAZE-BA
 * **Calibration is per-backbone.** Each model emits a different feature vector, so its calibration is saved and loaded under a backbone-specific filename ([`CalibrationModelStore.FileName`](uniteye/Scripts/Runtime/Calibration/CalibrationModelStore.cs)) — switching models never clobbers another's calibration, but you must **recalibrate once per model**.
 * The direction models feed the network a **face** crop (not eye crops), so the Gaze UI shows a **FaceCrop** thumbnail/toggle for them instead of **Eyecrops**.
 * **Every backbone emits a polynomial expansion of its raw gaze** as its calibration features so the per-axis linear calibration can reach the screen corners (the raw-gaze→flat-screen map is non-linear). EyeMU expands its normalized screen point (`gx, gy, gx², gy², gx·gy, gx³, gy³`, [`HomulerEyeMURunner.FillEyeMUFeatures`](uniteye/Scripts/Runtime/Utility/HomulerEyeMURunner.cs)); the direction models expand the gaze angles ([`GazeEstimationRunner.FillGazeFeatures`](uniteye/Scripts/Runtime/GazeProvider/GazeEstimationRunner.cs)). Without this the fit compressed predictions toward the centre ("corners bad"). See [`docs/GAZE-BACKBONES.md`](docs/GAZE-BACKBONES.md).
-* **Every backbone also feeds the iris position** to the calibration: the normalized offset of each iris center within its eye opening ([`HomulerFunctions.FillIrisFeatures`](uniteye/Scripts/Runtime/Utility/HomulerFunctions.cs)) — the classic direct webcam gaze cue, tracked by MediaPipe every frame and independent of the CNN. The six gaze landmarks it (and the eye crops) depend on are lightly One-Euro-smoothed in [`FaceMeshSolution`](uniteye/Scripts/Runtime/Mediapipe/FaceMeshSolution.cs) (`Smooth Gaze Landmarks`) since the Task API dropped the old graph's smoothing.
+* **Every backbone also feeds the iris position** to the calibration: the normalized offset of each iris center within its eye opening ([`HomulerFunctions.FillIrisFeatures`](uniteye/Scripts/Runtime/Utility/HomulerFunctions.cs)) — the classic direct webcam gaze cue, tracked by MediaPipe every frame and independent of the CNN. **Recalibrate:** until recently each iris was paired with the *other* eye's corners (MediaPipe names its two iris blocks by image side, the eye-corner indices by subject side — mirrored conventions), which produced offsets of roughly ±2.4 corner-distances instead of a fraction of one. The pairing is now verified against real landmarks and pinned by a test; the feature *length* is unchanged, so existing calibration files still load, but they were fitted against the wrong signal — recalibrate to benefit. The six gaze landmarks it (and the eye crops) depend on are lightly One-Euro-smoothed in [`FaceMeshSolution`](uniteye/Scripts/Runtime/Mediapipe/FaceMeshSolution.cs) (`Smooth Gaze Landmarks`) since the Task API dropped the old graph's smoothing.
 * **`Async Gpu Readback`** on `HomulerGaze` (experimental, off by default) pipelines the model-output readback: the CPU no longer stalls on the GPU each frame, at the cost of gaze arriving one camera frame later. Verify with your webcam before shipping.
 
 ## Used sources and libraries
 * [Unity Inference Engine](https://docs.unity3d.com/Packages/com.unity.ai.inference@latest) (`com.unity.ai.inference`, the successor to the deprecated Barracuda) — Unity's neural-network inference on [`.onnx`](https://onnx.ai/) models. UnitEye runs the gaze models on it. (Barracuda and the Inference Engine cannot coexist — both register an importer for `.onnx` — so Barracuda and the old HolisticBarracuda pipeline were removed.)
-* [MediaPipe Unity Plugin](https://github.com/homuler/MediaPipeUnityPlugin) (homuler) — Google's native MediaPipe FaceMesh (468 landmarks + iris), the eye-crop / face landmark source. Uses native binaries (Windows/macOS/Linux/Android) and therefore **does not support WebGL**. Vendored at `com.github.homuler.mediapipe/` (v0.16.3, consumed through the **Task API** — `Tasks.Vision.FaceLandmarker`; the 0.12.0 → 0.16.3 migration off the removed Solution API is recorded in [`docs/HOMULER-UPGRADE.md`](docs/HOMULER-UPGRADE.md)).
+* [MediaPipe Unity Plugin](https://github.com/homuler/MediaPipeUnityPlugin) (homuler) — Google's native MediaPipe FaceMesh (468 landmarks + iris), the eye-crop / face landmark source. Uses native binaries (Windows/macOS/Linux/Android) and therefore **does not support WebGL**. Vendored at `com.github.homuler.mediapipe/` (v0.16.3, consumed through the **Task API** — `Tasks.Vision.FaceLandmarker`; the 0.12.0 → 0.16.3 migration off the removed Solution API is recorded in [`docs/HOMULER-UPGRADE.md`](docs/HOMULER-UPGRADE.md)). Plugin 0.16.3 bundles **MediaPipe v0.10.22**; Google's **MediaPipe 1.0.0** (July 2026) is not yet consumable natively because homuler has not released a plugin built against it — the web path *is* on 1.0.0. This costs no face-landmark accuracy (verified: identical landmarks), and the reasoning is in [`docs/HOMULER-UPGRADE.md`](docs/HOMULER-UPGRADE.md#mediapipe-100-july-2026--where-each-path-stands).
 * [EyeMU](https://github.com/FIGLAB/EyeMU) and [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation) — the gaze models (`.onnx`).
 * Unity's [Input System](https://docs.unity3d.com/Packages/com.unity.inputsystem@latest) (`com.unity.inputsystem`) and [Newtonsoft Json](https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@latest) are package dependencies.
 * The `ML Calibration` MLP is a small, dependency-free C# implementation ([`SimpleMLP`](uniteye/Scripts/Runtime/Calibration/SimpleMLP.cs), 12→32→16→2), replacing the former BrightWire dependency — it trains faster and, with input standardization and honest holdout evaluation, more accurately.
@@ -69,7 +69,7 @@ Full details, the ONNX I/O, and the finish/hand-test steps are in [`docs/GAZE-BA
 Create an empty 3D Unity project (Unity 6.3 LTS / 6000.3), follow [Installation](#installation) to add the packages, then open `HomulerGazeScene` from the UnitEye package. [Getting started](#getting-started) walks through the pieces.
 
 ## Installation
-UnitEye targets **Unity 6.3 LTS (6000.3)** and is also verified on **Unity 6.5 (6000.5)** — the editor smoke suite passes on both. You need **two** package folders from the repository root: `uniteye` and `com.github.homuler.mediapipe`. Copy them into your project's `Packages/` folder (embedded packages), or reference them via `file:` in your `Packages/manifest.json`. No scoped registries are needed (HolisticBarracuda and the `jp.keijiro`/`jp.ikep` registries are gone); the remaining registry dependencies resolve from Unity's own registry:
+UnitEye targets **Unity 6.3 LTS (6000.3)** and is also verified on **Unity 6.5 (6000.5)** — the editor smoke suite passes on both (last verified: 252/252 checks on **6000.3.21f1** and **6000.5.5f1**, both with Input System 1.19.0). You need **two** package folders from the repository root: `uniteye` and `com.github.homuler.mediapipe`. Copy them into your project's `Packages/` folder (embedded packages), or reference them via `file:` in your `Packages/manifest.json`. No scoped registries are needed (HolisticBarracuda and the `jp.keijiro`/`jp.ikep` registries are gone); the remaining registry dependencies resolve from Unity's own registry:
 
 ```json
 {
@@ -77,11 +77,19 @@ UnitEye targets **Unity 6.3 LTS (6000.3)** and is also verified on **Unity 6.5 (
         "de.uniulm.uniteye": "file:../../path/to/uniteye",
         "com.github.homuler.mediapipe": "file:../../path/to/com.github.homuler.mediapipe",
         "com.unity.ai.inference": "2.6.1",
-        "com.unity.inputsystem": "1.8.2",
+        "com.unity.inputsystem": "1.19.0",
         "com.unity.nuget.newtonsoft-json": "3.2.1"
     }
 }
 ```
+
+> **Do not lower the Input System version.** Unity 6.4 turned the non-generic IMGUI
+> `TreeView`/`TreeViewState`/`TreeViewItem` into obsolete-as-error (`CS0619`), and Input System
+> **1.8.2** — pinned here previously — still uses them in its editor windows, so on Unity 6.5 the
+> project fails to compile before any UnitEye code is even reached. Input System 1.15.0 fixed that
+> (ISX-2349) and 1.19.0 additionally moved off the deprecated `GetInstanceID()`. **1.19.0 is the
+> version actually verified on both 6.3 and 6.5**; intermediate versions were not tested, and UPM
+> installs exactly the version declared here rather than upgrading automatically.
 
 (`uniteye`'s own [`package.json`](uniteye/package.json) declares these, so Unity resolves them automatically once the package is added; the block above is just what ends up in the manifest.)
 

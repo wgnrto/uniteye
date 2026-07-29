@@ -12,12 +12,17 @@
  * Depends on globalThis.UnitEyeCore (load uniteye-core.js first).
  * Verified in-browser: EyeMU runs in onnxruntime-web (correct I/O names, finite output) and
  * FaceLandmarker initializes; the model/CDN versions below are the ones confirmed working.
+ *
+ * MediaPipe is pinned to tasks-vision 1.0.0 (Google's first stable release, July 2026). The bump from
+ * 0.10.35 was verified to be behaviour-preserving: on the same face image both versions return 478
+ * landmarks whose coordinates are bit-identical (the .task model is pinned, so only the runtime moved).
+ * Pin the version deliberately — @latest can break without notice.
  */
 
 const ORT_URL = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.mjs';
 const ORT_WASM = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-const MP_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs';
-const MP_WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
+const MP_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.0/vision_bundle.mjs';
+const MP_WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.0/wasm';
 const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
 // MediaPipe canonical face-mesh indices (match the native UnitEye eye-corner + EAR indices)
@@ -55,6 +60,9 @@ export class UnitEyeWeb {
     this._mouse = { x: this.screenW / 2, y: this.screenH / 2 };
     this._crop = document.createElement('canvas'); this._crop.width = 128; this._crop.height = 128;
     this._cropCtx = this._crop.getContext('2d', { willReadFrequently: true });
+    // Reused calibration-feature buffer (mirrors the native runner's reused float[]); valid only until
+    // the next frame — a consumer that retains the vector must copy it.
+    this._features = new Array(C.EYEMU_FEATURE_COUNT);
   }
 
   /** Load a shipped Reg_X.json / Reg_Y.json (or in-browser trained models) to calibrate. */
@@ -156,9 +164,13 @@ export class UnitEyeWeb {
     const rawX = gaze[0] * this.screenW;
     const rawY = gaze[1] * this.screenH;
 
-    // 12-feature vector, matching HomulerEyeMURunner.Features exactly:
-    // [emb(4), gazePixels(2), headGeom(4: yaw,pitch,roll,area), screenW, screenH]
-    const features = [emb[0], emb[1], emb[2], emb[3], rawX, rawY, pose[0], pose[1], pose[2], pose[3], this.screenW, this.screenH];
+    // 19-feature vector, matching HomulerEyeMURunner.Features / FeatureCount exactly:
+    // [embedding 4, polynomial of the normalized gaze point 7, head pose 4, iris offsets 4].
+    // NOTE these use gaze[0]/gaze[1] — the model's NORMALIZED 0..1 output, not the pixel values:
+    // the native runner divides its pixel NetworkOutput back by Screen.width/height for exactly this
+    // reason (keeps the squared/cubed terms in a sane range). The old vector fed raw pixels plus two
+    // constant screen-size features, which standardize to zero and carry no signal.
+    const features = this.C.buildEyeMUFeatures(emb, gaze[0], gaze[1], pose, lm, this._features);
 
     const blink = this._blink(lm, vw, vh);
     this._emit(rawX, rawY, features, blink, true, now / 1000);

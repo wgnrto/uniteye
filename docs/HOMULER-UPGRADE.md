@@ -81,10 +81,48 @@ webcam, run `HomulerGazeScene` and check:
 ## Deferred follow-ups (optional accuracy wins, not part of the port)
 
 The Task API exposes two better-conditioned signals that were intentionally **not** adopted, because
-each changes the 12-feature vector and would force a recalibration + re-verification of the shipped
-contract:
+each changes the calibration feature vector (now 19 terms for EyeMU) and would force a recalibration +
+re-verification of the shipped contract:
 
 - **`eyeBlink` blendshapes** instead of the hand-rolled EAR for blink/drowsy detection.
 - **Facial transformation matrix** instead of the landmark-difference `HeadYaw/Pitch/Roll` math.
 
 Both are cleaner; treat them as a separate, deliberately-scoped change if pursued.
+
+## MediaPipe 1.0.0 (July 2026) — where each path stands
+
+Google shipped [MediaPipe **v1.0.0**](https://github.com/google-ai-edge/mediapipe/releases/tag/v1.0.0),
+its first stable release. UnitEye consumes MediaPipe through **two independent paths**, and only one of
+them can move today:
+
+| Path | Consumes MediaPipe via | Status |
+| --- | --- | --- |
+| **Web / WebGL** (`webgl/uniteye-cv.js`) | npm `@mediapipe/tasks-vision` (Google, direct) | **Updated to 1.0.0** and verified — see [`webgl/README.md`](../webgl/README.md) |
+| **Native** (Unity desktop/Android) | [homuler MediaPipe Unity Plugin](https://github.com/homuler/MediaPipeUnityPlugin), vendored | **Stays on plugin 0.16.3 → MediaPipe v0.10.22** |
+
+### Why the native path cannot follow yet
+
+The native path does not depend on MediaPipe directly — it depends on homuler's plugin, which vendors
+a **prebuilt** MediaPipe (`mediapipe_c.dll` / `.so` / `.dylib` + Android/iOS binaries) plus generated
+C# protobuf bindings. As of this writing homuler's latest release is **v0.16.3** (8 Nov 2025), which
+bundles **MediaPipe v0.10.22**. There is no plugin release built against MediaPipe 1.0.0, so there is
+nothing to vendor.
+
+Moving the native path would mean building homuler's plugin from source against MediaPipe 1.0.0: a
+Bazel build per target platform (Windows/macOS/Linux/Android/iOS), against an upstream that in 1.0.0
+also changed C/Python API namespacing, migrated Apple rules to `MODULE.bazel`, dropped macOS
+prebuilts, and bumped Abseil. That is a port of the plugin, not a version bump, and it would leave
+UnitEye maintaining a fork of a large native build. **Recommendation: wait for an upstream homuler
+release.** Watch [homuler/MediaPipeUnityPlugin releases](https://github.com/homuler/MediaPipeUnityPlugin/releases).
+
+### Is anything lost by staying on 0.10.22?
+
+For UnitEye's use — `FaceLandmarker`, 478 landmarks with iris — no. MediaPipe 1.0.0's headline changes
+are in text/LLM tasks (Gecko, TextSummarizer/TextProofreader), audio calculators, WebGPU plumbing and
+build/packaging; the face-landmark model and its Task API surface are unchanged. This was checked
+empirically on the web path: the same `face_landmarker.task` model run through tasks-vision **1.0.0**
+and **0.10.35** returns landmark coordinates that are **bit-identical**. The version gap between the
+two paths therefore carries no accuracy difference for face landmarking.
+
+(The two paths have always been independently versioned and already require separate calibration —
+different head-area and blink scaling — so this adds no new divergence.)

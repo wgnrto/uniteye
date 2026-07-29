@@ -169,9 +169,95 @@
     return out;
   }
 
+  // ---- EyeMU calibration feature vector ----
+  // Faithful port of HomulerEyeMURunner.FillEyeMUFeatures + HomulerFunctions.FillIrisFeatures, so the
+  // browser feeds its calibration the SAME 19 features (same order) as the native pipeline. Layout:
+  //   [0..3]   EyeMU embedding (dense_7)
+  //   [4..10]  polynomial of the NORMALIZED raw gaze point: gx, gy, gx², gy², gx·gy, gx³, gy³
+  //   [11..14] head pose: yaw, pitch, roll, area
+  //   [15..18] per-eye normalized iris offsets (appended last, so the head-pose slots keep their
+  //            indices — the native calibration's head-pose jitter targets 11/12/13 by index)
+  // A per-axis LINEAR ridge over just [gx, gy] fits the centre slope and compresses the corners; the
+  // quadratic/cross/cubic terms are what let the fit reach the screen corners. Changing this length
+  // stales saved calibrations (they NaN and fall back to raw gaze) — recalibrate.
+  const EYEMU_FEATURE_COUNT = 19;
+  const EYEMU_IRIS_FEATURE_START = 15;
+
+  // MediaPipe landmark indices — identical to the constants in HomulerFunctions.
+  // Each iris is paired with the eye it ACTUALLY lies in: MediaPipe names its two 5-point iris blocks
+  // (468.., 473..) by IMAGE side while the eye-corner indices use SUBJECT side, so the two namings are
+  // mirrored and pairing them by name pairs each iris with the wrong eye. Verified on a real detection:
+  // index 468 lies between corners 33 and 133; index 473 lies between corners 362 and 263.
+  const IRIS_LANDMARKS = {
+    leftEyeInnerCorner: 362, leftEyeOuterCorner: 263,
+    rightEyeOuterCorner: 33, rightEyeInnerCorner: 133,
+    leftIrisCenter: 473, rightIrisCenter: 468,
+  };
+
+  function fillEyeMUFeatures(f, embedding, gx, gy, headYaw, headPitch, headRoll, headArea) {
+    f[0] = embedding[0];
+    f[1] = embedding[1];
+    f[2] = embedding[2];
+    f[3] = embedding[3];
+    f[4] = gx;
+    f[5] = gy;
+    f[6] = gx * gx;
+    f[7] = gy * gy;
+    f[8] = gx * gy;
+    f[9] = gx * gx * gx;
+    f[10] = gy * gy * gy;
+    f[11] = headYaw;
+    f[12] = headPitch;
+    f[13] = headRoll;
+    f[14] = headArea;
+    return f;
+  }
+
+  // Iris center relative to the eye-corner midpoint, divided by the corner distance — the classic
+  // direct webcam gaze cue, made scale-invariant (head distance / face size cancel out). Zero when an
+  // eye is degenerate. Symmetric in the two corners, so their argument order does not affect the result.
+  function fillOneEyeIrisOffset(cornerA, cornerB, iris, dest, index) {
+    const midX = (cornerA.x + cornerB.x) * 0.5;
+    const midY = (cornerA.y + cornerB.y) * 0.5;
+    const dx = cornerB.x - cornerA.x, dy = cornerB.y - cornerA.y;
+    const cornerDistance = Math.sqrt(dx * dx + dy * dy);
+    if (cornerDistance < 1e-5) { dest[index] = dest[index + 1] = 0; return; }
+    dest[index] = (iris.x - midX) / cornerDistance;
+    dest[index + 1] = (iris.y - midY) / cornerDistance;
+  }
+
+  function fillIrisFeatures(landmarks, dest, start) {
+    const I = IRIS_LANDMARKS;
+    // Guard on the highest index actually read — which iris constant is larger depends on the mapping.
+    if (!landmarks || landmarks.length <= Math.max(I.leftIrisCenter, I.rightIrisCenter)) {
+      dest[start] = dest[start + 1] = dest[start + 2] = dest[start + 3] = 0;
+      return dest;
+    }
+    fillOneEyeIrisOffset(landmarks[I.leftEyeInnerCorner], landmarks[I.leftEyeOuterCorner],
+      landmarks[I.leftIrisCenter], dest, start);
+    fillOneEyeIrisOffset(landmarks[I.rightEyeOuterCorner], landmarks[I.rightEyeInnerCorner],
+      landmarks[I.rightIrisCenter], dest, start + 2);
+    return dest;
+  }
+
+  /**
+   * Build the full 19-feature EyeMU calibration vector.
+   * gx, gy are the model's NORMALIZED gaze output (0..1), not pixels. pose is [yaw, pitch, roll, area].
+   * `out` is an optional reuse buffer — as in the native runner it is valid only until the next call,
+   * so a caller that retains the vector (e.g. calibration capture) must copy it.
+   */
+  function buildEyeMUFeatures(embedding, gx, gy, pose, landmarks, out) {
+    const f = out || new Array(EYEMU_FEATURE_COUNT);
+    fillEyeMUFeatures(f, embedding, gx, gy, pose[0], pose[1], pose[2], pose[3]);
+    fillIrisFeatures(landmarks, f, EYEMU_IRIS_FEATURE_START);
+    return f;
+  }
+
   root.UnitEyeCore = {
     RidgeModel, trainRidge, OneEuro, OneEuro2D,
     pointInBox, pointInCircle, eyeCropRect, eyeCropToTensor,
+    fillEyeMUFeatures, fillIrisFeatures, buildEyeMUFeatures,
+    EYEMU_FEATURE_COUNT, EYEMU_IRIS_FEATURE_START, IRIS_LANDMARKS,
     _solveLinear: solveLinear,
   };
 })(typeof globalThis !== "undefined" ? globalThis : window);

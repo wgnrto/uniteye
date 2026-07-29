@@ -654,18 +654,27 @@ public static class UnitEyeSmokeTests
 
     private static void TestIrisFeatures()
     {
-        //Synthetic 478-landmark face: both eyes 0.1 wide and level. The LEFT iris sits a quarter eye-width
-        //toward the outer corner and a fifth eye-width below the corner line; the RIGHT iris is perfectly
-        //centered. FillIrisFeatures must produce the normalized offsets [0.25, 0.2, 0, 0].
+        //The iris blocks must be paired with the eye each one actually sits in. MediaPipe names the two
+        //5-point blocks (468.., 473..) by IMAGE side while the corner constants use SUBJECT side, so the
+        //two namings are mirrored — pairing by name pairs each iris with the OTHER eye and yields
+        //offsets of roughly +/-2.4 corner-distances instead of a fraction of one. Pin the real geometry:
+        //index 468 lies BETWEEN corners 33 and 133, index 473 between corners 362 and 263 (measured on a
+        //real detection). Laying the synthetic face out that way is what makes this test able to catch a
+        //re-swap; a layout built from the naming alone passes either way.
         var landmarks = new List<Mediapipe.NormalizedLandmark>(478);
         for (int i = 0; i < 478; i++)
             landmarks.Add(new Mediapipe.NormalizedLandmark { X = 0f, Y = 0f });
-        landmarks[HomulerFunctions.LeftEyeInnerCorner] = new Mediapipe.NormalizedLandmark { X = 0.60f, Y = 0.50f };
-        landmarks[HomulerFunctions.LeftEyeOuterCorner] = new Mediapipe.NormalizedLandmark { X = 0.70f, Y = 0.50f };
-        landmarks[HomulerFunctions.LeftIrisCenter] = new Mediapipe.NormalizedLandmark { X = 0.675f, Y = 0.52f };
-        landmarks[HomulerFunctions.RightEyeOuterCorner] = new Mediapipe.NormalizedLandmark { X = 0.30f, Y = 0.50f };
-        landmarks[HomulerFunctions.RightEyeInnerCorner] = new Mediapipe.NormalizedLandmark { X = 0.40f, Y = 0.50f };
-        landmarks[HomulerFunctions.RightIrisCenter] = new Mediapipe.NormalizedLandmark { X = 0.35f, Y = 0.50f };
+        //Subject's LEFT eye: corners 362/263, on the image RIGHT (x 0.60..0.70); its iris is index 473.
+        landmarks[362] = new Mediapipe.NormalizedLandmark { X = 0.60f, Y = 0.50f };
+        landmarks[263] = new Mediapipe.NormalizedLandmark { X = 0.70f, Y = 0.50f };
+        landmarks[473] = new Mediapipe.NormalizedLandmark { X = 0.675f, Y = 0.52f };
+        //Subject's RIGHT eye: corners 33/133, on the image LEFT (x 0.30..0.40); its iris is index 468.
+        landmarks[33] = new Mediapipe.NormalizedLandmark { X = 0.30f, Y = 0.50f };
+        landmarks[133] = new Mediapipe.NormalizedLandmark { X = 0.40f, Y = 0.50f };
+        landmarks[468] = new Mediapipe.NormalizedLandmark { X = 0.35f, Y = 0.50f };
+
+        Check(HomulerFunctions.RightIrisCenter == 468 && HomulerFunctions.LeftIrisCenter == 473,
+            "Iris centers map to the eye they lie in (468 -> corners 33/133, 473 -> corners 362/263)");
 
         var f = new float[4];
         HomulerFunctions.FillIrisFeatures(landmarks, f, 0);

@@ -51,7 +51,8 @@
       var expT = 0.3 * 0.5 + 0.0001 * 500 + 0.05;
       check("trainRidge recovers a linear map", close(predT, expT, 0.02), "got " + predT.toFixed(4) + " expected " + expT.toFixed(4));
 
-      // 4. Real shipped Reg_X.json weights predict a finite value on the 12-feature vector
+      // 4. RidgeModel dot-product math against a historic (12-length) weight set. This pins the solver,
+      //    not the current feature layout — the live vector is 19 terms (checked in section 9 below).
       var regX_W = [0.104463741, 0.010691735, -0.00440568523, 0.00266113342, -0.0188193135, -4.1600335E-05, 0.000105519161, -0.194871455, -0.8815033, -3.26503229, -2.26206422, 5.49777869E-05, 0.000420249];
       var mReal = new C.RidgeModel(regX_W, true, null, null);
       var feat12 = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1920, 1080];
@@ -84,6 +85,49 @@
       var t = C.eyeCropToTensor(img, new Float32Array(3));
       check("eyeCropToTensor R=255 -> +0.5", close(t[0], 0.5, 0.01), "got " + t[0]);
       check("eyeCropToTensor B=0 -> -0.5", close(t[2], -0.5, 0.01), "got " + t[2]);
+
+      // 9. EyeMU 19-feature vector — pins the layout against HomulerEyeMURunner.FillEyeMUFeatures.
+      // If these fail, the browser and native feature vectors have diverged and a calibration trained
+      // on one will be meaningless on the other (or NaN out on a length mismatch).
+      check("EyeMU feature count is 19", C.EYEMU_FEATURE_COUNT === 19, "got " + C.EYEMU_FEATURE_COUNT);
+      check("iris features start at 15", C.EYEMU_IRIS_FEATURE_START === 15, "got " + C.EYEMU_IRIS_FEATURE_START);
+
+      var gx = 0.25, gy = 0.5;
+      var fv = C.fillEyeMUFeatures(new Array(15), [1, 2, 3, 4], gx, gy, 0.11, 0.22, 0.33, 0.44);
+      check("features[0..3] = embedding", fv[0] === 1 && fv[1] === 2 && fv[2] === 3 && fv[3] === 4);
+      check("features[4,5] = normalized gx,gy", fv[4] === gx && fv[5] === gy);
+      check("features[6..10] = gx²,gy²,gx·gy,gx³,gy³",
+        close(fv[6], gx * gx) && close(fv[7], gy * gy) && close(fv[8], gx * gy) &&
+        close(fv[9], gx * gx * gx) && close(fv[10], gy * gy * gy),
+        JSON.stringify(fv.slice(6, 11)));
+      check("features[11..14] = head yaw,pitch,roll,area",
+        close(fv[11], 0.11) && close(fv[12], 0.22) && close(fv[13], 0.33) && close(fv[14], 0.44));
+
+      // Each iris must pair with the eye it actually lies in: index 473 sits between corners 362/263,
+      // and index 468 between corners 33/133 (MediaPipe names the iris blocks by image side, the corner
+      // indices by subject side — mirrored, so pairing by name pairs each iris with the WRONG eye and
+      // gives offsets around +/-2.4 instead of a fraction of the corner distance). Laying the synthetic
+      // face out to match the real geometry is what lets this catch a re-swap.
+      var lmI = []; for (var i = 0; i < 478; i++) lmI.push({ x: 0.5, y: 0.5 });
+      // subject's left eye, image right: corners 0.52/0.58 (distance 0.06), iris 473 at the midpoint
+      lmI[362] = { x: 0.52, y: 0.42 }; lmI[263] = { x: 0.58, y: 0.42 }; lmI[473] = { x: 0.55, y: 0.42 };
+      // subject's right eye, image left: corners 0.40/0.46, iris 468 a quarter of the distance outward
+      lmI[33] = { x: 0.40, y: 0.42 }; lmI[133] = { x: 0.46, y: 0.42 }; lmI[468] = { x: 0.445, y: 0.42 };
+      var iris = C.fillIrisFeatures(lmI, new Array(4), 0);
+      check("iris 473 pairs with corners 362/263 (offset 0 at midpoint)",
+        close(iris[0], 0) && close(iris[1], 0), JSON.stringify(iris));
+      check("iris 468 pairs with corners 33/133, normalized by corner distance",
+        close(iris[2], 0.25), "got " + iris[2]);
+      // a real-geometry sanity bound: a correctly paired iris never leaves its own eye
+      check("iris offsets stay well inside the eye (|offset| < 1)",
+        iris.every(function (v) { return Math.abs(v) < 1; }), JSON.stringify(iris));
+      var degenerate = C.fillIrisFeatures([], new Array(4), 0);
+      check("iris features are 0 when landmarks missing",
+        degenerate.every(function (v) { return v === 0; }), JSON.stringify(degenerate));
+
+      var full = C.buildEyeMUFeatures([1, 2, 3, 4], gx, gy, [0.11, 0.22, 0.33, 0.44], lmI);
+      check("buildEyeMUFeatures returns 19 finite values",
+        full.length === 19 && full.every(isFinite), full.length + " / " + JSON.stringify(full));
     } catch (e) {
       check("EXCEPTION", false, e && e.message);
     }

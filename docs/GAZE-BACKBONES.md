@@ -12,8 +12,8 @@ Seam: [`IGazeBackbone`](../uniteye/Scripts/Runtime/GazeProvider/IGazeBackbone.cs
 ## EyeMU (default, verified)
 
 [`HomulerEyeMURunner`](../uniteye/Scripts/Runtime/Utility/HomulerEyeMURunner.cs). Eye crops + eye corners
-+ head geometry → a **screen point** directly (12-feature vector). Ships with the package; this is the
-tested path.
++ head geometry → a **screen point** directly (19-feature vector: embedding 4, gaze polynomial 7, head
+pose 4, iris offsets 4). Ships with the package; this is the tested path.
 
 ## GazeMobileOne / GazeMobileNetV2 (yakhyo/gaze-estimation — integrated; needs a webcam accuracy check)
 

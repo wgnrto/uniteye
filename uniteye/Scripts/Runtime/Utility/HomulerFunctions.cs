@@ -57,13 +57,22 @@ namespace UnitEye
         }
 
         //Face-mesh landmark indices for the iris gaze features (face_landmarker_v2, 478 landmarks:
-        //0..467 mesh, 468..472 left iris, 473..477 right iris; index 468/473 is each iris CENTER).
+        //0..467 mesh, then two 5-point iris blocks at 468..472 and 473..477; the FIRST index of each
+        //block is that iris' CENTER).
+        //
+        //WHICH BLOCK BELONGS TO WHICH EYE: MediaPipe documents the blocks as "left"/"right" using
+        //IMAGE-relative sides, while the eye-corner constants below use SUBJECT-relative sides (the
+        //canonical face-mesh naming: 33/133 = subject's right eye, which appears on the image LEFT).
+        //The two conventions are mirror images, so pairing them by name pairs each iris with the WRONG
+        //eye. Verified against real landmarks: index 468 lies between corners 33 and 133, and index 473
+        //lies between corners 362 and 263. These constants are therefore named for the eye each iris
+        //actually belongs to, so FillIrisFeatures' pairing below is correct by construction.
         public const int LeftEyeInnerCorner = 362;
         public const int LeftEyeOuterCorner = 263;
         public const int RightEyeOuterCorner = 33;
         public const int RightEyeInnerCorner = 133;
-        public const int LeftIrisCenter = 468;
-        public const int RightIrisCenter = 473;
+        public const int LeftIrisCenter = 473;
+        public const int RightIrisCenter = 468;
 
         /// <summary>
         /// Fills 4 calibration features with the per-eye NORMALIZED iris offset — the position of the iris
@@ -79,7 +88,9 @@ namespace UnitEye
         /// </summary>
         public static void FillIrisFeatures(IList<NormalizedLandmark> landmarks, float[] dest, int start)
         {
-            if (landmarks == null || landmarks.Count <= RightIrisCenter)
+            //Guard on the highest index actually read, not on one particular iris constant — which of
+            //the two is larger depends on the eye mapping above.
+            if (landmarks == null || landmarks.Count <= Mathf.Max(LeftIrisCenter, RightIrisCenter))
             {
                 dest[start] = dest[start + 1] = dest[start + 2] = dest[start + 3] = 0f;
                 return;
