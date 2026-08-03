@@ -133,6 +133,9 @@ namespace UnitEye
 
         public bool drawCheckpoints;
 
+        [Tooltip("Draw the route the calibration dot will take. Drawn in GUI space while a calibration is running, so it disappears with the rest of the calibration overlay.")]
+        public bool drawPath = true;
+
         public int currentRound = 0;
 
         public int maxRoundsPerPreset = 2;
@@ -146,10 +149,6 @@ namespace UnitEye
 
         public bool stopAfterPoints = true;
         public bool quitAfterCalibration = false;
-
-        public GameObject screen;
-
-        public LineRenderer path;
 
         #endregion
 
@@ -203,10 +202,6 @@ namespace UnitEye
                 BuildPresets();
                 _currentPreset = 0;
                 ResetPoints(0);
-                //Refresh the path line for the rebuilt first preset (path is the runtime instance once
-                //Start has run; _presets != null guarantees that).
-                if (path != null)
-                    DrawPath(points);
             }
         }
 
@@ -219,9 +214,12 @@ namespace UnitEye
             //Get HomulerGaze reference (features come from its platform gaze provider)
             _gaze = GetComponent<HomulerGaze>();
 
-            //If no crosshair is selected load the CalibrationDot Resource
+            //If no crosshair is selected load the CalibrationDot Resource. Load it TYPED: the untyped
+            //overload returns whichever asset named "CalibrationDot" it finds first (the folder holds both
+            //a .png imported as a Sprite and a .svg), and casting that threw an InvalidCastException out of
+            //Start(), skipping the rest of the setup below.
             if (calibrationDot == null)
-                calibrationDot = (Texture2D)Resources.Load("CalibrationDot");
+                calibrationDot = Resources.Load<Texture2D>("CalibrationDot");
 
             //(The returnAfter cancel hint is appended in OnEnable, which has already run.)
 
@@ -230,10 +228,6 @@ namespace UnitEye
             //Master enable for dwelling; each preset's StopAtWaypoints then decides whether IT dwells.
             stopAfterPoints = true;
             ResetPoints(0);
-
-            path = Instantiate(path, new Vector3(Screen.width/2, -Screen.height/2), Quaternion.identity, screen.transform);
-
-            DrawPath(points);
         }
 
         /// <summary>
@@ -265,19 +259,22 @@ namespace UnitEye
         }
 
         /// <summary>
-        /// Renders a line along the given waypoints. TODO: adjust coordinate conversion, currently not working correctly
+        /// Renders the route the dot will take, in GUI space (the same space the waypoints and the dot
+        /// itself live in), so the line lands exactly on the path the participant is asked to follow.
         /// </summary>
-        /// <param name="waypoints">A list of Vector2 objects containing the local screen coordinates.</param>
+        /// <remarks>
+        /// This used to be a world-space <c>LineRenderer</c> (Prefabs/Path.prefab) instantiated under the
+        /// MediaPipe annotation Canvas and positioned with raw <c>Screen</c> pixel values. That Canvas is
+        /// Screen-Space-Camera with a CanvasScaler, so its units are pixels/scaleFactor: on anything other
+        /// than the scaler's 2436x1125 reference resolution the whole line was offset and shrunk (at
+        /// 1920x876 it sat off the right-hand edge of the screen). It was also spawned once in Start() and
+        /// never hidden, so the stray line stayed on screen through the evaluation and its results.
+        /// </remarks>
         private void DrawPath(List<Vector2> waypoints)
         {
-            path.transform.localPosition = new Vector3(Screen.width * 0.5f, -(Screen.height * 0.5f), -1f);
-
-            var lineRendererPositions = new Vector3[waypoints.Count];
-            for (int i = 0; i < waypoints.Count; i++)
-                lineRendererPositions[i] = new Vector3(waypoints[i].x, waypoints[i].y, transform.position.z);
-
-            path.positionCount = lineRendererPositions.Length;
-            path.SetPositions(lineRendererPositions);
+            //Light grey, matching the old LineRenderer's gradient, thin enough not to compete with the dot.
+            GUIShapes.DrawPolyline(waypoints, new Color(0.74f, 0.74f, 0.74f, 0.5f),
+                Mathf.Max(2f, 2f * Screen.height / 1080f));
         }
 
         void Update()
@@ -864,6 +861,12 @@ namespace UnitEye
                 GUI.color = prev;
                 GUI.Label(rect, prompt, _headRotationStyle);
             }
+
+            //Route preview for the current preset. Drawn here (rather than as a scene object) so it exists
+            //only while this overlay does. Repaint-only: the sweep presets have ~150 waypoints, and the
+            //other OnGUI passes (one per input event) would redo that geometry for nothing.
+            if (drawPath && !_finished && Event.current.type == EventType.Repaint)
+                DrawPath(points);
 
             var size = 36;
             if (calibrationDot != null)

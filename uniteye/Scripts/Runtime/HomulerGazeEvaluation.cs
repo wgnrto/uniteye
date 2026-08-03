@@ -25,8 +25,6 @@ namespace UnitEye
         private GUIStyle _guiStyle = new GUIStyle();
         private GUIStyle _timerStyle = new GUIStyle();
         private GUIStyle _heatmapStyle = new GUIStyle();
-        //Reused 1x1 white texture for the heatmap connector lines.
-        private static Texture2D _lineTex;
         //Per-target heatmap entries, aggregated ONCE when the evaluation finishes. OnGUI runs 2+ passes per
         //frame for as long as the results screen is up, so aggregating there allocated two dictionaries and
         //re-grouped every sample on every pass.
@@ -59,6 +57,14 @@ namespace UnitEye
         private readonly CalibrationModelStore _evalStore = new CalibrationModelStore();
         private bool _hasMlpModel;
         private bool _hasRidgeModel;
+
+        //Results-screen palette. The screen is drawn on an opaque WHITE backdrop (the scene behind it is
+        //arbitrary game content, which used to make the error colours impossible to judge and the summary
+        //hard to read), so every colour here is picked for contrast against white rather than against a
+        //dark scene.
+        private static readonly Color ResultsBackdrop = Color.white;
+        private static readonly Color ResultsText = new Color(0.10f, 0.10f, 0.12f);
+        private static readonly Color TargetMarker = new Color(0.20f, 0.20f, 0.22f, 0.9f);
 
         private enum ScreenRegion { Corner, Edge, Center }
         private const float RegionBoundaryThreshold = 1f / 3f;
@@ -132,9 +138,12 @@ namespace UnitEye
             //Get Gaze reference
             _gaze = GetComponent<HomulerGaze>();
 
-            //If no crosshair is selected load the CalibrationDot Resource
+            //If no crosshair is selected load the CalibrationDot Resource. Load it TYPED: the untyped
+            //overload returns whichever asset named "CalibrationDot" it finds first (the folder holds both
+            //a .png imported as a Sprite and a .svg), and casting that threw an InvalidCastException out of
+            //Start() — which also skipped BuildPoints() below, leaving the whole evaluation dead.
             if (evaluationDot == null)
-                evaluationDot = (Texture2D)Resources.Load("CalibrationDot");
+                evaluationDot = Resources.Load<Texture2D>("CalibrationDot");
 
             //If can return after evaluation append string to GUI
             if (returnAfter)
@@ -380,6 +389,16 @@ namespace UnitEye
 
         void OnGUI()
         {
+            //Draw behind HomulerGaze's own overlays (depth 0) but in front of the webcam preview (depth 5):
+            //this component has the later execution order, so without a depth of its own the results
+            //backdrop below would paint over the "Show Gaze UI" button and the crosshair.
+            GUI.depth = 1;
+
+            //The results screen gets an opaque WHITE backdrop. It used to be drawn straight over the live
+            //scene, so the heatmap colours and the summary competed with whatever the game was rendering.
+            if (_finished)
+                GUIShapes.FillRect(new Rect(0f, 0f, Screen.width, Screen.height), ResultsBackdrop);
+
             //After the run, draw the accuracy heatmap (arrows from each target to the mean measured gaze,
             //colored by error) behind the summary text so you can see WHERE it is accurate vs off.
             if (_finished && showHeatmap)
@@ -391,10 +410,14 @@ namespace UnitEye
             {
                 float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
                 _guiStyle.fontSize = Mathf.RoundToInt((_finished ? 16 : 36) * uiScale);
+                if (_finished)
+                    _guiStyle.normal.textColor = ResultsText;
                 GUI.Label(new Rect(Screen.width / 2 - Screen.width * (_finished ? 0.15f : 0.1f), Screen.height / 2 - 20, 100, 60), $"{_guiMessage}", _guiStyle);
             }
 
-            if (evaluationDot != null)
+            //Nothing below is part of the results screen: the dot marks the target the participant should
+            //be looking at right now, and after the run there is none (the heatmap marks every target).
+            if (evaluationDot != null && !_finished)
             {
                 // Draw faded out points
                 if (showAllPoints)
@@ -495,15 +518,15 @@ namespace UnitEye
             var previousColor = GUI.color;
             foreach (var (target, mean, color) in _heatmapEntries)
             {
-                DrawLine(target, mean, color, Mathf.Max(2f, 3f * uiScale));
-                DrawMarker(target, marker, new Color(1f, 1f, 1f, 0.9f)); // where they were asked to look
-                DrawMarker(mean, marker * 0.9f, color);                  // where the gaze actually landed
+                GUIShapes.DrawLine(target, mean, color, Mathf.Max(2f, 3f * uiScale));
+                DrawMarker(target, marker, TargetMarker);  // where they were asked to look
+                DrawMarker(mean, marker * 0.9f, color);    // where the gaze actually landed
             }
             GUI.color = previousColor;
 
             //Legend, top-left, its own style so it doesn't disturb the summary text's style.
             _heatmapStyle.fontSize = Mathf.RoundToInt(14 * uiScale);
-            _heatmapStyle.normal.textColor = Color.white;
+            _heatmapStyle.normal.textColor = ResultsText;
             _heatmapStyle.wordWrap = true;
             GUI.Label(new Rect(Screen.width * 0.02f, Screen.height * 0.03f, Screen.width * 0.6f, Screen.height * 0.08f),
                 $"Accuracy heatmap — line = target → mean gaze.  " +
@@ -512,9 +535,11 @@ namespace UnitEye
 
         private static Color ErrorColor(float fractionOfDiagonal)
         {
-            if (fractionOfDiagonal < 0.02f) return new Color(0.25f, 0.8f, 0.3f);   // good
-            if (fractionOfDiagonal < 0.04f) return new Color(0.95f, 0.8f, 0.2f);   // ok
-            return new Color(0.9f, 0.3f, 0.3f);                                    // poor
+            //Darker than the usual traffic-light triple: these are drawn on the white results backdrop,
+            //where the light amber in particular was barely visible.
+            if (fractionOfDiagonal < 0.02f) return new Color(0.10f, 0.60f, 0.20f);  // good
+            if (fractionOfDiagonal < 0.04f) return new Color(0.85f, 0.50f, 0.00f);  // ok
+            return new Color(0.80f, 0.12f, 0.12f);                                  // poor
         }
 
         private void DrawMarker(Vector2 center, float size, Color color)
@@ -522,30 +547,6 @@ namespace UnitEye
             if (evaluationDot == null) return;
             GUI.color = color;
             GUI.DrawTexture(new Rect(center.x - 0.5f * size, center.y - 0.5f * size, size, size), evaluationDot);
-        }
-
-        private static void DrawLine(Vector2 a, Vector2 b, Color color, float width)
-        {
-            if (_lineTex == null)
-            {
-                _lineTex = new Texture2D(1, 1);
-                //Not tied to any scene/asset: survives scene loads and never shows up as a leaked asset.
-                _lineTex.hideFlags = HideFlags.HideAndDontSave;
-                _lineTex.SetPixel(0, 0, Color.white);
-                _lineTex.Apply();
-            }
-            var delta = b - a;
-            float length = delta.magnitude;
-            if (length < 1f) return;
-            float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
-
-            var matrix = GUI.matrix;
-            var color0 = GUI.color;
-            GUI.color = color;
-            GUIUtility.RotateAroundPivot(angle, a);
-            GUI.DrawTexture(new Rect(a.x, a.y - width * 0.5f, length, width), _lineTex);
-            GUI.matrix = matrix;
-            GUI.color = color0;
         }
     }
 }
