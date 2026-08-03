@@ -82,14 +82,23 @@ export class UnitEyeWeb {
     // MediaPipe FaceLandmarker
     const vision = await import(MP_URL);
     const fileset = await vision.FilesetResolver.forVisionTasks(MP_WASM);
+    // Blendshapes (8 direct eyeLook* gaze cues + eyeBlink) and the facial transformation matrix
+    // (metric head rotation + TRANSLATION) feed the 36-feature calibration vector, mirroring native.
     this.faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetPath: MP_MODEL },
-      runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: false, outputFacialTransformationMatrixes: false,
+      runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true,
     });
-    // camera
+    // camera. 1920x1080: at ~60cm, 1 deg of gaze moves the iris ~0.3px at 480p-class capture — the
+    // per-frame signal is SUB-PIXEL, and landmark jitter is the binding accuracy constraint, so capture
+    // resolution is the single cheapest accuracy lever (native has captured at 1920 for a while; this
+    // path was still asking for 640x480 = 3x less px/deg). 60fps = 2x samples per fixation + shorter
+    // exposure (sharper iris); the browser falls back to the closest supported mode.
     this.video = document.createElement('video');
     this.video.autoplay = true; this.video.playsInline = true; this.video.muted = true;
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
+      audio: false,
+    });
     this.video.srcObject = stream;
     await new Promise(res => { this.video.onloadedmetadata = () => { this.video.play(); res(); }; });
   }
@@ -164,21 +173,71 @@ export class UnitEyeWeb {
     const rawX = gaze[0] * this.screenW;
     const rawY = gaze[1] * this.screenH;
 
-    // 19-feature vector, matching HomulerEyeMURunner.Features / FeatureCount exactly:
-    // [embedding 4, polynomial of the normalized gaze point 7, head pose 4, iris offsets 4].
+    // 36-feature vector, matching HomulerEyeMURunner.Features / FeatureCount exactly:
+    // [embedding 4, polynomial of the normalized gaze point 7, head pose 4, iris offsets 4, context 17].
     // NOTE these use gaze[0]/gaze[1] — the model's NORMALIZED 0..1 output, not the pixel values:
     // the native runner divides its pixel NetworkOutput back by Screen.width/height for exactly this
-    // reason (keeps the squared/cubed terms in a sane range). The old vector fed raw pixels plus two
-    // constant screen-size features, which standardize to zero and carry no signal.
-    const features = this.C.buildEyeMUFeatures(emb, gaze[0], gaze[1], pose, lm, this._features);
+    // reason (keeps the squared/cubed terms in a sane range).
+    const features = this.C.buildEyeMUFeatures(emb, gaze[0], gaze[1], pose, lm, this._features,
+      this._contextFromResult(res));
 
-    const blink = this._blink(lm, vw, vh);
+    //Blink gate: prefer the eyeBlink blendshapes (dedicated lid-closure signal, no downward-gaze false
+    //positives) when the landmarker provides them; fall back to the EAR heuristic (mirrors native).
+    const blinkScore = this._blinkFromResult(res);
+    const blink = blinkScore !== null ? blinkScore > 0.5 : this._blink(lm, vw, vh);
     this._emit(rawX, rawY, features, blink, true, now / 1000);
+  }
+
+  // Max of the two eyeBlink blendshape scores, or null when blendshapes are unavailable (or the
+  // name->index cache hasn't been built yet — _contextFromResult builds it each frame before this runs).
+  _blinkFromResult(res) {
+    const shapes = res.faceBlendshapes && res.faceBlendshapes[0];
+    if (!shapes || !shapes.categories || !this._blinkIndex) return null;
+    const [l, r] = this._blinkIndex;
+    if (l < 0 || r < 0) return null;
+    return Math.max(shapes.categories[l].score, shapes.categories[r].score);
+  }
+
+  // Context source for the shared 17-feature block (mirrors HomulerFunctions.FillTailContext): head
+  // translation/depth in METRES from the facial transformation matrix plus the 8 eyeLook* blendshape
+  // scores resolved by category name (order matches the native EyeLookNames).
+  // MATRIX LAYOUT: @mediapipe/tasks-vision returns the 4x4 COLUMN-major (OpenGL convention, same layout
+  // Unity's Matrix4x4 constructor consumes on the native side) — the translation column is data[12..14].
+  // Reading it row-major (data[3]/[7]/[11]) picks the fourth column of each ROW, i.e. three zeros from
+  // the rotation block, silently zeroing the tx/ty/dist features.
+  _contextFromResult(res) {
+    const ctx = { tx: 0, ty: 0, dist: 0, eyeLook: this._eyeLookScratch || (this._eyeLookScratch = new Array(8).fill(0)) };
+    const m = res.facialTransformationMatrixes && res.facialTransformationMatrixes[0];
+    if (m && m.data && m.data.length >= 16) {
+      ctx.tx = m.data[12] * 0.01;
+      ctx.ty = m.data[13] * 0.01;
+      ctx.dist = Math.abs(m.data[14]) * 0.01;
+    }
+    ctx.eyeLook.fill(0);
+    const shapes = res.faceBlendshapes && res.faceBlendshapes[0];
+    if (shapes && shapes.categories) {
+      if (!this._eyeLookIndex) {
+        const names = ['eyeLookInLeft', 'eyeLookOutLeft', 'eyeLookUpLeft', 'eyeLookDownLeft',
+                       'eyeLookInRight', 'eyeLookOutRight', 'eyeLookUpRight', 'eyeLookDownRight'];
+        this._eyeLookIndex = names.map(n => shapes.categories.findIndex(c => c.categoryName === n));
+        this._blinkIndex = ['eyeBlinkLeft', 'eyeBlinkRight']
+          .map(n => shapes.categories.findIndex(c => c.categoryName === n));
+      }
+      for (let i = 0; i < 8; i++) {
+        const idx = this._eyeLookIndex[i];
+        if (idx >= 0) ctx.eyeLook[i] = shapes.categories[idx].score;
+      }
+    }
+    return ctx;
   }
 
   _eyeTensor(lm, aIdx, bIdx, vw, vh, flip) {
     const r = this.C.eyeCropRect(lm, aIdx, bIdx, vw, vh);
     if (!r) return null;
+    // Reject crops that leave the frame — mirrors the native BlitEyeCrop bounds check. drawImage clips
+    // out-of-bounds source rects instead of failing, so without this the canvas keeps PREVIOUS-frame
+    // pixels in the uncovered region and EyeMU infers from a stale composite.
+    if (r.x < 0 || r.y < 0 || r.x + r.size > vw || r.y + r.size > vh) return null;
     const ctx = this._cropCtx;
     ctx.save();
     if (flip) { ctx.translate(128, 0); ctx.scale(-1, 1); }

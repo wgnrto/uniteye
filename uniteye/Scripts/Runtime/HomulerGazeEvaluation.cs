@@ -180,17 +180,23 @@ namespace UnitEye
         // values are updated there. Running in Update could pair a newly moved target with stale gaze.
         void LateUpdate()
         {
+            //Mouse.current/Keyboard.current are NULL when no such device exists (headless players,
+            //touch-only devices) and dereferencing them threw a NullReferenceException EVERY frame.
+            var mouse = Mouse.current;
+            bool leftClick = mouse != null && mouse.leftButton.wasPressedThisFrame;
+            bool rightClick = mouse != null && mouse.rightButton.wasPressedThisFrame;
+
             //If finished and leftclick, signal Returned (new Input System, matching HomulerGazeCalibration)
-            if (Mouse.current.leftButton.wasPressedThisFrame && returnAfter && _finished)
+            if (leftClick && returnAfter && _finished)
                 Returned = true;
             //If rightclick, signal Returned
-            if (Mouse.current.rightButton.wasPressedThisFrame && returnAfter)
+            if (rightClick && returnAfter)
                 Returned = true;
             //If finished don't run through evaluation anymore
             if (_finished) return;
 
             //Start on leftclick
-            if (Mouse.current.leftButton.wasPressedThisFrame && !_started)
+            if (leftClick && !_started)
             {
                 //rows/columns/padding are final by now (LoadEvaluation sets them after enabling)
                 BuildPoints();
@@ -208,8 +214,9 @@ namespace UnitEye
                 _timeRemaining = duration;
             }
 
-            //Stop evaluation early when pressing S
-            if (Keyboard.current[Key.S].wasPressedThisFrame && _started)
+            //Stop evaluation early when pressing S (null when no keyboard device exists)
+            var keyboard = Keyboard.current;
+            if (keyboard != null && keyboard[Key.S].wasPressedThisFrame && _started)
             {
                 _earlyStop = true;
             }
@@ -272,6 +279,11 @@ namespace UnitEye
 
                 //Calculate errors
                 _guiMessage = Evaluate();
+
+                //Accuracy/precision decomposition + AOI-hit rates + persisted per-region error model.
+                //This is the measurement that RANKS improvement work: bias-dominated error wants
+                //calibration/drift/geometry effort, jitter-dominated error wants resolution/aggregation.
+                _guiMessage += BuildErrorStatistics();
 
                 //Aggregate the per-target heatmap once, here — not in OnGUI, which repeats 2+ passes/frame.
                 BuildHeatmapEntries();
@@ -504,6 +516,74 @@ namespace UnitEye
                 var mean = pair.Value / counts[pair.Key];
                 _heatmapEntries.Add((pair.Key, mean, ErrorColor(Vector2.Distance(mean, pair.Key) / diagonal)));
             }
+        }
+
+        /// <summary>
+        /// Computes the standard accuracy/precision/RMS-S2S decomposition per evaluation target on the
+        /// model the heatmap shows (ridge if present, else MLP), reports AOI-hit rates at representative
+        /// AOI sizes, and persists the per-region error model (bias + covariance per target) next to the
+        /// calibration so the runtime AOI layer can turn hits into calibrated probabilities.
+        /// </summary>
+        private string BuildErrorStatistics()
+        {
+            var predictions = _hasRidgeModel ? _predRidgeData : (_hasMlpModel ? _predMLPData : null);
+            if (predictions == null || predictions.Count == 0 || _targetData.Count == 0)
+                return "";
+
+            //Group samples per target (targets repeat identically per dwell, so Vector2 keys are exact).
+            int count = Mathf.Min(predictions.Count, _targetData.Count);
+            var perTarget = new Dictionary<Vector2, List<Vector2>>();
+            for (int i = 0; i < count; i++)
+            {
+                if (!perTarget.TryGetValue(_targetData[i], out var list))
+                    perTarget[_targetData[i]] = list = new List<Vector2>();
+                list.Add(predictions[i]);
+            }
+
+            var stats = new List<GazeStatistics.FixationStats>(perTarget.Count);
+            //Tag the model with the calibration whose predictions it measures — its bias field must only
+            //be applied at runtime while THAT calibration is active.
+            var errorModel = new GazeErrorModel
+            {
+                SourceCalibration = _hasRidgeModel ? Calibrations.RidgeRegression : Calibrations.MLCalibration
+            };
+            float w = Screen.width, h = Screen.height;
+            foreach (var pair in perTarget)
+            {
+                var s = GazeStatistics.Compute(pair.Value, pair.Key);
+                stats.Add(s);
+                //Anchor in normalized coords so the persisted model is resolution-independent.
+                errorModel.AddAnchor(
+                    new Vector2(pair.Key.x / w, pair.Key.y / h),
+                    new Vector2(s.bias.x / w, s.bias.y / h),
+                    (s.sd.x / w) * (s.sd.x / w), s.cov / (w * h), (s.sd.y / h) * (s.sd.y / h));
+            }
+
+            GazeStatistics.Aggregate(stats, out float accuracyPx, out _, out float precisionPx, out float whiteness);
+
+            //AOI-hit rates: fraction of targets whose MEAN gaze lands inside a square AOI of the given
+            //size centred on the target — the metric the shipped product (AOI logging) actually lives on.
+            float pxPerCm = 10f / Mathf.Max(1e-3f, Functions.PixelsToMm(1f));
+            string aoiLine = "AOI hit rate (mean-gaze in square AOI): ";
+            foreach (float sizeCm in new[] { 3f, 5f, 8f })
+            {
+                float halfPx = sizeCm * pxPerCm * 0.5f;
+                int hits = 0;
+                foreach (var s in stats)
+                    if (Mathf.Abs(s.bias.x) <= halfPx && Mathf.Abs(s.bias.y) <= halfPx)
+                        hits++;
+                aoiLine += $"{sizeCm:F0}cm {(100f * hits / stats.Count):F0}%  ";
+            }
+
+            //Persist the error model for the runtime AOI-probability layer + session-quality reporting.
+            try { errorModel.Save(_gaze.GazeBackbone); }
+            catch (System.Exception e) { UnitEyeLog.Exception(e); }
+
+            //Whiteness ≈ 1.41 = white noise (fixation averaging pays ~sqrt(N)); much lower = colored
+            //noise/drift (averaging saturates — spend effort on bias/drift instead).
+            return $"Decomposition: accuracy(bias) {Functions.PixelsToMm(accuracyPx) * 0.1f:F2}cm, " +
+                   $"precision(SD) {Functions.PixelsToMm(precisionPx) * 0.1f:F2}cm, " +
+                   $"RMS-S2S/SD {whiteness:F2} (1.41=white noise).\n{aoiLine}\n";
         }
 
         private void DrawResultsHeatmap()

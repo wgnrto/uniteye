@@ -71,11 +71,11 @@ Console markers prove the chain end-to-end: `UNITEYE_JSLIB_STARTED` (receiver �
 Note: the scene logs missing-script warnings for the `Mediapipe`/annotation objects on WebGL — expected,
 those are the native-only components excluded from WebGL builds; the browser pipeline replaces them.
 
-## Calibration feature vector (19) — matches native
+## Calibration feature vector (36) — matches native
 
-The browser builds the **same 19-feature calibration vector** as `HomulerEyeMURunner.Features`, in the
+The browser builds the **same 36-feature calibration vector** as `HomulerEyeMURunner.Features`, in the
 same order, via shared ports in `uniteye-core.js` (`buildEyeMUFeatures` = `fillEyeMUFeatures` +
-`fillIrisFeatures`):
+`fillIrisFeatures` + `fillContextFeatures`):
 
 | Index | Feature |
 | --- | --- |
@@ -83,12 +83,19 @@ same order, via shared ports in `uniteye-core.js` (`buildEyeMUFeatures` = `fillE
 | 4–10 | polynomial of the **normalized** gaze point: `gx, gy, gx², gy², gx·gy, gx³, gy³` |
 | 11–14 | head pose: yaw, pitch, roll, area |
 | 15–18 | per-eye normalized iris offsets |
+| 19–21 | head translation tx, ty + depth (facial transformation matrix, metres; 0 if unavailable) |
+| 22–29 | the 8 `eyeLook*` blendshape scores (a second, independently trained gaze cue) |
+| 30–35 | interaction terms: `gx·headYaw, gy·headPitch, gx·tx, gy·ty, gx·dist, gy·dist` |
+
+The FaceLandmarker now runs with `outputFaceBlendshapes` + `outputFacialTransformationMatrixes`
+enabled to source rows 19–29, the camera is requested at **1920×1080 / 60 fps** (the old 640×480
+request cost 3× the per-degree iris resolution — the binding accuracy constraint), and the blink gate
+prefers the `eyeBlink` blendshapes over the EAR heuristic (which false-positives on downward gaze).
 
 This matters for the Unity WebGL build in particular: `uniteye-webgl-boot.js` streams this vector into
 C#, and a length mismatch makes the EyeMU calibration NaN out and silently fall back to raw gaze. The
 gaze terms use the model's normalized 0..1 output, **not** pixels — squaring/cubing pixel values would
-blow the terms up. (This replaced an older 12-feature vector that fed raw pixels plus two constant
-screen-size features; the polynomial is what lets a per-axis linear ridge reach the screen corners.)
+blow the terms up.
 
 ## Calibration does not transfer across platforms
 

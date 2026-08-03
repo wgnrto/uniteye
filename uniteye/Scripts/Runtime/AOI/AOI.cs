@@ -16,6 +16,14 @@ namespace UnitEye
 
         public bool focused = false;
 
+        /// <summary>
+        /// Extra hit margin in NORMALIZED units added around the shape (gaze-UI practice: pad AOIs by
+        /// ~0.5-1deg — enlarging AOIs by 1deg raises hit-any-AOI rates from &lt;70% to &gt;80% in published
+        /// evaluations). Applied by <see cref="CheckAOIWithMargin"/>, which the AOI manager uses; the raw
+        /// CheckAOI keeps exact geometry for callers that need it.
+        /// </summary>
+        public float margin = 0f;
+
         protected LineRenderer _lineRenderer;
 
         public AOI(string uID, bool inverted = false, bool enabled = true, bool visualized = true)
@@ -28,6 +36,80 @@ namespace UnitEye
 
         public abstract bool CheckAOI(Vector2 point);
         public abstract void Visualize(Color color);
+
+        /// <summary>
+        /// CheckAOI with the margin applied: a point within <see cref="margin"/> of the shape counts as
+        /// inside. Generic implementation (no per-shape code): probes the point plus 8 ring offsets at the
+        /// margin radius — any probe inside = hit. Margin 0 short-circuits to the exact check.
+        /// </summary>
+        public virtual bool CheckAOIWithMargin(Vector2 point)
+        {
+            if (CheckAOI(point)) return true;
+            //Margin only GROWS a normal region. For an INVERTED AOI, "any probe inside" would grow the
+            //inverted (outside) region — i.e. SHRINK the underlying shape (the Offscreen AOI would eat a
+            //border strip of the actual screen). Inverted AOIs use their exact geometry.
+            if (margin <= 0f || inverted) return false;
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI * 0.25f;
+                if (CheckAOI(point + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * margin))
+                    return true;
+            }
+            return false;
+        }
+
+        //Deterministic 2D standard-normal offsets for the probabilistic hit test below. Fixed seed:
+        //identical results across runs/platforms (this feeds logged research data).
+        private static Vector2[] s_gaussianOffsets;
+        private static Vector2[] GaussianOffsets
+        {
+            get
+            {
+                if (s_gaussianOffsets == null)
+                {
+                    var rng = new System.Random(987654321);
+                    s_gaussianOffsets = new Vector2[32];
+                    for (int i = 0; i < s_gaussianOffsets.Length; i++)
+                    {
+                        //Box-Muller
+                        double u1 = 1.0 - rng.NextDouble();
+                        double u2 = rng.NextDouble();
+                        float r = Mathf.Sqrt(-2f * Mathf.Log((float)u1));
+                        float theta = 2f * Mathf.PI * (float)u2;
+                        s_gaussianOffsets[i] = new Vector2(r * Mathf.Cos(theta), r * Mathf.Sin(theta));
+                    }
+                }
+                return s_gaussianOffsets;
+            }
+        }
+
+        /// <summary>
+        /// P(gaze in AOI) for a fixation modeled as a 2D Gaussian: mean = the (bias-corrected) fixation
+        /// point, covariance = the per-user, per-region error ellipse from <see cref="GazeErrorModel"/>.
+        /// Replaces confidently-wrong booleans with calibrated probabilities near AOI borders — with a
+        /// ~2cm-sigma tracker, a fixation 1cm outside a small AOI is genuinely ambiguous and the logged
+        /// data should say so. Generic Monte-Carlo over 32 deterministic Gaussian offsets pushed through
+        /// the Cholesky factor of the covariance, so EVERY shape gets it with no per-shape math
+        /// (resolution ~±0.09 in probability — plenty for logging).
+        /// </summary>
+        public virtual float HitProbability(Vector2 mean, float covXX, float covXY, float covYY)
+        {
+            //Cholesky of [[covXX, covXY], [covXY, covYY]] (guarded for degenerate/ill-conditioned input).
+            float l11 = Mathf.Sqrt(Mathf.Max(1e-12f, covXX));
+            float l21 = covXY / l11;
+            float l22 = Mathf.Sqrt(Mathf.Max(1e-12f, covYY - l21 * l21));
+
+            var offsets = GaussianOffsets;
+            int hits = 0;
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                var o = offsets[i];
+                var sample = new Vector2(mean.x + l11 * o.x, mean.y + l21 * o.x + l22 * o.y);
+                if (CheckAOIWithMargin(sample))
+                    hits++;
+            }
+            return (float)hits / offsets.Length;
+        }
 
         /// <summary>
         /// Check point inclusion for a Box between startpoint and endpoint.

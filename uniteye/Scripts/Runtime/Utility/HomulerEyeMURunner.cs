@@ -54,14 +54,18 @@ namespace UnitEye
 
         /// <summary>
         /// Length of the calibration feature vector: FillEyeMUFeatures' 15 terms [embedding4, gaze
-        /// polynomial 7, head pose 4] plus the 4 iris-offset features appended at the end (indices 15..18,
-        /// HomulerFunctions.FillIrisFeatures) — appended so the head-pose slots (11/12/13, targeted by the
-        /// augmentation jitter) keep their positions. Changing this length stales saved calibrations
-        /// (NaN -> raw-gaze fallback); recalibrate.
+        /// polynomial 7, head pose 4], the 4 iris-offset features (indices 15..18,
+        /// HomulerFunctions.FillIrisFeatures), then the shared 17-feature context block (head translation/
+        /// depth, eyeLook blendshapes, gaze interaction terms — HomulerFunctions.FillContextFeatures).
+        /// Blocks are APPENDED so the head-pose slots (11/12/13, targeted by the augmentation jitter) keep
+        /// their positions. Changing this length stales saved calibrations (NaN -> raw-gaze fallback);
+        /// recalibrate.
         /// </summary>
-        public const int FeatureCount = 19;
+        public const int FeatureCount = 19 + HomulerFunctions.ContextFeatureCount;
         /// <summary>Index of the first iris-offset feature (see HomulerFunctions.FillIrisFeatures).</summary>
         public const int IrisFeatureStart = 15;
+        /// <summary>Index of the first shared-context feature.</summary>
+        public const int ContextFeatureStart = 19;
 
         //Reused feature buffer so the per-frame Features access allocates nothing (was a fresh List<float> +
         //AddRange growth every frame). See FillEyeMUFeatures for the layout. Valid only until the next
@@ -84,9 +88,16 @@ namespace UnitEye
                 _features[IrisFeatureStart + 1] = _tailPublished[5];
                 _features[IrisFeatureStart + 2] = _tailPublished[6];
                 _features[IrisFeatureStart + 3] = _tailPublished[7];
+                //Shared context block: head translation/depth, eyeLook blendshapes, interaction terms.
+                //gx/gy (the normalized gaze point) are this backbone's primary gaze terms.
+                HomulerFunctions.FillContextFeatures(_features, ContextFeatureStart, gx, gy,
+                    _tailPublished[0], _tailPublished[1], _tailPublished, TailContextStart);
                 return _features;
             }
         }
+
+        /// <summary>Capture time (Time.unscaledTimeAsDouble) of the frame behind the published gaze.</summary>
+        public double CaptureTimestamp => _timestampPublished;
 
         /// <summary>
         /// Fills the EyeMU calibration feature vector: the 4-value embedding, a low-order POLYNOMIAL of the
@@ -147,11 +158,14 @@ namespace UnitEye
         private bool _pendingReadback;
         private Tensor<float> _outEmbedding, _outGaze;           // worker-owned output refs (not disposed)
         private Tensor<float> _pendingCorners, _pendingPose;     // inputs kept alive until publish
-        //The feature-vector TAIL (head pose 4 + iris offsets 4) snapshotted when an inference is SCHEDULED
-        //and published together with its outputs, so the assembled feature vector is internally consistent
-        //(all values from the same camera frame) even when the result arrives a frame later.
-        private readonly float[] _tailPending = new float[8];
-        private readonly float[] _tailPublished = new float[8];
+        //The feature-vector TAIL (head pose 4 + iris offsets 4 + context 11) snapshotted when an inference
+        //is SCHEDULED and published together with its outputs, so the assembled feature vector is internally
+        //consistent (all values from the same camera frame) even when the result arrives a frame later.
+        private const int TailLength = 8 + HomulerFunctions.ContextTailCount;
+        private const int TailContextStart = 8;
+        private readonly float[] _tailPending = new float[TailLength];
+        private readonly float[] _tailPublished = new float[TailLength];
+        private double _timestampPending, _timestampPublished;
 
         public HomulerEyeMURunner(FaceMeshSolution faceMesh, bool asyncReadback = false)
         {
@@ -173,7 +187,7 @@ namespace UnitEye
             _rightTensor = new Tensor<float>(new TensorShape(1, IMG_SIZE, IMG_SIZE, 3));
         }
 
-        //Snapshot the non-inference feature tail (head pose + iris offsets) from the CURRENT landmarks.
+        //Snapshot the non-inference feature tail (head pose + iris offsets + context) from CURRENT landmarks.
         private void CaptureFeatureTail(float[] dest)
         {
             dest[0] = _faceMesh.HeadYaw;
@@ -181,6 +195,7 @@ namespace UnitEye
             dest[2] = _faceMesh.HeadRoll;
             dest[3] = _faceMesh.HeadArea;
             HomulerFunctions.FillIrisFeatures(_faceMesh.FaceLandmarks, dest, 4);
+            HomulerFunctions.FillTailContext(_faceMesh, dest, TailContextStart);
         }
 
         /// <summary>
@@ -251,6 +266,7 @@ namespace UnitEye
                 _pendingCorners = corners;
                 _pendingPose = pose;
                 CaptureFeatureTail(_tailPending);
+                _timestampPending = _faceMesh.LastCaptureTimestamp;
                 _pendingReadback = true;
                 return published;
             }
@@ -270,6 +286,7 @@ namespace UnitEye
 
             //Same-frame tail: identical values to the old live reads, just captured once here.
             CaptureFeatureTail(_tailPublished);
+            _timestampPublished = _faceMesh.LastCaptureTimestamp;
 
             //Cleanup the per-frame small input tensors (the eye-image tensors are reused, disposed in Dispose).
             corners.Dispose();
@@ -291,6 +308,7 @@ namespace UnitEye
             NetworkOutput[1] = gaze[1] * Screen.height;
 
             System.Array.Copy(_tailPending, _tailPublished, _tailPublished.Length);
+            _timestampPublished = _timestampPending;
 
             _outEmbedding = null;
             _outGaze = null;

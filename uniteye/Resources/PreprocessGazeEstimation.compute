@@ -1,15 +1,34 @@
 // Preprocessing for the yakhyo/gaze-estimation models: ImageNet-normalize an RGB face crop into a
 // tensor texture that TextureConverter reads as a (1,3,H,W) NCHW float tensor.
 // mean/std are the standard torchvision ImageNet values the models were trained with.
+//
+// Optionally ROLL-NORMALIZES while sampling: rotates the sampling coordinates by -headRoll around the
+// crop centre so the model always sees an upright face (2D data normalization). Head roll rotates the
+// face INSIDE an axis-aligned crop, an off-distribution input the calibration can only chase with a
+// linear roll feature; sampling rotated coordinates removes it at zero extra passes. Out-of-crop
+// samples clamp to the crop edge — the FACE_CROP_SCALE padding keeps the face itself inside for
+// ordinary rolls.
 #pragma kernel Preprocess
 
 RWTexture2D<half4> _Tensor;
 Texture2D<half4> _Texture;
+// cos/sin of the rotation applied to sampling coords (identity: cos=1, sin=0), and the crop size.
+float _RotCos;
+float _RotSin;
+int _Size;
 
 [numthreads(8, 8, 1)]
 void Preprocess(uint3 id : SV_DispatchThreadID)
 {
-    half3 rgb = _Texture[id.xy].xyz;                 // webcam crop, [0,1] RGB
+    // Rotate the sampling position around the crop centre.
+    float half_size = _Size * 0.5;
+    float2 centered = float2(id.xy) + 0.5 - half_size;
+    float2 rotated = float2(
+        _RotCos * centered.x - _RotSin * centered.y,
+        _RotSin * centered.x + _RotCos * centered.y);
+    int2 src = clamp(int2(rotated + half_size), int2(0, 0), int2(_Size - 1, _Size - 1));
+
+    half3 rgb = _Texture[src].xyz;                   // webcam crop, [0,1] RGB
     half3 mean = half3(0.485h, 0.456h, 0.406h);
     half3 stdv = half3(0.229h, 0.224h, 0.225h);
     half3 n = (rgb - mean) / stdv;                   // ImageNet normalization (can be negative)

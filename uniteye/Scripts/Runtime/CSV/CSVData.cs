@@ -17,9 +17,13 @@ namespace UnitEye
         public List<string> AOIList;
         public DateTime timestamp;
         public string notes;
+        //Measured pipeline latency of this sample (camera-frame consumption -> logging), in ms. Analysts
+        //re-aligning gaze against MOVING stimuli must shift by this: 150ms x a 500px/s object = 75px of
+        //systematic error if ignored. 0 for rows created without latency information (e.g. notes).
+        public float captureLatencyMs;
 
         //Constructor to set all values in one line of code
-        public CSVData(float gazePixelX, float gazePixelY, float gazeNormalizedX, float gazeNormalizedY, float gazeNormalizedUnfilteredX, float gazeNormalizedUnfilteredY, float distanceToCamera, float eyeAspectRatio, bool blinking, DateTime timestamp, List<string> AOIList)
+        public CSVData(float gazePixelX, float gazePixelY, float gazeNormalizedX, float gazeNormalizedY, float gazeNormalizedUnfilteredX, float gazeNormalizedUnfilteredY, float distanceToCamera, float eyeAspectRatio, bool blinking, DateTime timestamp, List<string> AOIList, float captureLatencyMs = 0f)
         {
             this.gazePixelX = gazePixelX;
             this.gazePixelY = gazePixelY;
@@ -32,6 +36,7 @@ namespace UnitEye
             this.blinking = blinking;
             this.timestamp = timestamp;
             this.AOIList = AOIList;
+            this.captureLatencyMs = captureLatencyMs;
         }
 
         //Seralize all the CSVData properties into one string
@@ -56,6 +61,9 @@ namespace UnitEye
 
             //Add unix timestamp in milliseconds
             bobTheStringBuilder.Append($";{((DateTimeOffset)timestamp).ToUnixTimeMilliseconds()}");
+
+            //Measured pipeline latency (see field comment)
+            bobTheStringBuilder.Append($";{captureLatencyMs:F0}");
 
             //Replace decimal separator from comma to period (for locales with comma)
             bobTheStringBuilder.Replace(",", ".");

@@ -44,6 +44,12 @@
       return new RidgeModel(obj.W, obj.Affine !== false, obj.FeatureMean || null, obj.FeatureStd || null);
     }
     predict(features) {
+      // Dimensionality guard — mirrors RidgeRegression.Predict's NaN contract: a model trained on a
+      // DIFFERENT feature layout (e.g. a saved calibration from before the vector grew to 36) must
+      // return NaN so the pipeline falls back to raw gaze, not silently produce garbage by multiplying
+      // whatever prefix happens to line up.
+      const expected = features.length + (this.affine ? 1 : 0);
+      if (!this.w || this.w.length !== expected) return NaN;
       const xs = [];
       if (this.affine) xs.push(1.0);
       if (this.featureMean && this.featureStd && this.featureMean.length === features.length) {
@@ -52,7 +58,7 @@
         for (let i = 0; i < features.length; i++) xs.push(features[i]);
       }
       let y = 0;
-      for (let i = 0; i < this.w.length && i < xs.length; i++) y += this.w[i] * xs[i];
+      for (let i = 0; i < this.w.length; i++) y += this.w[i] * xs[i];
       return y;
     }
   }
@@ -180,8 +186,10 @@
   // A per-axis LINEAR ridge over just [gx, gy] fits the centre slope and compresses the corners; the
   // quadratic/cross/cubic terms are what let the fit reach the screen corners. Changing this length
   // stales saved calibrations (they NaN and fall back to raw gaze) — recalibrate.
-  const EYEMU_FEATURE_COUNT = 19;
+  const EYEMU_FEATURE_COUNT = 36;              // 19 engineered + the 17-feature shared context block
   const EYEMU_IRIS_FEATURE_START = 15;
+  const EYEMU_CONTEXT_FEATURE_START = 19;      // mirrors HomulerEyeMURunner.ContextFeatureStart
+  const CONTEXT_FEATURE_COUNT = 17;            // mirrors HomulerFunctions.ContextFeatureCount
 
   // MediaPipe landmark indices — identical to the constants in HomulerFunctions.
   // Each iris is paired with the eye it ACTUALLY lies in: MediaPipe names its two 5-point iris blocks
@@ -241,23 +249,53 @@
   }
 
   /**
-   * Build the full 19-feature EyeMU calibration vector.
+   * Shared 17-feature context block (mirrors HomulerFunctions.FillContextFeatures):
+   *   [tx, ty, dist, eyeLook x8, gA*headYaw, gB*headPitch, gA*tx, gB*ty, gA*dist, gB*dist]
+   * ctx = { tx, ty, dist, eyeLook: float[8] } — head translation/depth in METRES from the facial
+   * transformation matrix (cm * 0.01) and the 8 eyeLook* blendshape scores; zeros when unavailable.
+   * The interaction terms give the linear ridge the multiplicative structure of the physical map
+   * (x ~ eyePos + D*tan(yaw + headYaw)).
+   */
+  function fillContextFeatures(f, start, gA, gB, headYaw, headPitch, ctx) {
+    const tx = ctx && Number.isFinite(ctx.tx) ? ctx.tx : 0;
+    const ty = ctx && Number.isFinite(ctx.ty) ? ctx.ty : 0;
+    const dist = ctx && Number.isFinite(ctx.dist) ? ctx.dist : 0;
+    f[start] = tx;
+    f[start + 1] = ty;
+    f[start + 2] = dist;
+    for (let i = 0; i < 8; i++)
+      f[start + 3 + i] = ctx && ctx.eyeLook && Number.isFinite(ctx.eyeLook[i]) ? ctx.eyeLook[i] : 0;
+    f[start + 11] = gA * headYaw;
+    f[start + 12] = gB * headPitch;
+    f[start + 13] = gA * tx;
+    f[start + 14] = gB * ty;
+    f[start + 15] = gA * dist;
+    f[start + 16] = gB * dist;
+    return f;
+  }
+
+  /**
+   * Build the full 36-feature EyeMU calibration vector (mirrors the native layout exactly).
    * gx, gy are the model's NORMALIZED gaze output (0..1), not pixels. pose is [yaw, pitch, roll, area].
+   * ctx is the context source object for fillContextFeatures (or null -> zeros, e.g. when the
+   * FaceLandmarker ran without blendshape/matrix outputs).
    * `out` is an optional reuse buffer — as in the native runner it is valid only until the next call,
    * so a caller that retains the vector (e.g. calibration capture) must copy it.
    */
-  function buildEyeMUFeatures(embedding, gx, gy, pose, landmarks, out) {
+  function buildEyeMUFeatures(embedding, gx, gy, pose, landmarks, out, ctx) {
     const f = out || new Array(EYEMU_FEATURE_COUNT);
     fillEyeMUFeatures(f, embedding, gx, gy, pose[0], pose[1], pose[2], pose[3]);
     fillIrisFeatures(landmarks, f, EYEMU_IRIS_FEATURE_START);
+    fillContextFeatures(f, EYEMU_CONTEXT_FEATURE_START, gx, gy, pose[0], pose[1], ctx);
     return f;
   }
 
   root.UnitEyeCore = {
     RidgeModel, trainRidge, OneEuro, OneEuro2D,
     pointInBox, pointInCircle, eyeCropRect, eyeCropToTensor,
-    fillEyeMUFeatures, fillIrisFeatures, buildEyeMUFeatures,
-    EYEMU_FEATURE_COUNT, EYEMU_IRIS_FEATURE_START, IRIS_LANDMARKS,
+    fillEyeMUFeatures, fillIrisFeatures, fillContextFeatures, buildEyeMUFeatures,
+    EYEMU_FEATURE_COUNT, EYEMU_IRIS_FEATURE_START, EYEMU_CONTEXT_FEATURE_START,
+    CONTEXT_FEATURE_COUNT, IRIS_LANDMARKS,
     _solveLinear: solveLinear,
   };
 })(typeof globalThis !== "undefined" ? globalThis : window);

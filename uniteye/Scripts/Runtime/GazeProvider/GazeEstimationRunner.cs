@@ -65,18 +65,36 @@ namespace UnitEye
         private Vector2 _rawGaze;
 
         //Async (pipelined) readback state — same design as HomulerEyeMURunner: results publish on a later
-        //call once the readback completes, with the head/iris feature tail snapshotted at schedule time so
-        //the assembled vector stays internally consistent.
+        //call once the readback completes, with the head/iris/context feature tail snapshotted at schedule
+        //time so the assembled vector stays internally consistent.
         private readonly bool _asyncReadback;
         private bool _pendingReadback;
-        private Tensor<float> _outYaw, _outPitch;   // worker-owned output refs (not disposed)
-        private readonly float[] _tailPending = new float[8];
-        private readonly float[] _tailPublished = new float[8];
+        private Tensor<float> _outYaw, _outPitch, _outEmbedding;   // worker-owned output refs (not disposed)
+        private float[] _embeddingPublished;    // latest embedding readback (worker-owned buffer copy)
+        //Tail layout: [head4, iris4, context11] (see TailLength / HomulerFunctions.FillTailContext).
+        private const int TailLength = 8 + HomulerFunctions.ContextTailCount;
+        private const int TailContextStart = 8;
+        private readonly float[] _tailPending = new float[TailLength];
+        private readonly float[] _tailPublished = new float[TailLength];
+        private double _timestampPending, _timestampPublished;
 
-        public GazeEstimationRunner(FaceMeshSolution faceMesh, string modelResourcePath, bool asyncReadback = false)
+        //Horizontal-flip test-time augmentation: run the crop AND its mirror, negate the mirrored yaw,
+        //average — a standard 3-8% angular-error reduction for appearance models at 2x inference cost.
+        //Sync mode only (the async pipeline holds one in-flight inference); OFF by default until the
+        //mirror/negate convention is confirmed against a live webcam (a wrong sign would average toward 0).
+        private readonly bool _flipAugmentation;
+
+        //Roll-normalize the face crop (2D data normalization) — see PerformInference. Hand-test knob:
+        //if gaze degrades on a device (sign convention), disable via HomulerGaze's inspector toggle.
+        private readonly bool _rollNormalize;
+
+        public GazeEstimationRunner(FaceMeshSolution faceMesh, string modelResourcePath, bool asyncReadback = false,
+            bool flipAugmentation = false, bool rollNormalize = true)
         {
             _faceMesh = faceMesh;
             _asyncReadback = asyncReadback;
+            _flipAugmentation = flipAugmentation && !asyncReadback;
+            _rollNormalize = rollNormalize;
 
             var modelAsset = Resources.Load<ModelAsset>(modelResourcePath);
             _preprocess = Resources.Load<ComputeShader>("PreprocessGazeEstimation");
@@ -97,11 +115,97 @@ namespace UnitEye
             _tensorTex.enableRandomWrite = true;
             _tensorTex.Create();
             _inputTensor = new Tensor<float>(new TensorShape(1, 3, INPUT_SIZE, INPUT_SIZE));
+
+            //Embedding-head personalization: the shipped ONNX files carry a third output "embedding" — the
+            //pre-logit GAP feature vector (512/1024/1280-d depending on the model), tapped via graph edit.
+            //Regressing the per-user calibration on THIS (instead of only the 2 decoded angles) is the
+            //closed-form version of "fine-tune the last layer" (the Google NatComm 2020 recipe: SVR on
+            //penultimate features halved error) — the decoded angles destroy the person-specific
+            //appearance information the embedding still carries. The features array is sized engineered +
+            //embedding; the ridge's standardization + CV-chosen lambda handle the extra columns.
+            foreach (var output in _model.outputs)
+                if (output.name == OUTPUT_EMBEDDING)
+                    _hasEmbeddingOutput = true;
+            //The width (512/1024/1280 depending on the model) is only visible at runtime — Model.Output
+            //carries no shape — so the feature array is sized lazily at the first readback
+            //(EnsureEmbeddingSized), before any Features consumer sees a sample.
             _enabled = true;
         }
 
+        const string OUTPUT_EMBEDDING = "embedding";
+        private bool _hasEmbeddingOutput;
+        private int _embeddingDim;
+        private float[] _embeddingSigns;   // ±1 sparse-JL projection signs (null when raw dim <= 64)
+
+        /// <summary>
+        /// Width the raw embedding is compressed to before entering the calibration features. The raw
+        /// 512-1280-d embedding fed to the ridge directly made calibration TRAINING pathological: the
+        /// trainer's cross-validation runs hundreds of dense solves, and 1300-column normal equations turn
+        /// a two-second training step into minutes of frozen UI. A fixed ±1 random projection (sparse
+        /// Johnson-Lindenstrauss, Achlioptas 2003) preserves the linear-regression geometry at 64 dims —
+        /// the same budget the personalization literature reaches for via PCA — at ~80k multiply-adds per
+        /// frame. The signs are generated by an IN-CODE xorshift with fixed constants (not System.Random,
+        /// whose sequence is an implementation detail that can change across runtimes and would silently
+        /// re-shuffle every saved calibration's feature space).
+        /// </summary>
+        public const int EmbeddingProjectionDim = 64;
+
+        /// <summary>Deterministic ±1/sqrt(outDim... ) projection signs for ProjectEmbedding (length rawDim * outDim).</summary>
+        public static float[] BuildEmbeddingSigns(int rawDim, int outDim)
+        {
+            var signs = new float[rawDim * outDim];
+            uint state = 0x9E3779B9u;   // fixed seed — MUST never change (saved calibrations depend on it)
+            float scale = 1f / Mathf.Sqrt(rawDim);
+            for (int i = 0; i < signs.Length; i++)
+            {
+                //xorshift32 (Marsaglia) — fully specified here, runtime-independent.
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                signs[i] = (state & 1u) == 0u ? scale : -scale;
+            }
+            return signs;
+        }
+
+        /// <summary>Projects the raw embedding into dest[destOffset..destOffset+outDim) using the signs.</summary>
+        public static void ProjectEmbedding(float[] raw, float[] signs, float[] dest, int destOffset, int outDim)
+        {
+            for (int k = 0; k < outDim; k++)
+            {
+                float sum = 0f;
+                int row = k * raw.Length;
+                for (int j = 0; j < raw.Length; j++)
+                    sum += raw[j] * signs[row + j];
+                dest[destOffset + k] = sum;
+            }
+        }
+
+        //Sizes the published feature vector once the embedding width is known (first readback). Runs
+        //before PublishResult on that same call, so consumers never observe a length change mid-session.
+        private void EnsureEmbeddingSized(float[] embedding)
+        {
+            if (_fullFeatures != null || embedding == null) return;
+            if (embedding.Length > EmbeddingProjectionDim)
+            {
+                _embeddingDim = EmbeddingProjectionDim;
+                _embeddingSigns = BuildEmbeddingSigns(embedding.Length, EmbeddingProjectionDim);
+            }
+            else
+            {
+                _embeddingDim = embedding.Length;
+            }
+            _fullFeatures = new float[FeatureCount + _embeddingDim];
+        }
+        //Engineered features + backbone embedding (see ctor). Replaces _features as the published vector
+        //when an embedding output exists; the engineered block occupies the first FeatureCount slots
+        //either way, so the smoke-tested layout constants stay valid.
+        private float[] _fullFeatures;
+        /// <summary>Embedding width appended to the feature vector (0 for unedited models).</summary>
+        public int EmbeddingDim => _embeddingDim;
+
         public Vector2 RawGaze => _rawGaze;
-        public float[] Features => _features;
+        public float[] Features => _fullFeatures ?? _features;
+        public double CaptureTimestamp => _timestampPublished;
         public RenderTexture LeftEyeTexture => _faceCrop;   // the face crop doubles as the debug thumbnail
         public RenderTexture RightEyeTexture => _faceCrop;
 
@@ -119,14 +223,22 @@ namespace UnitEye
             bool published = false;
             if (_asyncReadback && _pendingReadback)
             {
-                if (!_outYaw.IsReadbackRequestDone() || !_outPitch.IsReadbackRequestDone())
+                if (!_outYaw.IsReadbackRequestDone() || !_outPitch.IsReadbackRequestDone() ||
+                    (_outEmbedding != null && !_outEmbedding.IsReadbackRequestDone()))
                     return false;
                 float pendingYaw = DecodeAngleRadians(_outYaw.DownloadToArray());
                 float pendingPitch = DecodeAngleRadians(_outPitch.DownloadToArray());
+                if (_outEmbedding != null)
+                {
+                    _embeddingPublished = _outEmbedding.DownloadToArray();
+                    EnsureEmbeddingSized(_embeddingPublished);
+                }
                 System.Array.Copy(_tailPending, _tailPublished, _tailPublished.Length);
+                _timestampPublished = _timestampPending;
                 PublishResult(pendingYaw, pendingPitch, _tailPublished);
                 _outYaw = null;
                 _outPitch = null;
+                _outEmbedding = null;
                 _pendingReadback = false;
                 published = true;
             }
@@ -169,6 +281,14 @@ namespace UnitEye
             Graphics.Blit(tex, _faceCrop, scale, offset);
 
             // ImageNet-normalize into the tensor texture, then convert to the (1,3,448,448) NCHW tensor.
+            // Roll-normalization (2D data normalization): the preprocess samples rotated coordinates so
+            // the model sees an UPRIGHT face regardless of head roll — laptop users tilt constantly, and
+            // a rolled face inside an axis-aligned crop is off-distribution for the model while the
+            // calibration only has a linear roll feature to chase the resulting error.
+            float roll = _rollNormalize ? _faceMesh.HeadRoll : 0f;
+            _preprocess.SetFloat("_RotCos", Mathf.Cos(roll));
+            _preprocess.SetFloat("_RotSin", Mathf.Sin(roll));
+            _preprocess.SetInt("_Size", INPUT_SIZE);
             _preprocess.SetTexture(0, "_Texture", _faceCrop);
             _preprocess.SetTexture(0, "_Tensor", _tensorTex);
             _preprocess.Dispatch(0, INPUT_SIZE / 8, INPUT_SIZE / 8, 1);
@@ -182,27 +302,64 @@ namespace UnitEye
             if (yawT == null || pitchT == null)
                 return published;
 
+            var embeddingT = _hasEmbeddingOutput ? _worker.PeekOutput(OUTPUT_EMBEDDING) as Tensor<float> : null;
+
             if (_asyncReadback)
             {
                 //Kick off the non-blocking readbacks; results publish on a later call.
                 yawT.ReadbackRequest();
                 pitchT.ReadbackRequest();
+                embeddingT?.ReadbackRequest();
                 _outYaw = yawT;
                 _outPitch = pitchT;
+                _outEmbedding = embeddingT;
                 CaptureFeatureTail(_tailPending);
+                _timestampPending = _faceMesh.LastCaptureTimestamp;
                 _pendingReadback = true;
                 return published;
             }
 
-            //Sync mode: block on the results now.
+            //Sync mode: block on the results now. The embedding is read BEFORE the flip-TTA pass below —
+            //that pass re-schedules the worker with the mirrored input, which would overwrite the outputs.
             float yaw = DecodeAngleRadians(yawT.DownloadToArray());
             float pitch = DecodeAngleRadians(pitchT.DownloadToArray());
+            if (embeddingT != null)
+            {
+                _embeddingPublished = embeddingT.DownloadToArray();
+                EnsureEmbeddingSized(_embeddingPublished);
+            }
+
+            //Flip TTA: run the MIRRORED crop through the model too and average, negating the mirrored yaw
+            //(a mirrored face looks the opposite horizontal way; pitch is mirror-invariant).
+            if (_flipAugmentation)
+            {
+                Graphics.Blit(tex, _faceCrop, new Vector2(-scale.x, scale.y), new Vector2(offset.x + scale.x, offset.y));
+                //A mirrored face carries NEGATED roll, so the roll-normalization rotates the other way.
+                _preprocess.SetFloat("_RotSin", Mathf.Sin(_rollNormalize ? -_faceMesh.HeadRoll : 0f));
+                _preprocess.SetTexture(0, "_Texture", _faceCrop);
+                _preprocess.SetTexture(0, "_Tensor", _tensorTex);
+                _preprocess.Dispatch(0, INPUT_SIZE / 8, INPUT_SIZE / 8, 1);
+                TextureConverter.ToTensor(_tensorTex, _inputTensor, _nchw);
+                _worker.SetInput(INPUT_NAME, _inputTensor);
+                _worker.Schedule();
+                var yawM = _worker.PeekOutput(OUTPUT_YAW) as Tensor<float>;
+                var pitchM = _worker.PeekOutput(OUTPUT_PITCH) as Tensor<float>;
+                if (yawM != null && pitchM != null)
+                {
+                    yaw = (yaw - DecodeAngleRadians(yawM.DownloadToArray())) * 0.5f;
+                    pitch = (pitch + DecodeAngleRadians(pitchM.DownloadToArray())) * 0.5f;
+                }
+                //Restore the unmirrored crop so the debug thumbnail matches what the primary pass saw.
+                Graphics.Blit(tex, _faceCrop, scale, offset);
+            }
+
             CaptureFeatureTail(_tailPublished);
+            _timestampPublished = _faceMesh.LastCaptureTimestamp;
             PublishResult(yaw, pitch, _tailPublished);
             return true;
         }
 
-        //Snapshot the non-inference feature tail (head pose + iris offsets) from the CURRENT landmarks.
+        //Snapshot the non-inference feature tail (head pose + iris offsets + context) from CURRENT landmarks.
         private void CaptureFeatureTail(float[] dest)
         {
             dest[0] = _faceMesh.HeadYaw;
@@ -210,6 +367,7 @@ namespace UnitEye
             dest[2] = _faceMesh.HeadRoll;
             dest[3] = _faceMesh.HeadArea;
             HomulerFunctions.FillIrisFeatures(_faceMesh.FaceLandmarks, dest, 4);
+            HomulerFunctions.FillTailContext(_faceMesh, dest, TailContextStart);
         }
 
         //Turns decoded gaze angles + the matching feature tail into RawGaze and the calibration features.
@@ -220,28 +378,45 @@ namespace UnitEye
             float ny = Mathf.Clamp01(0.5f - pitch * ANGLE_TO_SCREEN_GAIN);
             _rawGaze = new Vector2(nx * Screen.width, ny * Screen.height);
 
+            var f = _fullFeatures ?? _features;
             // Polynomial feature vector for calibration (see FillGazeFeatures / the field comment).
-            FillGazeFeatures(_features, yaw, pitch, tail[0], tail[1], tail[2], tail[3]);
+            FillGazeFeatures(f, yaw, pitch, tail[0], tail[1], tail[2], tail[3]);
             // Direct geometric gaze cue: normalized iris position within each eye (see FillIrisFeatures).
-            _features[IrisFeatureStart] = tail[4];
-            _features[IrisFeatureStart + 1] = tail[5];
-            _features[IrisFeatureStart + 2] = tail[6];
-            _features[IrisFeatureStart + 3] = tail[7];
+            f[IrisFeatureStart] = tail[4];
+            f[IrisFeatureStart + 1] = tail[5];
+            f[IrisFeatureStart + 2] = tail[6];
+            f[IrisFeatureStart + 3] = tail[7];
+            // Shared context block: head translation/depth, eyeLook blendshapes, gaze×pose/translation/
+            // distance interaction terms (see HomulerFunctions.FillContextFeatures).
+            HomulerFunctions.FillContextFeatures(f, ContextFeatureStart, yaw, pitch,
+                tail[0], tail[1], tail, TailContextStart);
+            // Backbone embedding tail (embedding-head personalization; zero-length for unedited models):
+            // the raw 512-1280-d GAP vector compressed to 64 dims via the fixed sparse-JL projection.
+            if (_embeddingDim > 0 && _embeddingPublished != null)
+            {
+                if (_embeddingSigns != null)
+                    ProjectEmbedding(_embeddingPublished, _embeddingSigns, f, FeatureCount, _embeddingDim);
+                else
+                    System.Array.Copy(_embeddingPublished, 0, f, FeatureCount,
+                        Mathf.Min(_embeddingDim, _embeddingPublished.Length));
+            }
         }
 
         /// <summary>
         /// Length of the calibration feature vector: FillGazeFeatures' 11 terms [gaze-angle polynomial 7,
-        /// head pose 4] plus the 4 iris-offset features appended at the end (indices 11..14,
-        /// HomulerFunctions.FillIrisFeatures) — appended so the head-pose slots (7/8/9, targeted by the
-        /// augmentation jitter) keep their positions. The iris cue is complementary here: the model sees a
-        /// 448px FACE crop, where the iris is only a few pixels, while the landmarks resolve it directly.
+        /// head pose 4], the 4 iris-offset features (indices 11..14, HomulerFunctions.FillIrisFeatures),
+        /// then the shared 17-feature context block (head translation/depth, eyeLook blendshapes,
+        /// gaze interaction terms — HomulerFunctions.FillContextFeatures). Blocks are APPENDED so the
+        /// head-pose slots (7/8/9, targeted by the augmentation jitter) keep their positions.
         /// Changing this length stales saved calibrations (NaN -> raw fallback); recalibrate.
         /// </summary>
-        public const int FeatureCount = 15;
+        public const int FeatureCount = 15 + HomulerFunctions.ContextFeatureCount;
         /// <summary>Number of leading gaze-angle polynomial terms (used by the ensemble backbone).</summary>
         public const int GazeAngleTermCount = 7;
         /// <summary>Index of the first iris-offset feature.</summary>
         public const int IrisFeatureStart = 11;
+        /// <summary>Index of the first shared-context feature.</summary>
+        public const int ContextFeatureStart = 15;
 
         /// <summary>
         /// Fills the calibration feature vector with a low-order polynomial of the gaze angles plus linear
@@ -270,19 +445,32 @@ namespace UnitEye
             f[10] = headArea;
         }
 
+        //Softmax-expectation window: bins outside argmax ± this take no part in the expectation.
+        //Desktop gaze spans ~±25° (~6 of the 90 4°-bins); the other ~80 bins carry only softmax noise,
+        //and any probability mass there pulls the full-range expectation toward the centre — the classic
+        //soft-argmax compression, worst at the screen corners. A static compression would be absorbed by
+        //the calibration's cubic terms; what the window removes is the frame-to-frame NOISE of that far-bin
+        //mass and its head-pose-dependent component, which the polynomial cannot absorb.
+        public const int DecodeWindowBins = 5;
+
         /// <summary>
-        /// L2CS-style decode of one output head: softmax over the bins, take the expected bin index, then
-        /// map bin -> angle (index * bin_width - offset, in degrees) and return radians. Mutates the passed
-        /// array in place (it is an owned per-frame readback buffer).
+        /// L2CS-style decode of one output head: softmax over the bins, take the expected bin index within
+        /// a ±<see cref="DecodeWindowBins"/> window around the argmax, then map bin -> angle
+        /// (index * bin_width - offset, in degrees) and return radians. Mutates the passed array in place
+        /// (it is an owned per-frame readback buffer).
         /// </summary>
         public static float DecodeAngleRadians(float[] bins)
         {
             float max = float.NegativeInfinity;
+            int argmax = 0;
             for (int i = 0; i < bins.Length; i++)
-                if (bins[i] > max) max = bins[i];
+                if (bins[i] > max) { max = bins[i]; argmax = i; }
+
+            int lo = Mathf.Max(0, argmax - DecodeWindowBins);
+            int hi = Mathf.Min(bins.Length - 1, argmax + DecodeWindowBins);
 
             float sum = 0f;
-            for (int i = 0; i < bins.Length; i++)
+            for (int i = lo; i <= hi; i++)
             {
                 bins[i] = Mathf.Exp(bins[i] - max);
                 sum += bins[i];
@@ -290,7 +478,7 @@ namespace UnitEye
 
             float expectation = 0f;
             if (sum > 0f)
-                for (int i = 0; i < bins.Length; i++)
+                for (int i = lo; i <= hi; i++)
                     expectation += (bins[i] / sum) * i;
 
             float degrees = expectation * BIN_WIDTH_DEG - ANGLE_OFFSET_DEG;
@@ -303,6 +491,7 @@ namespace UnitEye
             _worker = null;
             _outYaw = null;
             _outPitch = null;
+            _outEmbedding = null;
             _pendingReadback = false;
             _inputTensor?.Dispose();
             _inputTensor = null;

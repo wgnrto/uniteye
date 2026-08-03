@@ -114,6 +114,9 @@ namespace UnitEye
         [Tooltip("Seconds to dwell at each head-movement target while the user rotates their head. Longer = more head-pose coverage but a longer calibration.")]
         [Range(2f, 10f)]
         public float headRotationDwellSeconds = 5f;
+        [Tooltip("Seconds to dwell at each INTERIOR target (centre + quadrant points) — these give the TPS warp interior anchors. ~8s total at the default.")]
+        [Range(0.5f, 4f)]
+        public float interiorDwellSeconds = 1.5f;
         [Range(0.1f, 1f)]
         public float settleSeconds = 0.5f;
         [Range(5, 60)]
@@ -245,6 +248,10 @@ namespace UnitEye
             _presets = new List<CalibrationPreset>
             {
                 new CornerPreset(padding, cornerVisits, cornerDwellSeconds, normalizedSafeMargin),
+                //Interior dwells (centre + the 25%/75% quadrant points): gives the thin-plate-spline warp
+                //INTERIOR anchors — with boundary-only anchors its interior behaviour was pure affine
+                //extrapolation, unable to correct mid-screen residuals where a game's AOIs actually live.
+                new InteriorPreset(padding, interiorDwellSeconds),
                 new HeadRotationPreset(padding, headRotationDwellSeconds, normalizedSafeMargin),
                 new ZigZagPreset(padding, true, 4),
                 new VerticalWavyPreset(padding),
@@ -283,21 +290,28 @@ namespace UnitEye
             if (_gaze == null)
                 _gaze = GetComponent<HomulerGaze>();
 
+            //Mouse.current/Keyboard.current are NULL when no such device exists (headless players,
+            //touch-only devices) and dereferencing them threw a NullReferenceException EVERY frame.
+            var mouse = Mouse.current;
+            var keyboard = Keyboard.current;
+            bool leftClick = mouse != null && mouse.leftButton.wasPressedThisFrame;
+            bool rightClick = mouse != null && mouse.rightButton.wasPressedThisFrame;
+
             //If finished and leftclick, signal Returned
-            if (Mouse.current.leftButton.wasPressedThisFrame && returnAfter && _finished)
+            if (leftClick && returnAfter && _finished)
                 Returned = true;
             //If rightclick, signal Returned
-            if (Mouse.current.rightButton.wasPressedThisFrame && returnAfter)
+            if (rightClick && returnAfter)
                 Returned = true;
             //Start on leftclick
-            if (Mouse.current.leftButton.wasPressedThisFrame && !_finished)
+            if (leftClick && !_finished)
             {
                 _started = true;
                 _showMessage = false;
                 _finishedRound = false;
             }
             //Stop calibration early when clicking S
-            if (Keyboard.current[Key.S].wasPressedThisFrame && _started && !_finished)
+            if (keyboard != null && keyboard[Key.S].wasPressedThisFrame && _started && !_finished)
             {
                 _earlyStop = true;
             }
@@ -431,6 +445,11 @@ namespace UnitEye
                     break;
             }
 
+            //Validation-gate advice (empty when the holdout accuracy is fine).
+            var advice = ConfidenceAdvice(LastHoldoutRmseCm);
+            if (advice.Length > 0)
+                message += advice.TrimStart('\n') + "\n";
+
             //Append return hint to GUI
             if (returnAfter)
                 message += $"Click to return.";
@@ -462,6 +481,11 @@ namespace UnitEye
                 return;
             var features = provider.GetFeatures();
             if (features == null || features.Length == 0)
+                return;
+            //Never mix vector lengths in one training set: a backbone swap right before the run (or the
+            //embedding output publishing its runtime-sized tail a frame late) can produce one row of a
+            //different length, and a jagged feature matrix throws inside training. Drop the odd row out.
+            if (_xData.Count > 0 && features.Length != _xData[0].Length)
                 return;
 
             //Consume the sample NOW (not only on a successful capture): every return below is a decision
@@ -540,6 +564,8 @@ namespace UnitEye
             {
                 //Save under the active backbone's name so each gaze model keeps its own calibration.
                 mlp.Save(CalibrationModelStore.FileName("MLP.json", _gaze.GazeBackbone));
+                //A persisted error model measured the OLD fit's residuals — stale after retraining.
+                GazeErrorModel.Delete(_gaze.GazeBackbone);
             }
 
             return MLPstring;
@@ -579,9 +605,32 @@ namespace UnitEye
                     warp.Save(warpFile);
                 else
                     ThinPlateSplineWarp.Delete(warpFile);
+                //The persisted per-region error model measured the OLD fit's residuals — applying it to
+                //this fresh calibration would corrupt the AOI stream. Delete; the next evaluation rebuilds it.
+                GazeErrorModel.Delete(_gaze.GazeBackbone);
             }
 
+            //Session confidence from the holdout RMSE — the calibration VALIDATION gate. Sessions in the
+            //"poor" band produce AOI logs that are largely noise; telling the user (and tagging the CSV)
+            //converts unknown-quality data into known-quality data, which is how commercial webcam
+            //trackers earn their reported numbers (session gating), applied here honestly.
+            LastHoldoutRmseCm = Mathf.Sqrt(result.XRmse * result.XRmse + result.YRmse * result.YRmse);
+
             return $"RidgeRegression Training done. Best RMSE X: {result.XRmse}cm | Best RMSE Y: {result.YRmse}cm.{warpNote}";
+        }
+
+        /// <summary>Euclidean holdout RMSE (cm) of the most recent calibration training; -1 before any.
+        /// The session-quality headline number — consumers (Gaze UI, CSV notes, host game) can gate or
+        /// tag their data on it.</summary>
+        public static float LastHoldoutRmseCm { get; private set; } = -1f;
+
+        /// <summary>Human advice line for the validation gate; empty when accuracy is fine.</summary>
+        public static string ConfidenceAdvice(float rmseCm)
+        {
+            if (rmseCm < 0f) return "";
+            if (rmseCm < 2.0f) return "";
+            if (rmseCm < 3.5f) return "\nAccuracy is MODERATE - consider a re-run if precise AOIs matter.";
+            return "\nAccuracy is POOR - please recalibrate (check lighting, camera height, seating).";
         }
 
         /// <summary>

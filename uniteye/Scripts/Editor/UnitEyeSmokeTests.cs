@@ -54,6 +54,14 @@ public static class UnitEyeSmokeTests
             TestCalibrationFileNames();
             TestCalibrationProfiles();
             TestThinPlateSplineWarp();
+            TestGazeStatistics();
+            TestDriftCorrector();
+            TestFixationAggregator();
+            TestPursuitCorrelator();
+            TestAOIProbability();
+            TestGazeErrorModel();
+            TestInteriorPreset();
+            TestEmbeddingProjection();
         }
         catch (Exception e)
         {
@@ -849,6 +857,15 @@ public static class UnitEyeSmokeTests
         CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(45)), 0f, 0.02f, "Gaze decode: center bin ~ 0 rad");
         CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(0)), -Mathf.PI, 0.02f, "Gaze decode: bin 0 ~ -pi rad");
         CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(89)), (89f * 4f - 180f) * Mathf.Deg2Rad, 0.02f, "Gaze decode: bin 89");
+
+        //Windowed decode: broad low-level logit noise far from the argmax must NOT drag the expectation
+        //toward the centre (the classic full-range soft-argmax compression). With a flat logit floor of 0
+        //and a spike of 5 at bin 60, a full-range expectation lands several degrees centre-ward; the
+        //±5-bin window keeps it at the spike.
+        var noisy = new float[90];
+        noisy[60] = 5f;
+        CheckClose(GazeEstimationRunner.DecodeAngleRadians(noisy), (60f * 4f - 180f) * Mathf.Deg2Rad, 0.05f,
+            "Gaze decode: windowed expectation resists far-bin noise (no centre drag)");
     }
 
     private static void TestGazeFeaturePolynomial()
@@ -857,8 +874,9 @@ public static class UnitEyeSmokeTests
         //LINEAR ridge can bend to the corners (raw [yaw,pitch] can't: the angle->screen map is nonlinear
         //with a yaw*pitch coupling). Pin the length + exact term layout so the basis isn't silently
         //changed and train/predict stay in lockstep (both read this same vector).
-        Check(GazeEstimationRunner.FeatureCount == 15, "Gaze calibration feature vector is 15 terms (polynomial + head pose + iris offsets)");
+        Check(GazeEstimationRunner.FeatureCount == 32, "Gaze calibration feature vector is 32 terms (polynomial + head pose + iris + context)");
         Check(GazeEstimationRunner.IrisFeatureStart == 11, "Direction-model iris block starts after the head pose (7/8/9 stay stable)");
+        Check(GazeEstimationRunner.ContextFeatureStart == 15, "Direction-model context block starts after the iris block");
         var f = new float[GazeEstimationRunner.FeatureCount];
         float yaw = 0.3f, pitch = -0.2f;
         GazeEstimationRunner.FillGazeFeatures(f, yaw, pitch, 0.11f, 0.12f, 0.13f, 0.14f);
@@ -880,8 +898,9 @@ public static class UnitEyeSmokeTests
         //the direction backbones carry one of the gaze angles) — otherwise a linear ridge compresses the
         //corners. Pin the length + exact layout so train/predict stay in lockstep, and so HeadPoseFeature-
         //Indices (11/12/13) keeps matching.
-        Check(HomulerEyeMURunner.FeatureCount == 19, "EyeMU calibration feature vector is 19 terms (embedding + gaze polynomial + head pose + iris offsets)");
+        Check(HomulerEyeMURunner.FeatureCount == 36, "EyeMU calibration feature vector is 36 terms (embedding + gaze polynomial + head pose + iris + context)");
         Check(HomulerEyeMURunner.IrisFeatureStart == 15, "EyeMU iris block starts after the head pose (11/12/13 stay stable)");
+        Check(HomulerEyeMURunner.ContextFeatureStart == 19, "EyeMU context block starts after the iris block");
         var f = new float[HomulerEyeMURunner.FeatureCount];
         var emb = new[] { 0.1f, 0.2f, 0.3f, 0.4f };
         float gx = 0.25f, gy = 0.75f;
@@ -899,6 +918,26 @@ public static class UnitEyeSmokeTests
         CheckClose(f[12], 0.12f, 1e-6f, "feature[12] = headPitch");
         CheckClose(f[13], 0.13f, 1e-6f, "feature[13] = headRoll");
         CheckClose(f[14], 0.14f, 1e-6f, "feature[14] = headArea (linear)");
+
+        //Shared context block (both backbones use the same filler): tx/ty/dist, 8 eyeLook blendshapes,
+        //then the gaze x pose/translation/distance interaction terms — the multiplicative structure of
+        //the physical map (x ~ eyePos + D*tan(yaw+headYaw)) a per-axis linear ridge cannot represent.
+        var tail = new float[HomulerFunctions.ContextTailCount];
+        for (var i = 0; i < tail.Length; i++) tail[i] = 0.5f + i * 0.1f;   // tx=0.5, ty=0.6, dist=0.7, looks...
+        var ctx = new float[HomulerFunctions.ContextFeatureCount];
+        float gA = 0.3f, gB = -0.2f, hYaw = 0.11f, hPitch = 0.12f;
+        HomulerFunctions.FillContextFeatures(ctx, 0, gA, gB, hYaw, hPitch, tail, 0);
+        CheckClose(ctx[0], 0.5f, 1e-6f, "context[0] = tx");
+        CheckClose(ctx[1], 0.6f, 1e-6f, "context[1] = ty");
+        CheckClose(ctx[2], 0.7f, 1e-5f, "context[2] = dist");
+        CheckClose(ctx[3], 0.8f, 1e-5f, "context[3] = first eyeLook blendshape");
+        CheckClose(ctx[10], 1.5f, 1e-5f, "context[10] = last eyeLook blendshape");
+        CheckClose(ctx[11], gA * hYaw, 1e-6f, "context[11] = gazeA*headYaw");
+        CheckClose(ctx[12], gB * hPitch, 1e-6f, "context[12] = gazeB*headPitch");
+        CheckClose(ctx[13], gA * 0.5f, 1e-6f, "context[13] = gazeA*tx");
+        CheckClose(ctx[14], gB * 0.6f, 1e-6f, "context[14] = gazeB*ty");
+        CheckClose(ctx[15], gA * 0.7f, 1e-5f, "context[15] = gazeA*dist");
+        CheckClose(ctx[16], gB * 0.7f, 1e-5f, "context[16] = gazeB*dist");
 
         //Ensemble backbone: EyeMU's full vector leads (head-pose slots keep their indices), followed by the
         //direction model's leading gaze-angle polynomial block.
@@ -1011,10 +1050,18 @@ public static class UnitEyeSmokeTests
 
     private static void TestGazeModelsLoadAndRun()
     {
-        //Verifies both yakhyo/gaze-estimation ONNX models import and expose the I/O GazeEstimationRunner
-        //codes against: one input (1,3,448,448) named "input", two outputs "yaw"+"pitch" of 90 bins each.
+        //Verifies the yakhyo/gaze-estimation ONNX models import and expose the I/O GazeEstimationRunner
+        //codes against: one input (1,3,448,448) named "input", outputs "yaw"+"pitch" (90 bins each) PLUS
+        //the "embedding" output added by graph edit (the pre-logit GAP vector the embedding-head
+        //personalization regresses on: MobileOne 1024, MobileNetV2 1280, ResNet34 512).
         //Runs once with a blank CPU input so it works under -nographics. Does NOT prove gaze accuracy.
-        foreach (var path in new[] { "ONNX/GazeEstimation/mobileone_s0_gaze", "ONNX/GazeEstimation/mobilenetv2_gaze", "ONNX/GazeEstimation/resnet34_gaze" })
+        var expectedEmbedding = new Dictionary<string, int>
+        {
+            ["ONNX/GazeEstimation/mobileone_s0_gaze"] = 1024,
+            ["ONNX/GazeEstimation/mobilenetv2_gaze"] = 1280,
+            ["ONNX/GazeEstimation/resnet34_gaze"] = 512,
+        };
+        foreach (var path in expectedEmbedding.Keys)
         {
             var asset = Resources.Load<ModelAsset>(path);
             Check(asset != null, $"Gaze model should load from Resources: {path}");
@@ -1022,15 +1069,17 @@ public static class UnitEyeSmokeTests
 
             var model = ModelLoader.Load(asset);
             Check(model.inputs.Count == 1, $"{path}: should have 1 input");
-            Check(model.outputs.Count == 2, $"{path}: should have 2 outputs");
+            Check(model.outputs.Count == 3, $"{path}: should have 3 outputs (yaw, pitch, embedding)");
 
-            bool hasYaw = false, hasPitch = false;
+            bool hasYaw = false, hasPitch = false, hasEmbedding = false;
             foreach (var o in model.outputs)
             {
                 if (o.name == "yaw") hasYaw = true;
                 if (o.name == "pitch") hasPitch = true;
+                if (o.name == "embedding") hasEmbedding = true;
             }
             Check(hasYaw && hasPitch, $"{path}: outputs should be named yaw + pitch");
+            Check(hasEmbedding, $"{path}: the embedding tap output should exist");
 
             Worker worker = null;
             Tensor<float> input = null;
@@ -1047,6 +1096,18 @@ public static class UnitEyeSmokeTests
                 {
                     var bins = yaw.DownloadToArray();
                     Check(bins.Length == 90, $"{path}: yaw should have 90 bins (got {bins.Length})");
+                }
+                var embedding = worker.PeekOutput("embedding") as Tensor<float>;
+                Check(embedding != null, $"{path}: 'embedding' output should run");
+                if (embedding != null)
+                {
+                    var values = embedding.DownloadToArray();
+                    Check(values.Length == expectedEmbedding[path],
+                        $"{path}: embedding should be {expectedEmbedding[path]}-d (got {values.Length})");
+                    var finite = true;
+                    foreach (var v in values)
+                        if (float.IsNaN(v) || float.IsInfinity(v)) finite = false;
+                    Check(finite, $"{path}: embedding values should be finite");
                 }
             }
             finally
@@ -1106,6 +1167,235 @@ public static class UnitEyeSmokeTests
         CheckClose(fast.currValue.x, f.x, 1e-6f, "FilterVector2 must update currValue (was stuck at zero)");
         CheckClose(fast.currValue.y, f.y, 1e-6f, "FilterVector2 must update currValue (y)");
         CheckClose(fast.prevValue.x, fPrev.x, 1e-6f, "FilterVector2 must update prevValue");
+    }
+
+    private static void TestGazeStatistics()
+    {
+        //Known cluster: samples on a cross around (110, 205) against target (100, 200) -> bias (10, 5),
+        //per-axis SD sqrt(mean of squared offsets).
+        var samples = new List<Vector2>
+        {
+            new Vector2(108, 205), new Vector2(112, 205), new Vector2(110, 203), new Vector2(110, 207),
+        };
+        var s = GazeStatistics.Compute(samples, new Vector2(100, 200));
+        CheckClose(s.bias.x, 10f, 1e-4f, "GazeStatistics bias x");
+        CheckClose(s.bias.y, 5f, 1e-4f, "GazeStatistics bias y");
+        CheckClose(s.sd.x, Mathf.Sqrt(2f), 1e-4f, "GazeStatistics per-axis SD x");
+        CheckClose(s.sd.y, Mathf.Sqrt(2f), 1e-4f, "GazeStatistics per-axis SD y");
+        Check(s.rmsS2S > 0f, "GazeStatistics computes sample-to-sample RMS");
+        Check(s.bcea > 0f, "GazeStatistics computes a positive BCEA for a 2D cluster");
+
+        //Aggregate: pure-bias targets (zero scatter) must yield precision 0 and accuracy = mean |bias|.
+        var perTarget = new List<GazeStatistics.FixationStats>
+        {
+            new GazeStatistics.FixationStats { bias = new Vector2(3, 4), sd = Vector2.zero, count = 5 },
+            new GazeStatistics.FixationStats { bias = new Vector2(-3, -4), sd = Vector2.zero, count = 5 },
+        };
+        GazeStatistics.Aggregate(perTarget, out var acc, out var meanBias, out var prec, out _);
+        CheckClose(acc, 5f, 1e-4f, "GazeStatistics aggregate accuracy = mean |bias|");
+        CheckClose(prec, 0f, 1e-4f, "GazeStatistics aggregate precision 0 for zero scatter");
+        CheckClose(meanBias.x, 0f, 1e-4f, "GazeStatistics aggregate mean bias cancels opposing biases");
+    }
+
+    private static void TestDriftCorrector()
+    {
+        //Identity before any anchors.
+        var corrector = new DriftCorrector();
+        var p = new Vector2(0.3f, 0.7f);
+        CheckClose((corrector.Apply(p) - p).magnitude, 0f, 1e-6f, "DriftCorrector starts at identity");
+
+        //Feed anchors with a constant true translation of (+0.05, -0.03): the corrector must learn it.
+        var rng = new System.Random(42);
+        for (int i = 0; i < 40; i++)
+        {
+            var target = new Vector2(0.1f + 0.8f * (float)rng.NextDouble(), 0.1f + 0.8f * (float)rng.NextDouble());
+            var predicted = target - new Vector2(0.05f, -0.03f);   // systematic drift
+            corrector.AddAnchor(predicted, target);
+        }
+        var corrected = corrector.Apply(new Vector2(0.5f, 0.5f) - new Vector2(0.05f, -0.03f));
+        CheckClose(corrected.x, 0.5f, 0.01f, "DriftCorrector learns a translation drift (x)");
+        CheckClose(corrected.y, 0.5f, 0.01f, "DriftCorrector learns a translation drift (y)");
+        Check(corrector.AcceptedAnchors > 30, "DriftCorrector accepts consistent anchors");
+
+        //Outlier gate: a wild anchor (user clicked without looking) must be rejected.
+        int before = corrector.AcceptedAnchors;
+        bool accepted = corrector.AddAnchor(new Vector2(0.1f, 0.1f), new Vector2(0.9f, 0.9f));
+        Check(!accepted && corrector.AcceptedAnchors == before, "DriftCorrector rejects an out-of-band anchor");
+
+        //Gain drift: predictions compressed toward centre by 0.85 need >= the affine unlock to fix; feed
+        //spread anchors and verify the gain is (partially, caps allowed) recovered.
+        corrector.Reset();
+        for (int i = 0; i < 60; i++)
+        {
+            var target = new Vector2(0.1f + 0.8f * (float)rng.NextDouble(), 0.1f + 0.8f * (float)rng.NextDouble());
+            var predicted = new Vector2(0.5f + (target.x - 0.5f) * 0.85f, 0.5f + (target.y - 0.5f) * 0.85f);
+            corrector.AddAnchor(predicted, target);
+        }
+        Check(corrector.AffineUnlocked, "DriftCorrector unlocks the affine DOFs with spread anchors");
+        var edge = corrector.Apply(new Vector2(0.5f + 0.4f * 0.85f, 0.5f));
+        CheckClose(edge.x, 0.9f, 0.02f, "DriftCorrector recovers a gain (scale) drift the translation-only re-center cannot");
+
+        //Persistence round-trip.
+        var json = corrector.SaveToJson();
+        var restored = new DriftCorrector();
+        restored.LoadFromJson(json);
+        CheckClose((restored.Apply(p) - corrector.Apply(p)).magnitude, 0f, 1e-5f, "DriftCorrector state round-trips through JSON");
+    }
+
+    private static void TestFixationAggregator()
+    {
+        var aggregator = new FixationAggregator();
+        //A tight cluster: after enough samples the aggregator enters fixation and returns the centroid.
+        var rng = new System.Random(7);
+        Vector2 lastOut = default;
+        for (int i = 0; i < 12; i++)
+        {
+            var sample = new Vector2(500f + (float)rng.NextDouble() * 4f, 300f + (float)rng.NextDouble() * 4f);
+            lastOut = aggregator.Add(sample, i * (1.0 / 30.0));
+        }
+        Check(aggregator.InFixation, "FixationAggregator detects a tight cluster as a fixation");
+        Check(Mathf.Abs(lastOut.x - 502f) < 3f && Mathf.Abs(lastOut.y - 302f) < 3f,
+            "FixationAggregator returns the cluster centroid");
+        Check(aggregator.FixationDuration > 0.2, "FixationAggregator tracks fixation duration");
+
+        //A saccade (large jump) must break the fixation and return the raw sample.
+        var jumped = aggregator.Add(new Vector2(1500f, 800f), 0.5);
+        Check(!aggregator.InFixation, "FixationAggregator ends the fixation on a saccade");
+        CheckClose(jumped.x, 1500f, 1e-3f, "FixationAggregator passes raw samples through during saccades");
+    }
+
+    private static void TestPursuitCorrelator()
+    {
+        //Simulates the REAL clock relationship: the object position is sampled on the render clock
+        //(t + latency, position at that same moment), while the gaze sample carries its camera CAPTURE
+        //time t. The correlator must pair gaze at t with the object at t - pursuitLag, unaffected by the
+        //pipeline latency — stamping the object with the gaze clock (the original bug) shifted every
+        //anchor by latency x object-speed along the motion path.
+        const double latency = 0.15;
+        const float speed = 0.3f;
+        var correlator = new PursuitCorrelator();
+        bool certified = false;
+        Vector2 pairedGaze = default, pairedTarget = default;
+        for (int i = 0; i < 40; i++)
+        {
+            double t = i / 30.0;                                 // gaze capture time
+            double renderT = t + latency;                        // object sampled on the render clock
+            var target = new Vector2(0.2f + (float)renderT * speed, 0.5f);
+            //The eye pursues with ~100ms lag: at capture time t it sits where the object was at t-0.1.
+            var gaze = new Vector2(0.2f + Mathf.Max(0f, (float)t - 0.1f) * speed, 0.5f + 0.002f * (i % 3));
+            certified |= correlator.Feed(gaze, t, target, renderT, out pairedGaze, out pairedTarget);
+        }
+        Check(certified, "PursuitCorrelator certifies gaze tracking a moving target");
+        //With correct two-clock pairing the anchor pair must nearly coincide despite the 150ms latency
+        //(the buggy single-clock pairing left a speed*(latency+2*lag) ≈ 0.10 gap here).
+        Check(Mathf.Abs(pairedGaze.x - pairedTarget.x) < 0.02f,
+            $"PursuitCorrelator pairs gaze with the lag-corrected target despite pipeline latency (gap {Mathf.Abs(pairedGaze.x - pairedTarget.x):F3})");
+
+        //Duplicate gaze timestamps (render frames without a fresh camera sample) must not certify/emit.
+        int emitted = 0;
+        for (int i = 0; i < 5; i++)
+            if (correlator.Feed(pairedGaze, 39 / 30.0, new Vector2(0.9f, 0.5f), 39 / 30.0 + latency, out _, out _))
+                emitted++;
+        Check(emitted == 0, "PursuitCorrelator ignores repeated gaze samples (one anchor per camera frame)");
+
+        //Uncorrelated gaze (fixating while the target moves) must NOT certify.
+        correlator.Reset();
+        bool wrongCertified = false;
+        for (int i = 0; i < 40; i++)
+        {
+            double t = i / 30.0;
+            var target = new Vector2(0.2f + (float)t * speed, 0.5f);
+            var gaze = new Vector2(0.55f + 0.003f * (i % 5), 0.48f);
+            wrongCertified |= correlator.Feed(gaze, t, target, t + latency, out _, out _);
+        }
+        Check(!wrongCertified, "PursuitCorrelator rejects gaze that does not follow the target");
+    }
+
+    private static void TestAOIProbability()
+    {
+        //A fixation dead-centre in a large box ~ probability 1; far outside ~ 0; on the edge ~ 0.5.
+        var box = new AOIBox("probBox", new Vector2(0.4f, 0.4f), new Vector2(0.6f, 0.6f));
+        float sigma = 0.01f;   // tight ellipse vs a 0.2-wide box
+        float inside = box.HitProbability(new Vector2(0.5f, 0.5f), sigma * sigma, 0f, sigma * sigma);
+        float outside = box.HitProbability(new Vector2(0.9f, 0.9f), sigma * sigma, 0f, sigma * sigma);
+        float edge = box.HitProbability(new Vector2(0.4f, 0.5f), sigma * sigma, 0f, sigma * sigma);
+        Check(inside > 0.95f, $"AOI probability ~1 well inside (got {inside})");
+        Check(outside < 0.05f, $"AOI probability ~0 far outside (got {outside})");
+        Check(edge > 0.2f && edge < 0.8f, $"AOI probability ~0.5 on the border (got {edge})");
+        //Determinism (fixed offsets): identical inputs -> identical probability.
+        CheckClose(box.HitProbability(new Vector2(0.4f, 0.5f), sigma * sigma, 0f, sigma * sigma), edge, 1e-6f,
+            "AOI probability is deterministic");
+
+        //Margin: a point just outside the exact shape counts as inside with a margin.
+        var strict = new AOIBox("strict", new Vector2(0.4f, 0.4f), new Vector2(0.6f, 0.6f));
+        Check(!strict.CheckAOIWithMargin(new Vector2(0.39f, 0.5f)), "No margin: just-outside point misses");
+        strict.margin = 0.02f;
+        Check(strict.CheckAOIWithMargin(new Vector2(0.39f, 0.5f)), "Margin: just-outside point hits");
+    }
+
+    private static void TestGazeErrorModel()
+    {
+        var model = new GazeErrorModel();
+        model.AddAnchor(new Vector2(0.25f, 0.5f), new Vector2(0.02f, 0f), 0.001f, 0f, 0.001f);
+        model.AddAnchor(new Vector2(0.75f, 0.5f), new Vector2(-0.02f, 0f), 0.004f, 0f, 0.004f);
+        //Query AT an anchor: (near-)exact bias thanks to the inverse-distance weighting epsilon.
+        model.Query(new Vector2(0.25f, 0.5f), out var bias, out var cxx, out _, out _);
+        CheckClose(bias.x, 0.02f, 0.005f, "GazeErrorModel returns the anchor's bias at the anchor");
+        //Query midway: interpolated bias ~0, covariance between the anchors'.
+        model.Query(new Vector2(0.5f, 0.5f), out var midBias, out var midCxx, out _, out _);
+        Check(Mathf.Abs(midBias.x) < 0.01f, "GazeErrorModel interpolates bias between anchors");
+        Check(midCxx > 0.001f && midCxx < 0.004f, "GazeErrorModel interpolates covariance between anchors");
+        CheckClose(model.MeanErrorNormalized(), 0.02f, 1e-4f, "GazeErrorModel mean error magnitude");
+    }
+
+    private static void TestEmbeddingProjection()
+    {
+        //The sparse-JL projection that compresses the 512-1280-d model embedding to 64 calibration
+        //features must be DETERMINISTIC across runs/platforms (saved calibrations depend on the exact
+        //signs) and actually mix all inputs.
+        var signs1 = GazeEstimationRunner.BuildEmbeddingSigns(512, GazeEstimationRunner.EmbeddingProjectionDim);
+        var signs2 = GazeEstimationRunner.BuildEmbeddingSigns(512, GazeEstimationRunner.EmbeddingProjectionDim);
+        bool identical = signs1.Length == signs2.Length;
+        for (int i = 0; identical && i < signs1.Length; i++)
+            identical = signs1[i] == signs2[i];
+        Check(identical, "Embedding projection signs are deterministic");
+        //Entries are ±1/sqrt(rawDim); the sign split should be roughly balanced.
+        float expectedMagnitude = 1f / Mathf.Sqrt(512f);
+        int positive = 0;
+        bool magnitudeOk = true;
+        foreach (var s in signs1)
+        {
+            if (Mathf.Abs(Mathf.Abs(s) - expectedMagnitude) > 1e-6f) magnitudeOk = false;
+            if (s > 0) positive++;
+        }
+        Check(magnitudeOk, "Embedding projection entries are +/- 1/sqrt(rawDim)");
+        float positiveFraction = (float)positive / signs1.Length;
+        Check(positiveFraction > 0.45f && positiveFraction < 0.55f,
+            $"Embedding projection signs are balanced (got {positiveFraction:F3} positive)");
+
+        //Projection of a one-hot input reproduces that input's column of signs.
+        var raw = new float[512];
+        raw[37] = 2f;
+        var dest = new float[10 + GazeEstimationRunner.EmbeddingProjectionDim];
+        GazeEstimationRunner.ProjectEmbedding(raw, signs1, dest, 10, GazeEstimationRunner.EmbeddingProjectionDim);
+        CheckClose(dest[10], 2f * signs1[0 * 512 + 37], 1e-6f, "Embedding projection computes the sign-weighted sum (k=0)");
+        CheckClose(dest[10 + 63], 2f * signs1[63 * 512 + 37], 1e-6f, "Embedding projection computes the sign-weighted sum (k=63)");
+    }
+
+    private static void TestInteriorPreset()
+    {
+        var preset = new InteriorPreset(20f, 1.5f);
+        var points = preset.GetPoints();
+        Check(preset.StopAtWaypoints, "InteriorPreset dwells at its waypoints (TPS anchors)");
+        Check(!preset.IsHeadMovement, "InteriorPreset is a sit-still preset (its dwells feed the warp)");
+        Check(points.Count == 7, "InteriorPreset emits centre + 4 quadrant points (+ lead/close)");
+        //All points strictly interior — the whole reason this preset exists.
+        bool interior = true;
+        foreach (var p in points)
+            if (p.x < Screen.width * 0.2f || p.x > Screen.width * 0.8f ||
+                p.y < Screen.height * 0.2f || p.y > Screen.height * 0.8f)
+                interior = false;
+        Check(interior, "InteriorPreset points are strictly interior (not on the boundary)");
     }
 
     #endregion

@@ -24,6 +24,12 @@ namespace Mediapipe.Unity
         [SerializeField] private int _preferableDefaultWidth = 1280;
         [Tooltip("Preferred webcam device name; empty picks the closest to Preferable Default Width.")]
         [SerializeField] private string _name = "";
+        //At ~60cm, 1° of gaze rotation moves the iris ~0.3px at 720p-class capture — the per-frame gaze
+        //signal is SUB-PIXEL and landmark jitter is the pipeline's binding accuracy constraint. Higher
+        //frame rates also double the samples per fixation (~sqrt(2) precision after aggregation) and
+        //shorten exposure (less motion blur on the iris). The driver delivers the closest supported rate.
+        [Tooltip("Requested camera frame rate. 60fps = 2x samples per fixation and shorter exposure (sharper iris); the driver falls back to the closest supported rate.")]
+        [SerializeField] private int _requestedFps = 60;
 
         private WebCamTexture _webCamTexture;
         private int _deviceIndex = -1;
@@ -122,8 +128,9 @@ namespace Mediapipe.Unity
             StopCamera();
             _deviceIndex = index;
             _name = devices[index].name;
-            // Request the preferred width; the device delivers the closest resolution it supports.
-            _webCamTexture = new WebCamTexture(devices[index].name, _preferableDefaultWidth, Mathf.RoundToInt(_preferableDefaultWidth * 9f / 16f));
+            // Request the preferred width + frame rate; the device delivers the closest it supports.
+            _webCamTexture = new WebCamTexture(devices[index].name, _preferableDefaultWidth,
+                Mathf.RoundToInt(_preferableDefaultWidth * 9f / 16f), Mathf.Max(1, _requestedFps));
             _webCamTexture.Play();
         }
     }

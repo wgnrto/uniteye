@@ -47,8 +47,11 @@ namespace UnitEye
             s_rawGaze = new Vector2(pixelX, pixelY);
             s_facePresent = facePresent;
             s_blinking = blinking;
+            //ARRIVAL time: browser capture latency upstream of this call is not observable from here.
+            s_captureTimestamp = Time.unscaledTimeAsDouble;
             s_newSample = true;
         }
+        private static double s_captureTimestamp;
 
         /// <summary>Optional: the JS side can also supply the EyeMU feature vector so Unity-side calibration matches the native path.</summary>
         public static void ReportFeatures(float[] features) => s_features = features ?? new float[0];
@@ -70,9 +73,11 @@ namespace UnitEye
 
         public Vector2 RawGaze => s_rawGaze;
         public float[] GetFeatures() => s_features;
+        public double CaptureTimestamp => s_captureTimestamp;
         public bool IsFacePresent => s_facePresent;
         public bool IsBlinking => s_blinking;
         public bool IsDrowsy => false;                 // TODO: compute browser-side if you need drowsiness
+        public float BinocularIrisDisagreement => 0f;  // TODO: compute browser-side if needed
         public float DistanceMm => -1000f;             // TODO: browser-side distance if needed
         public float EyeFeature => float.NaN;
         public Vector3 HeadPoseEuler => Vector3.zero;  // TODO: head pose from FaceLandmarker if needed

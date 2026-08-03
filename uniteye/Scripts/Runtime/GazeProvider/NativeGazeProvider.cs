@@ -30,14 +30,24 @@ namespace UnitEye
 
         //Whether the backbones pipeline their GPU readbacks (see HomulerGaze._asyncGpuReadback).
         private readonly bool _asyncReadback;
+        //Whether the direction backbones run horizontal-flip test-time augmentation (sync mode only).
+        private readonly bool _flipAugmentation;
+        //Whether the direction backbones roll-normalize their face crop (2D data normalization).
+        private readonly bool _rollNormalize;
+        //eyeBlink blendshape score above which the frame counts as a blink (both eyes maxed). The
+        //blendshape gate replaces the EAR heuristic when blendshapes are available: the attention model
+        //separates lid closure from downward gaze, which EAR conflates (downward gaze looked like a blink).
+        private const float BlinkBlendshapeThreshold = 0.5f;
 
         public NativeGazeProvider(GameObject mediaPipeGO, GazeBackbone backbone = GazeBackbone.EyeMU,
-            bool asyncGpuReadback = false)
+            bool asyncGpuReadback = false, bool flipAugmentation = false, bool rollNormalize = true)
         {
             _webcam = mediaPipeGO.GetComponent<WebCamSource>();
             _faceMesh = mediaPipeGO.GetComponent<FaceMeshSolution>();
             _eyeHelper = new HomulerEyeHelper(_faceMesh, _webcam.name);
             _asyncReadback = asyncGpuReadback;
+            _flipAugmentation = flipAugmentation;
+            _rollNormalize = rollNormalize;
 
             //Pick the gaze model behind the shared face-mesh/blink/distance stack.
             _backbone = CreateBackbone(backbone);
@@ -48,16 +58,16 @@ namespace UnitEye
             switch (backbone)
             {
                 case GazeBackbone.GazeMobileOne:
-                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobileone_s0_gaze", _asyncReadback);
+                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobileone_s0_gaze", _asyncReadback, _flipAugmentation, _rollNormalize);
                 case GazeBackbone.GazeMobileNetV2:
-                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobilenetv2_gaze", _asyncReadback);
+                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/mobilenetv2_gaze", _asyncReadback, _flipAugmentation, _rollNormalize);
                 case GazeBackbone.GazeResNet34:
-                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/resnet34_gaze", _asyncReadback);
+                    return new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/resnet34_gaze", _asyncReadback, _flipAugmentation, _rollNormalize);
                 case GazeBackbone.EyeMUPlusResNet34:
                     //Ensemble: both models every frame, concatenated calibration features (~2x inference cost).
                     return new CompositeGazeBackbone(
                         new HomulerEyeMURunner(_faceMesh, _asyncReadback),
-                        new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/resnet34_gaze", _asyncReadback));
+                        new GazeEstimationRunner(_faceMesh, "ONNX/GazeEstimation/resnet34_gaze", _asyncReadback, _flipAugmentation, _rollNormalize));
                 default:
                     return new HomulerEyeMURunner(_faceMesh, _asyncReadback);
             }
@@ -87,15 +97,32 @@ namespace UnitEye
             //Compute EyeFeature once, then derive blink/drowsy from it (was recomputed inside each call).
             _eyeFeature = _eyeHelper.EyeFeature();
             _isDrowsy = _eyeHelper.IsDrowsyFromFeature(_eyeFeature);
-            _isBlinking = _eyeHelper.IsBlinkingFromFeature(_eyeFeature);
+            //Blink gate: prefer the eyeBlink blendshapes (dedicated lid-closure signal; no downward-gaze
+            //false positives, no per-user threshold calibration) and fall back to the EAR heuristic when
+            //blendshapes are unavailable. Drowsiness stays on the EAR feature (its calibrated statistics
+            //describe the smoothed EAR, not the blendshape).
+            _isBlinking = _faceMesh != null && _faceMesh.HasBlendshapes
+                ? Mathf.Max(_faceMesh.EyeBlinkLeft, _faceMesh.EyeBlinkRight) > BlinkBlendshapeThreshold
+                : _eyeHelper.IsBlinkingFromFeature(_eyeFeature);
             _distanceMm = _eyeHelper.CalculateCamDistanceFocal();
+
+            //Binocular consistency: the two eyes move conjugately, so their normalized iris offsets should
+            //(nearly) agree. Disagreement is a free per-frame quality signal — it spikes on half-blinks,
+            //partial occlusion and landmark failures that the blink gate misses. Exposed for capture
+            //gates / logging / host-game confidence displays.
+            HomulerFunctions.FillIrisFeatures(_faceMesh.FaceLandmarks, _irisScratch, 0);
+            BinocularIrisDisagreement = new Vector2(_irisScratch[0] - _irisScratch[2],
+                                                    _irisScratch[1] - _irisScratch[3]).magnitude;
             return true;
         }
+        private readonly float[] _irisScratch = new float[4];
 
         public Vector2 RawGaze => _rawGaze;
         //Returns the backbone's reused feature buffer (no per-frame copy). Valid only until the next
         //Tick; the calibration capture, which retains samples, clones it (see HomulerGazeCalibration).
         public float[] GetFeatures() => _backbone.Features;
+        public double CaptureTimestamp => _backbone.CaptureTimestamp;
+        public float BinocularIrisDisagreement { get; private set; }
         public bool IsFacePresent => _faceMesh != null && _faceMesh.FaceLandmarks != null;
         public bool IsBlinking => _isBlinking;
         public bool IsDrowsy => _isDrowsy;

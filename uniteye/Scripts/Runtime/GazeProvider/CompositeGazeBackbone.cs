@@ -65,6 +65,9 @@ namespace UnitEye
         public RenderTexture LeftEyeTexture => _eyeMU.LeftEyeTexture;
         public RenderTexture RightEyeTexture => _eyeMU.RightEyeTexture;
 
+        //RawGaze comes from EyeMU, so its published frame's capture time is the honest timestamp.
+        public double CaptureTimestamp => _eyeMU.CaptureTimestamp;
+
         public void Dispose()
         {
             _eyeMU?.Dispose();

@@ -36,6 +36,14 @@ namespace Mediapipe.Unity.FaceMesh
         [SerializeField] private WebCamSource _webCamSource;
         [SerializeField] private bool _annotate = true;
         [SerializeField] private int maxNumFaces = 1;
+        // Head pose from the FaceLandmarker's facial transformation matrix (a metric rigid fit of the
+        // canonical face model) instead of the legacy atan-of-relative-Z landmark hack. The matrix pose is
+        // markedly cleaner (normalized-landmark Z is the model's weakest channel and the old roll carried
+        // an inherited magic /2), and it additionally provides head TRANSLATION, which no landmark-derived
+        // feature carried. Kept as a toggle so the legacy behaviour remains reachable if a webcam hand-test
+        // ever shows a sign/convention issue on some device.
+        [Tooltip("Derive head yaw/pitch/roll (and translation) from MediaPipe's metric facial transformation matrix instead of the legacy landmark-Z approximation.")]
+        [SerializeField] private bool _useMatrixHeadPose = true;
         // Unity textures are bottom-left origin; MediaPipe expects top-left. Flip vertically so the
         // landmarks come back in MediaPipe (y-down, top-left) convention, matching the old pipeline.
         // If gaze is upside-down/mirrored on your webcam, flip these (a hand-test knob).
@@ -126,6 +134,28 @@ namespace Mediapipe.Unity.FaceMesh
         // all landmarks) instead of per HeadArea access — HeadArea is read 2-4x per frame downstream.
         private float _bboxMinX, _bboxMinY, _bboxMaxX, _bboxMaxY;
 
+        // ---- Facial transformation matrix state (metric head pose + translation, in canonical-face cm).
+        // NOTE the matrix is computed against MediaPipe's own assumed virtual camera, so the translation is
+        // only approximately metric unless the real camera FOV matches; the ROTATION is trustworthy, and
+        // for calibration features an approximately-proportional translation is exactly what's needed.
+        private bool _hasTransformMatrix;
+        private float _matrixYaw, _matrixPitch, _matrixRoll;   // radians
+        private Vector3 _headTranslation;                      // cm, camera space
+
+        // ---- Blendshape state. Indices resolved by category NAME once (robust to ordering), then read by
+        // index every frame. EyeLook order: [inL, outL, upL, downL, inR, outR, upR, downR].
+        private static readonly string[] EyeLookNames =
+        {
+            "eyeLookInLeft", "eyeLookOutLeft", "eyeLookUpLeft", "eyeLookDownLeft",
+            "eyeLookInRight", "eyeLookOutRight", "eyeLookUpRight", "eyeLookDownRight",
+        };
+        private readonly int[] _eyeLookIndices = new int[8];
+        private int _blinkLeftIndex = -1, _blinkRightIndex = -1;
+        private bool _blendshapeIndicesResolved;
+        private readonly float[] _eyeLookScores = new float[8];
+        private bool _hasBlendshapes;
+        private float _eyeBlinkLeft, _eyeBlinkRight;
+
         // Reusable Mediapipe.NormalizedLandmark objects so we expose the SAME type the consumers already
         // use (.X/.Y/.Z) without allocating 478 objects every frame — we mutate them in place.
         private readonly List<NormalizedLandmark> _mpLandmarks = new List<NormalizedLandmark>(TotalLandmarks);
@@ -148,6 +178,7 @@ namespace Mediapipe.Unity.FaceMesh
         {
             get
             {
+                if (_useMatrixHeadPose && _hasTransformMatrix) return _matrixYaw;
                 if (FaceLandmarks == null) return 0f;
                 var l50 = FaceLandmarks[50];
                 var l280 = FaceLandmarks[280];
@@ -159,6 +190,7 @@ namespace Mediapipe.Unity.FaceMesh
         {
             get
             {
+                if (_useMatrixHeadPose && _hasTransformMatrix) return _matrixPitch;
                 if (FaceLandmarks == null) return 0f;
                 var l10 = FaceLandmarks[10];
                 var l168 = FaceLandmarks[168];
@@ -170,6 +202,7 @@ namespace Mediapipe.Unity.FaceMesh
         {
             get
             {
+                if (_useMatrixHeadPose && _hasTransformMatrix) return _matrixRoll;
                 if (FaceLandmarks == null) return 0f;
                 var l6 = FaceLandmarks[6];
                 var l151 = FaceLandmarks[151];
@@ -178,6 +211,29 @@ namespace Mediapipe.Unity.FaceMesh
                 return roll >= 0 ? (roll - Mathf.PI) / 2 : (roll + Mathf.PI) / 2;
             }
         }
+
+        /// <summary>True while this frame carries a facial transformation matrix (face tracked + output enabled).</summary>
+        public bool HasTransformMatrix => _hasTransformMatrix && FaceLandmarks != null;
+        /// <summary>Head translation from the transformation matrix, canonical-face cm in camera space.
+        /// Approximately metric (see the matrix-state comment); Vector3.zero when unavailable.</summary>
+        public Vector3 HeadTranslation => HasTransformMatrix ? _headTranslation : Vector3.zero;
+
+        /// <summary>True while this frame carries face blendshapes (face tracked + output enabled).</summary>
+        public bool HasBlendshapes => _hasBlendshapes && FaceLandmarks != null;
+        /// <summary>The 8 eyeLook* blendshape scores [inL,outL,upL,downL,inR,outR,upR,downR] — a direct,
+        /// independently-trained gaze cue fed to the calibration features. Reused buffer, zeroed when
+        /// unavailable; callers that retain values must copy.</summary>
+        public float[] EyeLookBlendshapes => _eyeLookScores;
+        /// <summary>eyeBlink blendshape scores (0..1). Preferred over the EAR heuristic for the blink gate:
+        /// the attention model separates lid closure from downward gaze, which EAR conflates.</summary>
+        public float EyeBlinkLeft => _hasBlendshapes ? _eyeBlinkLeft : 0f;
+        public float EyeBlinkRight => _hasBlendshapes ? _eyeBlinkRight : 0f;
+
+        /// <summary>Time (Time.unscaledTimeAsDouble) at which the camera frame behind the CURRENT landmarks
+        /// was consumed from the webcam. This is the closest observable proxy for the capture time (USB/driver
+        /// latency upstream of Unity is not measurable); consumers use it to pair gaze samples with
+        /// world/AOI state as it was when the user actually looked. 0 until the first detection.</summary>
+        public double LastCaptureTimestamp { get; private set; }
 
         // Head "area" from the face landmark bounding box (the old FaceRects source is gone in the Task
         // API). NOTE: the old pipeline's FaceRects was null in sync mode, so HeadArea used to be 0 — this
@@ -258,15 +314,21 @@ namespace Mediapipe.Unity.FaceMesh
             }
 
             var baseOptions = new BaseOptions(BaseOptions.Delegate.CPU, modelAssetBuffer: File.ReadAllBytes(modelPath));
+            //Request the two "rich" outputs the pipeline previously discarded: the facial transformation
+            //matrix (metric head rotation + translation — replaces the landmark-Z head-pose approximation
+            //and closes the lateral-head-shift blindness in the calibration features) and the 52 blendshapes
+            //(direct eyeLook* gaze cues + eyeBlink scores for the blink gate).
             var options = new FaceLandmarkerOptions(
                 baseOptions,
                 runningMode: RunningMode.VIDEO,
                 numFaces: maxNumFaces,
                 minFaceDetectionConfidence: 0.5f,
                 minFacePresenceConfidence: 0.5f,
-                minTrackingConfidence: 0.5f);
+                minTrackingConfidence: 0.5f,
+                outputFaceBlendshapes: true,
+                outputFaceTransformationMatrixes: true);
             _faceLandmarker = FaceLandmarker.CreateFromOptions(options, GpuManager.GpuResources);
-            _result = FaceLandmarkerResult.Alloc(maxNumFaces);
+            _result = FaceLandmarkerResult.Alloc(maxNumFaces, outputFaceBlendshapes: true, outputFaceTransformationMatrixes: true);
             _stopwatch.Start();
         }
 
@@ -326,6 +388,10 @@ namespace Mediapipe.Unity.FaceMesh
             var image = textureFrame.BuildCPUImage();
             textureFrame.Release();
 
+            //The frame was consumed from the webcam THIS engine frame — record when, so gaze samples can be
+            //paired with world/AOI state at (approximately) the moment the user actually looked.
+            double captureTime = Time.unscaledTimeAsDouble;
+
             long timestampMs = _stopwatch.ElapsedMilliseconds;
             bool detected = _faceLandmarker.TryDetectForVideo(image, timestampMs, null, ref _result);
             image.Dispose();
@@ -336,6 +402,9 @@ namespace Mediapipe.Unity.FaceMesh
                 if (_smoothGazeLandmarks)
                     SmoothGazeLandmarks(timestampMs);
                 _lastLandmarkTimestampMs = timestampMs;
+                LastCaptureTimestamp = captureTime;
+                ExtractTransformMatrix();
+                ExtractBlendshapes();
                 IsFaceDetected = true;
                 FaceLandmarks = _mpLandmarks;
                 LeftIrisLandmarks = _leftIris;
@@ -352,12 +421,97 @@ namespace Mediapipe.Unity.FaceMesh
                 FaceLandmarks = null;
                 LeftIrisLandmarks = null;
                 RightIrisLandmarks = null;
+                _hasTransformMatrix = false;
+                _hasBlendshapes = false;
                 //Reset the gaze-landmark filters: after a face loss the next detection may be anywhere, and
                 //filter state from the old position would drag the fresh landmarks toward it.
                 for (int i = 0; i < _landmarkFilters.Length; i++)
                     _landmarkFilters[i].Reset();
                 _lastLandmarkTimestampMs = -1;
             }
+        }
+
+        //Reads the facial transformation matrix (canonical face -> camera space, cm) into cached yaw/pitch/
+        //roll radians + translation. Extracted once per detected frame; the head-pose properties then serve
+        //cached values. The rotation is taken via the matrix columns (forward = col 2, up = col 1) and
+        //converted to Tait-Bryan angles wrapped to ±π. SIGN CONVENTIONS are a webcam hand-test item like the
+        //preview flips (only consistency matters for the calibration features — standardization absorbs a
+        //global sign — but UnitEyeAPI.GetHeadPose consumers may see flipped signs vs the legacy path; toggle
+        //_useMatrixHeadPose off to restore the old behaviour).
+        private void ExtractTransformMatrix()
+        {
+            var matrices = _result.facialTransformationMatrixes;
+            if (matrices == null || matrices.Count == 0)
+            {
+                _hasTransformMatrix = false;
+                return;
+            }
+
+            var m = matrices[0];
+            var forward = new Vector3(m.m02, m.m12, m.m22);
+            var up = new Vector3(m.m01, m.m11, m.m21);
+            if (forward.sqrMagnitude < 1e-8f || up.sqrMagnitude < 1e-8f)
+            {
+                _hasTransformMatrix = false;
+                return;
+            }
+            var e = Quaternion.LookRotation(forward, up).eulerAngles;
+            _matrixPitch = WrapAngleRad(e.x);
+            _matrixYaw = WrapAngleRad(e.y);
+            _matrixRoll = WrapAngleRad(e.z);
+            _headTranslation = new Vector3(m.m03, m.m13, m.m23);
+            _hasTransformMatrix = true;
+        }
+
+        //Degrees (0..360, Unity euler) -> radians wrapped to (-π, π], matching the legacy head-pose range.
+        private static float WrapAngleRad(float degrees)
+        {
+            float d = Mathf.Repeat(degrees + 180f, 360f) - 180f;
+            return d * Mathf.Deg2Rad;
+        }
+
+        //Copies the eyeLook*/eyeBlink* blendshape scores into reused buffers. Category indices are resolved
+        //by NAME on the first frame that carries blendshapes (robust to ordering), then read by index.
+        private void ExtractBlendshapes()
+        {
+            var blendshapes = _result.faceBlendshapes;
+            if (blendshapes == null || blendshapes.Count == 0)
+            {
+                _hasBlendshapes = false;
+                return;
+            }
+
+            var categories = blendshapes[0].categories;
+            if (categories == null || categories.Count == 0)
+            {
+                _hasBlendshapes = false;
+                return;
+            }
+
+            if (!_blendshapeIndicesResolved)
+            {
+                for (int i = 0; i < _eyeLookIndices.Length; i++) _eyeLookIndices[i] = -1;
+                for (int c = 0; c < categories.Count; c++)
+                {
+                    var name = categories[c].categoryName;
+                    if (string.IsNullOrEmpty(name)) continue;
+                    if (name == "eyeBlinkLeft") _blinkLeftIndex = c;
+                    else if (name == "eyeBlinkRight") _blinkRightIndex = c;
+                    else
+                        for (int i = 0; i < EyeLookNames.Length; i++)
+                            if (name == EyeLookNames[i]) { _eyeLookIndices[i] = c; break; }
+                }
+                _blendshapeIndicesResolved = true;
+            }
+
+            for (int i = 0; i < _eyeLookIndices.Length; i++)
+            {
+                int idx = _eyeLookIndices[i];
+                _eyeLookScores[i] = idx >= 0 && idx < categories.Count ? categories[idx].score : 0f;
+            }
+            _eyeBlinkLeft = _blinkLeftIndex >= 0 && _blinkLeftIndex < categories.Count ? categories[_blinkLeftIndex].score : 0f;
+            _eyeBlinkRight = _blinkRightIndex >= 0 && _blinkRightIndex < categories.Count ? categories[_blinkRightIndex].score : 0f;
+            _hasBlendshapes = true;
         }
 
         //Applies the One-Euro filters to the six gaze landmarks IN PLACE (the reused protobuf objects the

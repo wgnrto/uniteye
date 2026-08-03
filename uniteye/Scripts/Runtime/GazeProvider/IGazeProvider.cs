@@ -31,8 +31,20 @@ namespace UnitEye
         /// <summary>True while a face is currently being tracked.</summary>
         bool IsFacePresent { get; }
 
+        /// <summary>Capture time (Time.unscaledTimeAsDouble) of the camera frame behind the current
+        /// RawGaze — the closest observable proxy for when the user actually looked. Consumers use it to
+        /// pair gaze samples with world/AOI state at that moment (a 100-300ms pipeline lag times a moving
+        /// object's speed is a systematic AOI error no gaze-model improvement can fix). 0 until the first
+        /// sample; on WebGL this is the sample's ARRIVAL time (browser capture latency is not observable).</summary>
+        double CaptureTimestamp { get; }
+
         bool IsBlinking { get; }
         bool IsDrowsy { get; }
+
+        /// <summary>Disagreement between the two eyes' normalized iris offsets (conjugate eyes should
+        /// nearly agree) — a free per-frame quality proxy that spikes on half-blinks/occlusion/landmark
+        /// failures. 0 when unavailable.</summary>
+        float BinocularIrisDisagreement { get; }
 
         /// <summary>Estimated distance from the camera in mm (negative sentinel if unavailable).</summary>
         float DistanceMm { get; }

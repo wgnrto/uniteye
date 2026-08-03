@@ -34,6 +34,11 @@ namespace UnitEye
         /// <summary>Debug eye-crop (or face-crop) textures shown by the Gaze UI; may be null.</summary>
         RenderTexture LeftEyeTexture { get; }
         RenderTexture RightEyeTexture { get; }
+
+        /// <summary>Capture time (Time.unscaledTimeAsDouble) of the camera frame behind the CURRENTLY
+        /// published RawGaze/Features — one frame older than "now" in async-readback mode. Consumers use it
+        /// to pair gaze with world/AOI state as it was when the user actually looked.</summary>
+        double CaptureTimestamp { get; }
     }
 }
 #endif

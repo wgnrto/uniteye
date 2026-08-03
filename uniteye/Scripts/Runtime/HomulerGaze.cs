@@ -8,6 +8,7 @@ using Mediapipe.Unity.FaceMesh;
 using System.Collections.Generic;
 using UnitEye;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using Screen = UnityEngine.Screen;
 namespace UnitEye
 {
@@ -80,6 +81,38 @@ namespace UnitEye
         private bool _showGazeUIBackup = false;
         private Calibrations _calibrationBackup;
         private bool _backupped;
+
+        //---- Online drift stack (see DriftCorrector): a 6-DOF affine correction on top of the frozen
+        //calibration, fed by validated anchors (clicks, pursuit of registered game objects, attention
+        //events). Holds calibrated accuracy across the session instead of letting it decay.
+        private readonly DriftCorrector _driftCorrector = new DriftCorrector();
+        //Ring buffer of recent PRE-corrector calibrated gaze (normalized) for the pre-click fixation
+        //window: gaze leads a click by 100-200ms, so the honest sample is the fixation BEFORE the click.
+        private readonly List<(double t, Vector2 gazeNorm)> _gazeTrail = new List<(double, Vector2)>(64);
+        private const double GazeTrailSeconds = 0.6;
+        private const double ClickWindowStart = 0.35;   // seconds before the click
+        private const double ClickWindowEnd = 0.08;
+        //Registered pursuit targets (game objects the player may track) + pending attention events.
+        private readonly Dictionary<string, PursuitCorrelator> _pursuitTargets = new Dictionary<string, PursuitCorrelator>();
+        private readonly List<(double t, Vector2 posNorm)> _attentionEvents = new List<(double, Vector2)>();
+        private const double AttentionEventWindow = 0.45;   // capture happens within ~100-350ms of onset
+
+        //---- Fixation-level AOI stream (see FixationAggregator): AOI hit-testing consumes the running
+        //fixation centroid of the UNFILTERED calibrated gaze (sqrt(N) less noise, no filter phase-lag);
+        //the visible cursor keeps the responsive One-Euro output.
+        private readonly FixationAggregator _fixationAggregator = new FixationAggregator();
+
+        //---- Per-user, per-region error model (bias + covariance), written by the evaluation. Powers
+        //(a) runtime BIAS CORRECTION of the AOI stream (the measured systematic offset per region is
+        //subtracted — a free local correction on top of ridge+TPS, measured rather than fitted) and
+        //(b) the probabilistic AOI layer (P(AOI|fixation) under the region's error ellipse).
+        private GazeErrorModel _errorModel;
+        private readonly List<(string uID, float probability)> _aoiProbabilities = new List<(string, float)>();
+        private double _lastProbabilityTime;
+        private const double ProbabilityInterval = 0.25;   // seconds; 32-sample MC per AOI, so throttled
+
+        //Latest camera-frame capture time + derived pipeline latency (see IGazeProvider.CaptureTimestamp).
+        private double _captureTimestamp;
         #endregion
 
         #region Public accessors
@@ -97,6 +130,16 @@ namespace UnitEye
         public long LastGazeLocationTimeUnix { get; private set; }
         /// <summary>Increments once for every fresh provider gaze sample consumed by this component.</summary>
         public long GazeSampleSequence { get; private set; }
+        /// <summary>Capture time (Time.unscaledTimeAsDouble) of the camera frame behind the current gaze.</summary>
+        public double CaptureTimestamp => _captureTimestamp;
+        /// <summary>Measured pipeline latency of the current sample (consume-time to now), seconds. A
+        /// moving object crossing at 500px/s under 150ms latency is a 75px systematic AOI error — pair
+        /// logged gaze with world state at CaptureTimestamp, not at log time.</summary>
+        public float MeasuredLatencySeconds { get; private set; }
+        /// <summary>The online drift corrector (read-only access for session-health telemetry).</summary>
+        public DriftCorrector DriftCorrector => _driftCorrector;
+        /// <summary>True while the fixation aggregator classifies the current gaze as a fixation.</summary>
+        public bool InFixation => _fixationAggregator.InFixation;
         #endregion
 
         #region Serialized values
@@ -149,14 +192,26 @@ namespace UnitEye
                 return;
             }
 
+            //Persist the OLD backbone's drift state before switching (it belongs to that backbone's
+            //calibrated signal), then load the NEW backbone's saved state instead of deleting it —
+            //ClearDrift() here used to wipe the switched-TO backbone's cross-session warm start, because
+            //DriftStateKey already pointed at the new name.
+            if (_driftCorrector.AcceptedAnchors > 0)
+                PlayerPrefs.SetString(DriftStateKey, _driftCorrector.SaveToJson());
+
             _gazeBackbone = backbone;
             _provider?.SetBackbone(backbone);
             //Load this backbone's own calibration (per-backbone files). If it hasn't been calibrated yet,
             //the models load as null and RefineGazeLocation falls back to raw gaze until you calibrate.
             _modelStore.Load(_calibrations, _gazeBackbone);
-            //A drift offset captured against the OLD backbone's calibrated gaze is meaningless for the new
-            //model's output — clear it rather than silently shifting the new gaze by a stale correction.
-            ClearDrift();
+            _errorModel = GazeErrorModel.Load(_gazeBackbone);
+
+            //Fresh in-memory state for the new backbone's signal, warm-started from ITS saved session.
+            _driftOffset = Vector2.zero;
+            _recenterArmedUntil = -1f;
+            _hasRecentGaze = false;
+            _driftCorrector.Reset();
+            _driftCorrector.LoadFromJson(PlayerPrefs.GetString(DriftStateKey, ""));
         }
 
         [System.NonSerialized]
@@ -184,6 +239,7 @@ namespace UnitEye
         public void ReloadCalibration()
         {
             _modelStore.Load(_calibrations, _gazeBackbone);
+            _errorModel = GazeErrorModel.Load(_gazeBackbone);
             ClearDrift();
         }
 
@@ -194,11 +250,140 @@ namespace UnitEye
         /// </summary>
         public void RecenterDrift() => _recenterArmedUntil = Time.unscaledTime + RecenterArmSeconds;
 
-        /// <summary>Clears any drift re-centering offset (and cancels a pending re-center).</summary>
+        /// <summary>Clears any drift correction — the manual re-center offset AND the online affine
+        /// corrector state (and cancels a pending re-center). Called on (re)calibration/profile load.</summary>
         public void ClearDrift()
         {
             _driftOffset = Vector2.zero;
             _recenterArmedUntil = -1f;
+            _driftCorrector.Reset();
+            PlayerPrefs.DeleteKey(DriftStateKey);
+        }
+
+        private string DriftStateKey => $"UnitEyeDriftState_{_gazeBackbone}";
+
+        private void OnApplicationQuit()
+        {
+            //Persist the drift state for a warm start next session (same backbone; reset on recalibration).
+            if (_driftCorrector.AcceptedAnchors > 0)
+            {
+                PlayerPrefs.SetString(DriftStateKey, _driftCorrector.SaveToJson());
+                PlayerPrefs.Save();
+            }
+        }
+
+        // ------------------------------------------------------------------------------------------
+        // Drift-anchor sources. All observe the PRE-corrector calibrated gaze (the trail) so the
+        // corrector learns the full residual; all go through DriftCorrector's outlier gate.
+        // ------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Click anchors: at a mouse click, the median PRE-CLICK-window gaze (gaze leads a click by
+        /// 100-200ms and has settled by then) is anchored to the click position. The corrector's robust
+        /// residual gate rejects the ~1/3 of clicks users make without looking.
+        /// </summary>
+        private void CollectClickAnchor()
+        {
+            if (!clickAnchors) return;
+            var mouse = Mouse.current;                       // null when no mouse device exists
+            if (mouse == null || !mouse.leftButton.wasPressedThisFrame) return;
+
+            var mp = mouse.position.ReadValue();
+            //Input system positions are bottom-left; gaze space is top-left.
+            var clickNorm = new Vector2(
+                Mathf.Clamp01(mp.x / Screen.width),
+                Mathf.Clamp01(1f - mp.y / Screen.height));
+
+            if (TryMedianTrailGaze(ClickWindowStart, ClickWindowEnd, out var gazeNorm))
+                _driftCorrector.AddAnchor(gazeNorm, clickNorm, 1f);
+        }
+
+        /// <summary>
+        /// Attention-event anchors: the game declares "something attention-grabbing appeared at P"
+        /// (<see cref="ReportAttentionEvent"/>); if the gaze settles near P within the capture window
+        /// (~100-350ms, abrupt onsets capture attention that fast), it becomes a low-weight anchor.
+        /// </summary>
+        private void CollectAttentionEventAnchors(Vector2 currentGazeNorm)
+        {
+            for (int i = _attentionEvents.Count - 1; i >= 0; i--)
+            {
+                var (t, pos) = _attentionEvents[i];
+                double age = _captureTimestamp - t;
+                if (age > AttentionEventWindow)
+                {
+                    _attentionEvents.RemoveAt(i);
+                    continue;
+                }
+                //Settled near the event (within ~10% of the screen) after the saccade window opened.
+                if (age > 0.1 && _fixationAggregator.InFixation &&
+                    (currentGazeNorm - pos).magnitude < 0.1f)
+                {
+                    _driftCorrector.AddAnchor(currentGazeNorm, pos, 0.3f);
+                    _attentionEvents.RemoveAt(i);
+                }
+            }
+        }
+
+        /// <summary>Median of the gaze-trail samples captured between [click-start .. click-end] ago.</summary>
+        private bool TryMedianTrailGaze(double windowStart, double windowEnd, out Vector2 median)
+        {
+            median = default;
+            double now = Time.unscaledTimeAsDouble;
+            var xs = new List<float>(8);
+            var ys = new List<float>(8);
+            foreach (var (t, g) in _gazeTrail)
+            {
+                double age = now - t;
+                if (age <= windowStart && age >= windowEnd)
+                {
+                    xs.Add(g.x);
+                    ys.Add(g.y);
+                }
+            }
+            if (xs.Count < 3) return false;
+            xs.Sort();
+            ys.Sort();
+            median = new Vector2(xs[xs.Count / 2], ys[ys.Count / 2]);
+            return true;
+        }
+
+        /// <summary>
+        /// Game-facing: report the CURRENT position (normalized 0..1, top-left origin) of a moving object
+        /// the player plausibly tracks, once per frame per object. When the gaze trajectory provably
+        /// pursues it (per-axis correlation gate), dense drift anchors are emitted along the path —
+        /// including screen regions clicks never visit. Route reward-flight animations through corners
+        /// occasionally and the corners stay calibrated for free.
+        /// </summary>
+        public void FeedPursuitTarget(string id, Vector2 normalizedPosition)
+        {
+            if (!onlineDriftCorrection || _provider == null) return;
+            if (!_pursuitTargets.TryGetValue(id, out var correlator))
+                _pursuitTargets[id] = correlator = new PursuitCorrelator();
+
+            //Current pre-corrector gaze = last trail entry (this frame's sample). The gaze carries its
+            //CAPTURE time; the object position carries the RENDER clock — the correlator needs both (the
+            //pipeline latency between them would otherwise invert the pursuit-lag compensation).
+            if (_gazeTrail.Count == 0) return;
+            var (gazeTime, gazeNorm) = _gazeTrail[_gazeTrail.Count - 1];
+            if (correlator.Feed(gazeNorm, gazeTime, normalizedPosition, Time.unscaledTimeAsDouble,
+                    out var pairedGaze, out var pairedTarget))
+                _driftCorrector.AddAnchor(pairedGaze, pairedTarget, 0.5f);
+        }
+
+        /// <summary>Stop tracking a pursuit target (e.g. the object despawned).</summary>
+        public void RemovePursuitTarget(string id) => _pursuitTargets.Remove(id);
+
+        /// <summary>
+        /// Game-facing: declare that something attention-grabbing just appeared/happened at the given
+        /// normalized screen position (enemy spawn, explosion, dialog popup). If the player's gaze settles
+        /// there within ~350ms it becomes a low-weight drift anchor. Costs nothing when they don't look.
+        /// </summary>
+        public void ReportAttentionEvent(Vector2 normalizedPosition)
+        {
+            if (!onlineDriftCorrection) return;
+            _attentionEvents.Add((Time.unscaledTimeAsDouble, normalizedPosition));
+            if (_attentionEvents.Count > 16)
+                _attentionEvents.RemoveAt(0);
         }
 
         [SerializeField]
@@ -235,6 +420,27 @@ namespace UnitEye
         //before the eye moved on, which reads as poor accuracy. ~1.0 Hz is the 1€ paper's pointing baseline.
         [SerializeField, Range(1e-10f, 3.0f)] public float mincutoff = 1.0f;
         [SerializeField, Range(1e-10f, 10.0f)] public float dcutoff = 1.0f;
+
+        [Tooltip("Feed AOI hit-testing the running FIXATION CENTROID of the calibrated gaze instead of the per-frame filtered sample. Fixation-level aggregation cuts the noise component ~sqrt(N) and is what commercial trackers report; the visible cursor keeps the responsive filtered signal either way.")]
+        [SerializeField] public bool fixationAOILogging = true;
+
+        [Tooltip("Use the per-region error model measured by the EVALUATION (run one after calibrating!) to (a) subtract the measured systematic bias from the AOI stream and (b) log P(AOI|fixation) probabilities alongside boolean hits. No effect until an evaluation has been run for the active backbone.")]
+        [SerializeField] public bool useErrorModel = true;
+
+        [Tooltip("Continuously correct slow drift with a small affine layer fed by validated interaction anchors (clicks, registered pursuit targets, attention events). Sits on top of the frozen calibration; worst case it converges to identity. Webcam trackers without this lose ~50% accuracy per 20-minute session.")]
+        [SerializeField] public bool onlineDriftCorrection = true;
+
+        [Tooltip("Treat mouse clicks as gaze anchors for drift correction: the pre-click fixation (gaze leads a click by 100-200ms) is anchored to the click position, gated for outliers (users look at their click only ~2/3 of the time).")]
+        [SerializeField] public bool clickAnchors = true;
+
+        [Tooltip("Horizontal-flip test-time augmentation for the direction backbones (MobileOne/MobileNetV2/ResNet34): infer the mirrored crop too and average (~3-8% accuracy gain, 2x inference). Sync readback only. HAND-TEST before shipping: if gaze collapses toward screen centre horizontally, the mirror convention is wrong on this setup - turn it off.")]
+        [SerializeField] private bool _flipAugmentation = false;
+
+        [Tooltip("Roll-normalize the direction backbones' face crop (rotate sampling by -headRoll so the model always sees an upright face — 2D data normalization; laptop users tilt constantly). HAND-TEST: if gaze degrades when you tilt your head, the sign convention is wrong on this setup - turn it off.")]
+        [SerializeField] private bool _rollNormalizeCrops = true;
+
+        [Tooltip("Whether the user currently wears glasses. Saved with calibration profiles; loading a profile made with the other state warns (glasses are worth ~1cm+ of error to appearance models). Toggleable in the Gaze UI profiles panel.")]
+        public bool userWearsGlasses = false;
 
         //Hold the last gaze location while blinking instead of feeding unreliable eye crops through calibration/filtering
         [SerializeField] public bool holdGazeDuringBlink = true;
@@ -273,8 +479,16 @@ namespace UnitEye
     #if UNITY_WEBGL && !UNITY_EDITOR
             _provider = new WebGLGazeProvider();
     #else
-            _provider = new NativeGazeProvider(_mediaPipeGO, _gazeBackbone, _asyncGpuReadback);
+            _provider = new NativeGazeProvider(_mediaPipeGO, _gazeBackbone, _asyncGpuReadback, _flipAugmentation, _rollNormalizeCrops);
     #endif
+
+            //Warm-start the drift correction from the previous session (same backbone): seating drift is
+            //largely affine, so last session's correction is a better prior than identity. It keeps
+            //adapting from anchors either way, and a recalibration resets it.
+            _driftCorrector.LoadFromJson(PlayerPrefs.GetString(DriftStateKey, ""));
+
+            //Per-region error model measured by the evaluation (null until one has been run).
+            _errorModel = GazeErrorModel.Load(_gazeBackbone);
 
             //Apply the initial face-mesh overlay preference
             _provider.AnnotateFaceMesh = showFaceMesh;
@@ -336,6 +550,14 @@ namespace UnitEye
 
         public virtual void LateUpdate()
         {
+            //Click anchors are collected on EVERY render frame, BEFORE the fresh-sample gate below: the
+            //camera runs at ~30fps while the display runs 60-144, so `wasPressedThisFrame` is true on
+            //exactly one render frame that usually carries NO new camera sample — gating clicks on fresh
+            //samples silently dropped most of them. The pre-click fixation window reads the gaze TRAIL,
+            //which exists regardless of whether this frame produced a sample.
+            if (onlineDriftCorrection && !PauseCSVLogging && _provider != null)
+                CollectClickAnchor();
+
             //Peform neural network inference through entire eye tracking pipeline
             if (!_provider.Tick())
                 return;
@@ -362,6 +584,12 @@ namespace UnitEye
                 _blinkHoldStartedAt = -1f;
             }
 
+            //Capture-time bookkeeping for THIS sample (a fresh sample was consumed even when the blink
+            //hold below freezes the reported position — the timestamp must not go stale for the fixation
+            //aggregator / CSV latency column / pursuit pairing).
+            _captureTimestamp = _provider.CaptureTimestamp;
+            MeasuredLatencySeconds = (float)(Time.unscaledTimeAsDouble - _captureTimestamp);
+
             Vector2 unfilteredGaze;
             if (holdGaze)
             {
@@ -376,9 +604,36 @@ namespace UnitEye
                 //Apply calibration
                 gazeLocation = RefineGazeLocation(gazeLocation, _calibrations);
 
-                //Track a smoothed PRE-offset calibrated gaze (the reference for drift re-centering) and,
-                //if a re-center is armed and its countdown has elapsed, capture the offset that maps this
-                //smoothed gaze exactly to screen centre.
+                //Per-region error-model bias correction — the systematic offset the EVALUATION measured
+                //at this screen region, subtracted UPSTREAM of the drift corrector so the two layers see
+                //disjoint residuals (the corrector's anchors observe the error-model-corrected signal and
+                //therefore learn only what remains — stacking them the other way around subtracted the
+                //same bias twice once anchors accumulated). Applied only when the model was measured on
+                //the calibration type that is actually active.
+                if (useErrorModel && _errorModel != null && _errorModel.AppliesTo(_calibrations))
+                {
+                    var gazeNormForBias = new Vector2(gazeLocation.x / Screen.width, gazeLocation.y / Screen.height);
+                    _errorModel.Query(gazeNormForBias, out var regionBias, out _, out _, out _);
+                    gazeLocation -= new Vector2(regionBias.x * Screen.width, regionBias.y * Screen.height);
+                }
+
+                //The pre-corrector gaze trail the anchor sources sample from (normalized).
+                var preCorrectorNorm = new Vector2(gazeLocation.x / Screen.width, gazeLocation.y / Screen.height);
+                _gazeTrail.Add((_captureTimestamp, preCorrectorNorm));
+                while (_gazeTrail.Count > 0 && _captureTimestamp - _gazeTrail[0].t > GazeTrailSeconds)
+                    _gazeTrail.RemoveAt(0);
+
+                //Online drift correction: a slowly-adapted affine layer fed by validated interaction
+                //anchors. The anchor sources observe the PRE-corrector signal, so the corrector always
+                //learns the full residual.
+                if (onlineDriftCorrection)
+                {
+                    var corrected = _driftCorrector.Apply(preCorrectorNorm);
+                    gazeLocation = new Vector2(corrected.x * Screen.width, corrected.y * Screen.height);
+                }
+
+                //Manual drift re-center, applied and captured AFTER the corrector: it corrects what the
+                //corrector has not learned (capturing it pre-corrector made the two translations stack).
                 if (!_hasRecentGaze) { _recentCalibratedGaze = gazeLocation; _hasRecentGaze = true; }
                 else _recentCalibratedGaze = Vector2.Lerp(_recentCalibratedGaze, gazeLocation, 0.15f);
                 if (_recenterArmedUntil > 0f && Time.unscaledTime >= _recenterArmedUntil)
@@ -386,9 +641,13 @@ namespace UnitEye
                     _driftOffset = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f) - _recentCalibratedGaze;
                     _recenterArmedUntil = -1f;
                 }
-
-                //Apply the drift re-centering offset (a constant correction; zero until the user re-centers).
                 gazeLocation += _driftOffset;
+
+                //Attention-event anchors (click anchors are collected before the fresh-sample gate — see
+                //the top of LateUpdate — because clicks land on render frames, most of which carry no new
+                //camera sample).
+                if (onlineDriftCorrection && !PauseCSVLogging)
+                    CollectAttentionEventAnchors(preCorrectorNorm);
 
                 //Apply filtering
                 unfilteredGaze = gazeLocation;
@@ -399,15 +658,50 @@ namespace UnitEye
             var now = System.DateTime.Now;
             LastGazeLocationTimeUnix = ((System.DateTimeOffset)now).ToUnixTimeMilliseconds();
 
-            //AOI updating (refills the reused scratch list; no per-frame allocation)
-            _aoiManager.CheckAOIList(new Vector2(gazeLocation.x / Screen.width, gazeLocation.y / Screen.height), aoiNameList);
+            //AOI updating (refills the reused scratch list; no per-frame allocation). The AOI stream uses
+            //the fixation CENTROID of the unfiltered calibrated gaze (sqrt(N) noise reduction, no filter
+            //phase lag) — the cursor above keeps the filtered signal; the two consumers deliberately differ.
+            var aoiPoint = fixationAOILogging
+                ? _fixationAggregator.Add(unfilteredGaze, _captureTimestamp)
+                : gazeLocation;
+            var aoiNorm = new Vector2(aoiPoint.x / Screen.width, aoiPoint.y / Screen.height);
+
+            //Error ellipse for this screen region (the BIAS was already subtracted upstream, before the
+            //drift corrector — subtracting it here too double-corrected); the covariance feeds P(AOI|...).
+            float covXX = 0f, covXY = 0f, covYY = 0f;
+            if (useErrorModel && _errorModel != null)
+                _errorModel.Query(aoiNorm, out _, out covXX, out covXY, out covYY);
+
+            _aoiManager.CheckAOIList(aoiNorm, aoiNameList);
+
+            //Probabilistic AOI logging: P(AOI | fixation) under the region's error ellipse, throttled
+            //(32-sample MC per AOI) and only while fixating (a saccade sample has no meaningful ellipse).
+            if (useErrorModel && _errorModel != null &&
+                (!fixationAOILogging || _fixationAggregator.InFixation) &&
+                Time.unscaledTimeAsDouble - _lastProbabilityTime >= ProbabilityInterval)
+            {
+                _lastProbabilityTime = Time.unscaledTimeAsDouble;
+                _aoiManager.CheckAOIProbabilities(aoiNorm, covXX, covXY, covYY, _aoiProbabilities);
+                //Fold the calibrated probabilities into the logged AOI strings: "uID p=0.87". A top-2 gap
+                //under 0.2 is flagged AMBIGUOUS — those fixations are coin flips and analysts must know.
+                if (_aoiProbabilities.Count > 0)
+                {
+                    for (int i = 0; i < _aoiProbabilities.Count && i < 3; i++)
+                        aoiNameList.Add($"{_aoiProbabilities[i].uID} p={_aoiProbabilities[i].probability:F2}");
+                    //Only meaningful when the leader is a real candidate — two near-zero probabilities are
+                    //"looking at neither", not an ambiguous hit.
+                    if (_aoiProbabilities.Count >= 2 && _aoiProbabilities[0].probability >= 0.2f &&
+                        _aoiProbabilities[0].probability - _aoiProbabilities[1].probability < 0.2f)
+                        aoiNameList.Add("AMBIGUOUS");
+                }
+            }
 
             //CSV Logging. ShouldLog is checked BEFORE building the row: with logsPerSecond below the frame
             //rate the limiter drops most frames, so skipping the CSVData + AOI-list copy on those frames
             //avoids steady per-frame garbage. CSVData retains its AOI list by reference until the queue is
             //flushed, so accepted rows get their OWN copy (the scratch list is refilled every frame).
             if (!PauseCSVLogging && _csvLogger != null && _csvLogger.isActiveAndEnabled && _csvLogger.ShouldLog)
-                _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _provider.EyeFeature, _blinking, now, new List<string>(aoiNameList)));
+                _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _provider.EyeFeature, _blinking, now, new List<string>(aoiNameList), MeasuredLatencySeconds * 1000f));
 
             //Drowsy calibration
             if (_provider.IsCalibratingDrowsy)
@@ -661,6 +955,11 @@ namespace UnitEye
 
             //Reload calibration file
             Calibrations = _calibrations;
+            //A fresh calibration deleted the old per-region error model (its biases measured the OLD fit)
+            //— drop the in-memory copy too; the next evaluation rebuilds it.
+            _errorModel = GazeErrorModel.Load(_gazeBackbone);
+            //The corrector's anchors were collected against the old calibration's signal.
+            ClearDrift();
 
             IsRendering = true;
         }
@@ -715,6 +1014,9 @@ namespace UnitEye
             _evaluationScript.enabled = false;
             //Consume the return so LateUpdate does not call UnloadEvaluation again next frame
             _evaluationScript.ClearReturned();
+
+            //The evaluation just measured + saved a fresh per-region error model — pick it up live.
+            _errorModel = GazeErrorModel.Load(_gazeBackbone);
 
             IsRendering = true;
         }
@@ -1047,10 +1349,15 @@ namespace UnitEye
             GUI.Box(new Rect(0, 0, width * 0.48f, height * 0.15f), "Calibration profiles (save/load)", gazeUIStyleBox);
 
             GUI.Label(new Rect(width * 0.02f, height * 0.03f, width * 0.08f, height * 0.04f), "Name:", gazeUIStyleLabel);
-            _profileName = GUI.TextField(new Rect(width * 0.08f, height * 0.03f, width * 0.24f, height * 0.035f), _profileName ?? "");
+            _profileName = GUI.TextField(new Rect(width * 0.08f, height * 0.03f, width * 0.19f, height * 0.035f), _profileName ?? "");
+            //Glasses state travels with the profile: glasses are worth ~1cm+ to appearance models, so a
+            //calibration made with them silently degrades without them (and vice versa) — Load warns on
+            //a mismatch against this toggle.
+            userWearsGlasses = GUI.Toggle(new Rect(width * 0.275f, height * 0.03f, width * 0.055f, height * 0.035f),
+                userWearsGlasses, "Glasses", gazeUIStyleButton);
             if (GUI.Button(new Rect(width * 0.335f, height * 0.028f, width * 0.12f, height * 0.04f), $"Save ({DisplayName(_gazeBackbone)})", gazeUIStyleButton))
             {
-                _profileStatus = CalibrationProfileStore.Save(_profileName, _gazeBackbone);
+                _profileStatus = CalibrationProfileStore.Save(_profileName, _gazeBackbone, userWearsGlasses);
                 _profileList = CalibrationProfileStore.List();
             }
 
@@ -1065,7 +1372,7 @@ namespace UnitEye
                 _profileIndex = (_profileIndex + 1) % _profileList.Count;
             if (GUI.Button(new Rect(width * 0.30f, height * 0.08f, width * 0.09f, height * 0.04f), "Load", gazeUIStyleButton) && hasProfiles)
             {
-                _profileStatus = CalibrationProfileStore.Load(current);
+                _profileStatus = CalibrationProfileStore.Load(current, userWearsGlasses);
                 ReloadCalibration();
                 _profileName = current;
             }

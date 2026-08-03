@@ -43,6 +43,7 @@ namespace UnitEye
         public void RemoveAOI(AOI aoi)
         {
             _aoiList.Remove(aoi);
+            if (aoi != null) _dwell.Remove(aoi.uID);
         }
         /// <summary>
         /// Remove AOI from _aoiList by uID.
@@ -53,6 +54,7 @@ namespace UnitEye
             //RemoveAll instead of foreach+Remove: mutating the list inside a foreach over it throws
             //InvalidOperationException the moment a match is found (i.e. exactly in the success case).
             _aoiList.RemoveAll(aoi => aoi.uID == uID);
+            _dwell.Remove(uID);
         }
 
         /// <summary>
@@ -97,13 +99,64 @@ namespace UnitEye
         /// (e.g. queueing it into a CSVData, which serializes later) must store their own copy — this
         /// same list instance is refilled on the next call.
         /// </summary>
+        //---- Hysteresis + minimum dwell (the GazeGridQuantizer pattern generalized to all AOIs). A hit
+        //only REGISTERS once the gaze has been inside for minimumDwellSeconds (human fixations are rarely
+        //<100ms — shorter "hits" are noise), and an AOI that DID register stays active until the gaze has
+        //been outside it for exitHysteresisSeconds (kills boundary flicker on noisy signals). An AOI that
+        //never satisfied the dwell gets no hysteresis — a saccade sweeping through must not register a
+        //phantom hit on the way out.
+        [System.NonSerialized] public float minimumDwellSeconds = 0.1f;
+        [System.NonSerialized] public float exitHysteresisSeconds = 0.12f;
+        [System.NonSerialized] public bool dwellFiltering = true;
+        private struct DwellState { public float insideSince, lastInside; public bool registered; }
+        private readonly Dictionary<string, DwellState> _dwell = new Dictionary<string, DwellState>();
+
         public void CheckAOIList(Vector2 point, List<string> list)
         {
             list.Clear();
+            float now = Time.unscaledTime;
 
             foreach (AOI aoi in _aoiList)
             {
-                if (aoi.enabled && aoi.CheckAOI(point))
+                if (!aoi.enabled)
+                {
+                    //No stale dwell state may survive a disable — re-enabling must start a fresh dwell.
+                    _dwell.Remove(aoi.uID);
+                    if (aoi.focused) aoi.focused = false;
+                    continue;
+                }
+
+                bool rawInside = aoi.CheckAOIWithMargin(point);
+                bool inside = rawInside;
+                //Raycast-backed AOIs (AOITagList) refresh their hit list inside CheckAOI — extending them
+                //through hysteresis would report stale/empty object lists ("uID hit:" rows, and consumers
+                //indexing the hit list would throw), so they get the dwell gate but no exit extension.
+                bool extendable = !(aoi is AOITagList);
+                if (dwellFiltering)
+                {
+                    _dwell.TryGetValue(aoi.uID, out var state);
+                    if (rawInside)
+                    {
+                        if (state.insideSince <= 0f) state.insideSince = now;
+                        state.lastInside = now;
+                        inside = now - state.insideSince >= minimumDwellSeconds;
+                        if (inside) state.registered = true;
+                        _dwell[aoi.uID] = state;
+                    }
+                    else if (extendable && state.registered && now - state.lastInside <= exitHysteresisSeconds)
+                    {
+                        //Exit hysteresis: only an AOI that actually REGISTERED stays briefly active.
+                        inside = true;
+                        _dwell[aoi.uID] = state;
+                    }
+                    else
+                    {
+                        _dwell.Remove(aoi.uID);
+                        inside = false;
+                    }
+                }
+
+                if (inside)
                 {
                     //Debug.Log($"User looking at AOI: {aoi.uID}");
                     //If aoi is AOITagList add hitTagList to string
@@ -126,6 +179,32 @@ namespace UnitEye
                     if (aoi.focused) aoi.focused = false;
                 }
             }
+        }
+
+        /// <summary>
+        /// Probabilistic hit test: fills (uID, probability) for every enabled AOI whose hit probability
+        /// under the given error ellipse exceeds <paramref name="minimumProbability"/>, sorted descending.
+        /// This is what the CSV logger should record alongside (or instead of) boolean hits: with a
+        /// ~2cm-sigma tracker, border fixations are genuinely ambiguous, and calibrated probabilities keep
+        /// downstream dwell statistics honest where booleans manufacture certainty. Does not touch
+        /// focused/hysteresis state (the boolean path owns interaction semantics).
+        /// </summary>
+        public void CheckAOIProbabilities(Vector2 mean, float covXX, float covXY, float covYY,
+            List<(string uID, float probability)> results, float minimumProbability = 0.05f)
+        {
+            results.Clear();
+            foreach (AOI aoi in _aoiList)
+            {
+                if (!aoi.enabled) continue;
+                //The offscreen/inverted catch-all AOIs are not meaningful probability targets.
+                if (aoi.inverted) continue;
+                //Raycast-backed AOIs would fire 32 physics raycasts per probability — boolean-only there.
+                if (aoi is AOITagList) continue;
+                float p = aoi.HitProbability(mean, covXX, covXY, covYY);
+                if (p >= minimumProbability)
+                    results.Add((aoi.uID, p));
+            }
+            results.Sort((a, b) => b.probability.CompareTo(a.probability));
         }
 
         /// <summary>

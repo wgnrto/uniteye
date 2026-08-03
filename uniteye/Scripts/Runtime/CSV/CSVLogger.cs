@@ -59,7 +59,7 @@ namespace UnitEye
         private readonly List<CSVData> _queue = new List<CSVData>();
 
         //Header row to name columns in csv file
-        private static readonly string _Header = "X Filtered Pixel; Y Filtered Pixel; X Filtered Normalized; Y Filtered Normalized; X Raw Normalized; Y Raw Normalized; Distance to Camera in mm; Eye Aspect Ratio (Height/Width); Blinking; Timestamp With Milliseconds; Unix Timestamp In Milliseconds; AOI List; Additional Notes";
+        private static readonly string _Header = "X Filtered Pixel; Y Filtered Pixel; X Filtered Normalized; Y Filtered Normalized; X Raw Normalized; Y Raw Normalized; Distance to Camera in mm; Eye Aspect Ratio (Height/Width); Blinking; Timestamp With Milliseconds; Unix Timestamp In Milliseconds; Capture Latency In Milliseconds; AOI List; Additional Notes";
 
         private void Start()
         {

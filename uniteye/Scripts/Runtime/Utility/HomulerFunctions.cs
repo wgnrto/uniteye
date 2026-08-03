@@ -37,7 +37,14 @@ namespace UnitEye
             float leftYUp = 1f - leftY;
             float rightYUp = 1f - rightY;
 
-            //Calculation similar to EyeMU approach
+            //Calculation similar to EyeMU approach.
+            //KNOWN QUIRK (kept deliberately): eyeLength/yShift are WIDTH-normalized but yShift is applied
+            //to the HEIGHT-normalized y coordinate, so the eye's vertical placement inside the crop varies
+            //with the camera aspect ratio (at 16:9 the eye sits ~24% from the crop top — the framing the
+            //browser pipeline verified and the shipped calibrations were trained against). Constant within
+            //a session -> absorbed by calibration; "fixing" it would silently change EyeMU's input framing
+            //for every existing calibration, so any change must ship together with a forced recalibration
+            //and a webcam hand-test, plus the same change in webgl/uniteye-core.js eyeCropRect.
             float eyeLength = rightX - leftX;
             float xShift = eyeLength * 0.2f;
             eyeLength += 2f * xShift;
@@ -117,6 +124,82 @@ namespace UnitEye
             }
             dest[index] = (iris.X - midX) / cornerDistance;
             dest[index + 1] = (iris.Y - midY) / cornerDistance;
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Shared "context" feature block appended to every backbone's calibration vector. Layout (17):
+        //   [tx, ty, dist, eyeLook x8, gazeA·headYaw, gazeB·headPitch, gazeA·tx, gazeB·ty, gazeA·dist,
+        //    gazeB·dist]
+        // tx/ty/dist are the metric head translation + depth (transformation matrix, in metres; falls
+        // back to the face-bbox centre offset with dist 0 when the matrix is unavailable) — they close the
+        // "lateral head shift is invisible" gap. The eyeLook blendshapes are a second, independently
+        // trained gaze estimate. The interaction terms give the LINEAR ridge the multiplicative structure
+        // of the physical map (screen_x ≈ eyePos_x + D·tan(yaw + headYaw)): without them the head-rotation
+        // calibration stage collects variance the per-axis linear-in-pose model family cannot exploit
+        // beyond an additive shift. gazeA/gazeB are the backbone's primary horizontal/vertical gaze terms
+        // (yaw/pitch for the direction models, the normalized point for EyeMU).
+        // ---------------------------------------------------------------------------------------------
+
+        /// <summary>Number of features in the shared context block.</summary>
+        public const int ContextFeatureCount = 17;
+        /// <summary>Number of tail slots the context source values occupy (tx, ty, dist, 8 eyeLook).</summary>
+        public const int ContextTailCount = 11;
+
+        /// <summary>
+        /// Snapshots the context source values (head translation, depth, eyeLook blendshapes) from the
+        /// face mesh into a feature TAIL at <paramref name="start"/> (11 slots). Runners snapshot tails at
+        /// inference-schedule time so async readback publishes internally consistent vectors.
+        /// </summary>
+        public static void FillTailContext(FaceMeshSolution faceMesh, float[] dest, int start)
+        {
+            if (faceMesh != null && faceMesh.HasTransformMatrix)
+            {
+                var t = faceMesh.HeadTranslation;      // canonical-face cm, camera space
+                dest[start] = t.x * 0.01f;             // metres — keeps magnitudes in a sane range
+                dest[start + 1] = t.y * 0.01f;
+                dest[start + 2] = Mathf.Abs(t.z) * 0.01f;
+            }
+            else if (faceMesh != null && faceMesh.FaceLandmarks != null)
+            {
+                //Fallback: normalized face-bbox centre offset (proportional to lateral translation), no depth.
+                var bounds = faceMesh.FaceBoundsNormalized;
+                dest[start] = bounds.center.x - 0.5f;
+                dest[start + 1] = bounds.center.y - 0.5f;
+                dest[start + 2] = 0f;
+            }
+            else
+            {
+                dest[start] = dest[start + 1] = dest[start + 2] = 0f;
+            }
+
+            var eyeLook = faceMesh != null && faceMesh.HasBlendshapes ? faceMesh.EyeLookBlendshapes : null;
+            for (int i = 0; i < 8; i++)
+                dest[start + 3 + i] = eyeLook != null ? eyeLook[i] : 0f;
+        }
+
+        /// <summary>
+        /// Fills the 17-feature context block at <paramref name="start"/> of the calibration vector from a
+        /// tail whose context source values begin at <paramref name="tailContextStart"/> (see
+        /// FillTailContext). gazeA/gazeB are the backbone's primary gaze terms; headYaw/headPitch come from
+        /// the same tail snapshot as everything else so the products are single-frame consistent.
+        /// </summary>
+        public static void FillContextFeatures(float[] f, int start, float gazeA, float gazeB,
+            float headYaw, float headPitch, float[] tail, int tailContextStart)
+        {
+            float tx = tail[tailContextStart];
+            float ty = tail[tailContextStart + 1];
+            float dist = tail[tailContextStart + 2];
+            f[start] = tx;
+            f[start + 1] = ty;
+            f[start + 2] = dist;
+            for (int i = 0; i < 8; i++)
+                f[start + 3 + i] = tail[tailContextStart + 3 + i];
+            f[start + 11] = gazeA * headYaw;
+            f[start + 12] = gazeB * headPitch;
+            f[start + 13] = gazeA * tx;
+            f[start + 14] = gazeB * ty;
+            f[start + 15] = gazeA * dist;
+            f[start + 16] = gazeB * dist;
         }
 
         //Note: PixelsToMm and Quit were dead duplicates of the versions in Functions (which callers use)

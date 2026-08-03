@@ -19,6 +19,10 @@ namespace UnitEye
         public string name;
         public string createdUtc;
         public string backbone;   // informational: the active gaze backbone when the profile was saved
+        //Whether the user wore glasses when this calibration was made. Glasses are worth ~1cm+ of error
+        //to appearance models, and a profile calibrated WITH glasses silently degrades without them (and
+        //vice versa) — consumers should warn on a mismatch with the current session.
+        public bool wearingGlasses;
         //Relative path under "Calibration Files" (e.g. "RidgeRegression/Reg_X_EyeMU.json") -> raw JSON content.
         public Dictionary<string, string> files = new Dictionary<string, string>();
     }
@@ -45,7 +49,7 @@ namespace UnitEye
         /// Snapshots the current calibration files for <paramref name="backbone"/> into a user profile file.
         /// Returns a short status string for the UI.
         /// </summary>
-        public static string Save(string name, GazeBackbone backbone)
+        public static string Save(string name, GazeBackbone backbone, bool wearingGlasses = false)
         {
             name = Sanitize(name);
             if (string.IsNullOrEmpty(name))
@@ -60,6 +64,7 @@ namespace UnitEye
                 name = name,
                 createdUtc = DateTime.UtcNow.ToString("o"),
                 backbone = backbone.ToString(),
+                wearingGlasses = wearingGlasses,
                 files = files,
             };
 
@@ -81,7 +86,13 @@ namespace UnitEye
         /// Restores a named profile's files over the active calibration files. The caller reloads the
         /// calibration model afterward. Returns a short status string for the UI.
         /// </summary>
-        public static string Load(string name)
+        public static string Load(string name) => Load(name, null);
+
+        /// <summary>
+        /// Load with a glasses check: pass the CURRENT session's glasses state and the status warns when
+        /// it mismatches the state the profile was calibrated with (worth ~1cm+ of silent error).
+        /// </summary>
+        public static string Load(string name, bool? currentlyWearingGlasses)
         {
             name = Sanitize(name);
             var json = ReadProfileJson(name);
@@ -99,9 +110,33 @@ namespace UnitEye
             foreach (var kv in profile.files)
                 if (WriteCalibrationFile(kv.Key, kv.Value))
                     written++;
-            return written > 0
-                ? $"Loaded profile '{name}' ({written} file(s))."
-                : $"Profile '{name}' contained no usable calibration files.";
+            if (written == 0)
+                return $"Profile '{name}' contained no usable calibration files.";
+
+            //Companion files NOT in the profile must not survive the restore: a TPS warp or per-region
+            //error model is only valid for the exact ridge fit it was measured on — leaving the previous
+            //calibration's on disk cross-pairs it with the restored fit and corrupts gaze/AOI output.
+            if (!string.IsNullOrEmpty(profile.backbone))
+            {
+                foreach (var companion in new[] { "Warp", "ErrorModel" })
+                {
+                    var rel = $"RidgeRegression/{companion}_{profile.backbone}{Extension}";
+                    if (profile.files.ContainsKey(rel)) continue;
+                    try
+                    {
+                        var stale = Path.Combine(CalibrationRoot, "RidgeRegression", $"{companion}_{profile.backbone}{Extension}");
+                        if (File.Exists(stale)) File.Delete(stale);
+                    }
+                    catch (Exception e) { UnitEyeLog.Exception(e); }
+                }
+            }
+
+            var glassesWarning = currentlyWearingGlasses.HasValue && profile.wearingGlasses != currentlyWearingGlasses.Value
+                ? (profile.wearingGlasses
+                    ? " WARNING: profile was calibrated WITH glasses — accuracy degrades without them."
+                    : " WARNING: profile was calibrated WITHOUT glasses — accuracy degrades with them.")
+                : "";
+            return $"Loaded profile '{name}' ({written} file(s)).{glassesWarning}";
         }
 
         /// <summary>All available profile names: user-saved (StreamingAssets) + shipped (Resources), deduped and sorted.</summary>
