@@ -16,11 +16,18 @@ public static class MediaPipeAssetInstaller
 {
     const string PackageResources = "Packages/com.github.homuler.mediapipe/PackageResources/MediaPipe";
 
-    // The Task API (FaceLandmarker) loads a single self-contained .task bundle. face_landmarker_v2
-    // includes the face detector + 478-landmark model with iris, so it's the only model UnitEye needs.
+    // The Task API (FaceLandmarker) loads a single self-contained .task bundle. The _with_blendshapes
+    // variant includes the face detector + 478-landmark model with iris AND the blendshape predictor,
+    // which FaceMeshSolution requests (see FaceMeshSolution.ModelFileName) — so it's the only model
+    // UnitEye needs, and the plain face_landmarker_v2 bundle below is now dead weight in a build.
     static readonly string[] RequiredAssets =
     {
-        "face_landmarker_v2.bytes",
+        Mediapipe.Unity.FaceMesh.FaceMeshSolution.ModelFileName,
+    };
+
+    static readonly string[] SupersededAssets =
+    {
+        Mediapipe.Unity.FaceMesh.FaceMeshSolution.LegacyModelFileName,
     };
 
     [MenuItem("UnitEye/Install MediaPipe StreamingAssets")]
@@ -44,6 +51,18 @@ public static class MediaPipeAssetInstaller
             if (!File.Exists(src)) { Debug.LogWarning($"MediaPipe asset not in package: {asset}"); missing++; continue; }
             File.Copy(src, Path.Combine(dstDir, asset), overwrite: true);
             copied++;
+        }
+
+        //Remove bundles an earlier install of UnitEye put here that the runtime no longer loads, so they
+        //stop being shipped in every player build. Only these exact names, and only in StreamingAssets.
+        foreach (var asset in SupersededAssets)
+        {
+            var stale = Path.Combine(dstDir, asset);
+            if (!File.Exists(stale)) continue;
+            File.Delete(stale);
+            var meta = stale + ".meta";
+            if (File.Exists(meta)) File.Delete(meta);
+            Debug.Log($"MEDIAPIPE_INSTALL: removed superseded model file {asset}");
         }
 
         AssetDatabase.Refresh();

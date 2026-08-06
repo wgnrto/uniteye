@@ -47,6 +47,7 @@ public static class UnitEyeSmokeTests
             TestIrisFeatures();
             TestScenesAndPrefabsHaveNoMissingScripts();
             TestScenesWireTheMediaPipeGameObject();
+            TestFaceLandmarkerBundleSupportsRequestedOutputs();
             TestEyeMUModelLoadsAndRuns();
             TestGazeEstimationDecode();
             TestGazeFeaturePolynomial();
@@ -698,6 +699,51 @@ public static class UnitEyeSmokeTests
         Check(checkedComponents > 0, "At least one package scene should contain a HomulerGaze");
 
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+    }
+
+    private static void TestFaceLandmarkerBundleSupportsRequestedOutputs()
+    {
+        //FaceMeshSolution asks the FaceLandmarker for blendshapes and transformation matrixes. Both come
+        //from extra models packed INSIDE the .task bundle, so pointing at a bundle that lacks one fails
+        //task creation at runtime ("BLENDSHAPES Tag and blendshapes model must be both set") and takes the
+        //whole native gaze path down — a mismatch no other test here can see. Build the landmarker with
+        //exactly the options the runtime uses and assert it comes up.
+        var modelName = Mediapipe.Unity.FaceMesh.FaceMeshSolution.ModelFileName;
+        var packaged = System.IO.Path.GetFullPath(
+            $"Packages/com.github.homuler.mediapipe/PackageResources/MediaPipe/{modelName}");
+        Check(System.IO.File.Exists(packaged), $"The MediaPipe package ships {modelName}");
+
+        var installed = System.IO.Path.Combine(Application.streamingAssetsPath, modelName);
+        Check(System.IO.File.Exists(installed),
+            $"{modelName} is installed in StreamingAssets (run UnitEye > Install MediaPipe StreamingAssets)");
+        if (!System.IO.File.Exists(installed)) return;
+
+        Mediapipe.Tasks.Vision.FaceLandmarker.FaceLandmarker landmarker = null;
+        try
+        {
+            var options = new Mediapipe.Tasks.Vision.FaceLandmarker.FaceLandmarkerOptions(
+                new Mediapipe.Tasks.Core.BaseOptions(
+                    Mediapipe.Tasks.Core.BaseOptions.Delegate.CPU,
+                    modelAssetBuffer: System.IO.File.ReadAllBytes(installed)),
+                runningMode: Mediapipe.Tasks.Vision.Core.RunningMode.VIDEO,
+                numFaces: 1,
+                minFaceDetectionConfidence: 0.5f,
+                minFacePresenceConfidence: 0.5f,
+                minTrackingConfidence: 0.5f,
+                outputFaceBlendshapes: true,
+                outputFaceTransformationMatrixes: true);
+            landmarker = Mediapipe.Tasks.Vision.FaceLandmarker.FaceLandmarker.CreateFromOptions(
+                options, Mediapipe.Unity.GpuManager.GpuResources);
+            Check(landmarker != null, $"{modelName} builds a FaceLandmarker with blendshapes + transformation matrixes");
+        }
+        catch (Exception e)
+        {
+            Check(false, $"{modelName} must support the outputs FaceMeshSolution requests: {e.Message}");
+        }
+        finally
+        {
+            landmarker?.Close();
+        }
     }
 
     private static void TestIrisFeatures()

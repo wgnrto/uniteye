@@ -17,8 +17,13 @@ namespace Mediapipe.Unity.FaceMesh
     public class FaceMeshSolution : MonoBehaviour
     {
         // The .task bundle for the Task API (self-contained: detector + landmarker + iris/attention).
-        // Copied into StreamingAssets by MediaPipeAssetInstaller.
-        public const string ModelFileName = "face_landmarker_v2.bytes";
+        // Copied into StreamingAssets by MediaPipeAssetInstaller. It must be the WITH_BLENDSHAPES variant:
+        // the 52 blendshapes come from a separate predictor packed inside the bundle, and requesting that
+        // output from the smaller face_landmarker_v2 bundle fails task creation outright ("BLENDSHAPES Tag
+        // and blendshapes model must be both set").
+        public const string ModelFileName = "face_landmarker_v2_with_blendshapes.bytes";
+        // Superseded bundle name — only used to clean it out of StreamingAssets / diagnose a stale install.
+        public const string LegacyModelFileName = "face_landmarker_v2.bytes";
 
         // face_landmarker_v2 outputs 478 landmarks: 0..467 face mesh, then two 5-point iris blocks.
         // NOTE the Left/Right names here follow MediaPipe's own IMAGE-relative naming, which is mirrored
@@ -154,6 +159,9 @@ namespace Mediapipe.Unity.FaceMesh
         private bool _blendshapeIndicesResolved;
         private readonly float[] _eyeLookScores = new float[8];
         private bool _hasBlendshapes;
+        //Whether the landmarker was created WITH the blendshape output at all (vs _hasBlendshapes, which
+        //tracks whether the current frame actually carried scores).
+        private bool _blendshapesEnabled = true;
         private float _eyeBlinkLeft, _eyeBlinkRight;
 
         // Reusable Mediapipe.NormalizedLandmark objects so we expose the SAME type the consumers already
@@ -313,23 +321,57 @@ namespace Mediapipe.Unity.FaceMesh
                 return;
             }
 
-            var baseOptions = new BaseOptions(BaseOptions.Delegate.CPU, modelAssetBuffer: File.ReadAllBytes(modelPath));
             //Request the two "rich" outputs the pipeline previously discarded: the facial transformation
             //matrix (metric head rotation + translation — replaces the landmark-Z head-pose approximation
             //and closes the lateral-head-shift blindness in the calibration features) and the 52 blendshapes
             //(direct eyeLook* gaze cues + eyeBlink scores for the blink gate).
+            //A project whose StreamingAssets still holds the pre-blendshape bundle would hard-fail on the
+            //first request, so fall back to a blendshape-free landmarker instead of leaving the whole gaze
+            //pipeline dead: everything downstream already degrades (HasBlendshapes gates the eyeLook*
+            //features, and NativeGazeProvider's blink gate falls back to the EAR heuristic).
+            var modelBuffer = File.ReadAllBytes(modelPath);
+            _faceLandmarker = TryCreateLandmarker(modelBuffer, withBlendshapes: true);
+            if (_faceLandmarker == null)
+            {
+                _faceLandmarker = TryCreateLandmarker(modelBuffer, withBlendshapes: false);
+                if (_faceLandmarker == null)
+                {
+                    enabled = false;
+                    return;
+                }
+                _blendshapesEnabled = false;
+                Debug.LogWarning($"FaceMeshSolution: '{modelPath}' carries no blendshape model, continuing without " +
+                                 "blendshapes (blink detection falls back to the EAR heuristic). Re-run " +
+                                 "'UnitEye ▸ Install MediaPipe StreamingAssets' to get the full bundle.");
+            }
+            _result = FaceLandmarkerResult.Alloc(maxNumFaces, outputFaceBlendshapes: _blendshapesEnabled, outputFaceTransformationMatrixes: true);
+            _stopwatch.Start();
+        }
+
+        //Returns null instead of throwing so Start can retry with blendshapes off; only the final attempt
+        //reports, otherwise a recoverable first try would log an error that resolves itself a line later.
+        private FaceLandmarker TryCreateLandmarker(byte[] modelBuffer, bool withBlendshapes)
+        {
+            //Fresh BaseOptions per attempt: CreateFromOptions takes ownership of the options it is handed.
             var options = new FaceLandmarkerOptions(
-                baseOptions,
+                new BaseOptions(BaseOptions.Delegate.CPU, modelAssetBuffer: modelBuffer),
                 runningMode: RunningMode.VIDEO,
                 numFaces: maxNumFaces,
                 minFaceDetectionConfidence: 0.5f,
                 minFacePresenceConfidence: 0.5f,
                 minTrackingConfidence: 0.5f,
-                outputFaceBlendshapes: true,
+                outputFaceBlendshapes: withBlendshapes,
                 outputFaceTransformationMatrixes: true);
-            _faceLandmarker = FaceLandmarker.CreateFromOptions(options, GpuManager.GpuResources);
-            _result = FaceLandmarkerResult.Alloc(maxNumFaces, outputFaceBlendshapes: true, outputFaceTransformationMatrixes: true);
-            _stopwatch.Start();
+            try
+            {
+                return FaceLandmarker.CreateFromOptions(options, GpuManager.GpuResources);
+            }
+            catch (System.Exception e)
+            {
+                if (!withBlendshapes)
+                    Debug.LogError($"FaceMeshSolution: could not create the MediaPipe FaceLandmarker. {e.Message}");
+                return null;
+            }
         }
 
         private void Update()
