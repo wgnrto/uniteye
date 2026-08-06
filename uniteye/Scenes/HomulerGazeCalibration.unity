@@ -509,6 +509,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2136784690}
+  - component: {fileID: 2136784685}
+  - component: {fileID: 2136784686}
   m_Layer: 0
   m_Name: Mediapipe
   m_TagString: Untagged
@@ -531,6 +533,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 785895849}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2136784685
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2136784684}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3dff2bce253b6a4eb6a6f7d95bda791, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  _webCamSource: {fileID: 2136784686}
+  _annotate: 1
+  maxNumFaces: 1
+  _flipHorizontally: 0
+  _flipVertically: 1
+--- !u!114 &2136784686
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2136784684}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6afc91cef9c41a642abfb28517d4f828, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  _preferableDefaultWidth: 1920
+  _name:
 --- !u!1001 &9103479361032634741
 PrefabInstance:
   m_ObjectHideFlags: 0

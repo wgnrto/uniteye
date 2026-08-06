@@ -46,6 +46,7 @@ public static class UnitEyeSmokeTests
             TestEyeCropRect();
             TestIrisFeatures();
             TestScenesAndPrefabsHaveNoMissingScripts();
+            TestScenesWireTheMediaPipeGameObject();
             TestEyeMUModelLoadsAndRuns();
             TestGazeEstimationDecode();
             TestGazeFeaturePolynomial();
@@ -657,6 +658,45 @@ public static class UnitEyeSmokeTests
         }
 
         //Leave a fresh empty scene behind so no package scene stays open
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+    }
+
+    private static void TestScenesWireTheMediaPipeGameObject()
+    {
+        //"No missing scripts" is not the same as "still works": the MediaPipe 0.16.3 Task-API migration
+        //stripped the dead Solution-era components from the Mediapipe GameObject, and the calibration scene
+        //never got the replacements (FaceMeshSolution + WebCamSource) re-added. That scene then threw an NRE
+        //out of the NativeGazeProvider constructor and one per frame from LateUpdate afterwards, while the
+        //missing-script test above stayed green. So assert the wiring every HomulerGaze actually needs.
+        var sceneGuids = AssetDatabase.FindAssets("t:SceneAsset", new[] { "Packages/de.uniulm.uniteye/Scenes" });
+        Check(sceneGuids.Length > 0, "Package scenes should be found");
+
+        var checkedComponents = 0;
+        foreach (var guid in sceneGuids)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(guid);
+            var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+
+            foreach (var root in scene.GetRootGameObjects())
+            {
+                foreach (var gaze in root.GetComponentsInChildren<UnitEye.HomulerGaze>(true))
+                {
+                    checkedComponents++;
+                    //_mediaPipeGO is private; SerializedObject reads it without widening the runtime API.
+                    var go = new SerializedObject(gaze).FindProperty("_mediaPipeGO")
+                        .objectReferenceValue as GameObject;
+                    Check(go != null, $"{path}: HomulerGaze on '{gaze.name}' has _mediaPipeGO assigned");
+                    if (go == null) continue;
+
+                    Check(go.GetComponent<Mediapipe.Unity.FaceMesh.FaceMeshSolution>() != null,
+                        $"{path}: '{go.name}' (HomulerGaze._mediaPipeGO) has a FaceMeshSolution");
+                    Check(go.GetComponent<Mediapipe.Unity.WebCamSource>() != null,
+                        $"{path}: '{go.name}' (HomulerGaze._mediaPipeGO) has a WebCamSource");
+                }
+            }
+        }
+        Check(checkedComponents > 0, "At least one package scene should contain a HomulerGaze");
+
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
     }
 

@@ -42,8 +42,28 @@ namespace UnitEye
         public NativeGazeProvider(GameObject mediaPipeGO, GazeBackbone backbone = GazeBackbone.EyeMU,
             bool asyncGpuReadback = false, bool flipAugmentation = false, bool rollNormalize = true)
         {
+            //Validate the MediaPipe GameObject up front. Without this the missing component surfaced as a
+            //bare NullReferenceException inside the constructor, which left HomulerGaze._provider null and
+            //turned into one NRE per frame out of LateUpdate — noise that says nothing about the real cause.
+            //(The MediaPipe 0.16.3 Task-API migration stripped the dead Solution-era components from the
+            //scenes; a scene that never got FaceMeshSolution/WebCamSource re-added lands exactly here.)
+            if (mediaPipeGO == null)
+                throw new MissingComponentException(
+                    "UnitEye: HomulerGaze._mediaPipeGO is not assigned. Point it at a GameObject carrying " +
+                    "FaceMeshSolution + WebCamSource (see the UnitEyeUsingHomulerMediapipe prefab).");
+
             _webcam = mediaPipeGO.GetComponent<WebCamSource>();
             _faceMesh = mediaPipeGO.GetComponent<FaceMeshSolution>();
+            if (_webcam == null || _faceMesh == null)
+            {
+                var missing = _faceMesh == null
+                    ? (_webcam == null ? "FaceMeshSolution and WebCamSource" : "FaceMeshSolution")
+                    : "WebCamSource";
+                throw new MissingComponentException(
+                    $"UnitEye: GameObject '{mediaPipeGO.name}' (HomulerGaze._mediaPipeGO) is missing {missing}. " +
+                    "Add the component(s) to it, or replace it with the UnitEyeUsingHomulerMediapipe prefab.");
+            }
+
             _eyeHelper = new HomulerEyeHelper(_faceMesh, _webcam.name);
             _asyncReadback = asyncGpuReadback;
             _flipAugmentation = flipAugmentation;

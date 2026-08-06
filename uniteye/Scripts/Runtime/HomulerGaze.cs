@@ -476,11 +476,23 @@ namespace UnitEye
 
             //Create the platform gaze provider. The seam keeps everything below (calibration/filter/AOI/CSV)
             //identical across platforms; only the webcam->raw-gaze producer differs.
+            //A provider that cannot be built (unassigned/incomplete MediaPipe GameObject) must disable this
+            //component: every callback below dereferences _provider, so carrying on would replace one
+            //actionable error with an NRE per frame from LateUpdate/OnGUI.
+            try
+            {
     #if UNITY_WEBGL && !UNITY_EDITOR
-            _provider = new WebGLGazeProvider();
+                _provider = new WebGLGazeProvider();
     #else
-            _provider = new NativeGazeProvider(_mediaPipeGO, _gazeBackbone, _asyncGpuReadback, _flipAugmentation, _rollNormalizeCrops);
+                _provider = new NativeGazeProvider(_mediaPipeGO, _gazeBackbone, _asyncGpuReadback, _flipAugmentation, _rollNormalizeCrops);
     #endif
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"UnitEye: gaze provider setup failed, disabling {nameof(HomulerGaze)} on '{name}'. {e.Message}", this);
+                enabled = false;
+                return;
+            }
 
             //Warm-start the drift correction from the previous session (same backbone): seating drift is
             //largely affine, so last session's correction is a better prior than identity. It keeps
@@ -550,12 +562,17 @@ namespace UnitEye
 
         public virtual void LateUpdate()
         {
+            //No provider = setup failed (Start logged why) or the component was torn down; everything below
+            //dereferences it.
+            if (_provider == null)
+                return;
+
             //Click anchors are collected on EVERY render frame, BEFORE the fresh-sample gate below: the
             //camera runs at ~30fps while the display runs 60-144, so `wasPressedThisFrame` is true on
             //exactly one render frame that usually carries NO new camera sample — gating clicks on fresh
             //samples silently dropped most of them. The pre-click fixation window reads the gaze TRAIL,
             //which exists regardless of whether this frame produced a sample.
-            if (onlineDriftCorrection && !PauseCSVLogging && _provider != null)
+            if (onlineDriftCorrection && !PauseCSVLogging)
                 CollectClickAnchor();
 
             //Peform neural network inference through entire eye tracking pipeline
