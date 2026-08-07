@@ -287,9 +287,12 @@ namespace UnitEye.Benchmark
                     locSumSq += d * d; locN++;
                     sumSq += d * d; n++;
 
-                    //Degrees where the row recorded a viewing distance. Converted PER ROW then RMS-ed:
-                    //distance varies within a session, so RMS-then-convert would be wrong.
-                    if (!float.IsNaN(sample.DistanceMm) && sample.DistanceMm > 1f && s.ScreenWidthCm > 0)
+                    //Degrees where the row recorded a viewing distance AND the session's centimetres are
+                    //real. A windowed Editor Game view makes screenWidthCm wrong by the viewport ratio, and
+                    //a wrong degree figure pooled into a median is worse than a missing one — % of diagonal
+                    //remains valid there because it is a ratio of the same units.
+                    if (s.PhysicalScaleTrustworthy &&
+                        !float.IsNaN(sample.DistanceMm) && sample.DistanceMm > 1f && s.ScreenWidthCm > 0)
                     {
                         double mmPerPx = 10.0 * s.ScreenWidthCm / w;
                         double deg = Math.Atan(d * mmPerPx / sample.DistanceMm) * 180.0 / Math.PI;

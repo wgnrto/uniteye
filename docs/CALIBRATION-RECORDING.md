@@ -87,6 +87,35 @@ All numbers are written with `InvariantCulture`. This matters more than it sound
 locale the ambient formatter renders `0.4193` as `0,4193`, which silently turns one JSON number into
 something no other machine can parse. There is a smoke test for it.
 
+### Physical scale: check `physicalScaleTrustworthy` before using centimetres
+
+`session.json` records `physicalScaleTrustworthy`, and it is the field to gate on before trusting any
+centimetre or degree figure from a session.
+
+The pipeline works in `Screen.width`/`Screen.height` — the **render surface**, which in the Editor is the
+Game view, not the monitor. Everything stays internally consistent there, so calibration, gaze and the
+normalized labels are fine. But the conversion to physical units is `pixels × 25.4 / Screen.dpi`, which
+assumes one render pixel covers one physical pixel. Run a 1920×1080 Game view inside a 900px-wide panel and
+the reported RMSE, the accuracy verdict, `screenWidthCm`/`screenHeightCm` and any degrees-of-visual-angle
+derived from them are all wrong by that ratio.
+
+So the recorder writes the provenance instead of pretending: `displayWidthPx`, `displayHeightPx`,
+`screenDpi`, `renderMatchesDisplay`, `recordedInEditor`, and the single `physicalScaleTrustworthy` verdict.
+The calibration also logs a warning the moment a run starts under those conditions — the last point at which
+maximising the Game view is free.
+
+Consequences:
+
+* **% of screen diagonal is always valid**, trustworthy scale or not: it is a ratio of the same units.
+* **Degrees of visual angle are withheld** by the benchmark when the flag is false. A confidently wrong
+  degree figure pooled into a median is worse than a missing one.
+* Sessions recorded before this field existed read as **not** trustworthy — unknown scale is treated as
+  untrusted, which is the safe direction.
+
+For data you intend to donate or compare, **run a fullscreen build**, or a Game view at scale 1× with
+Maximize On Play. Note `Screen.dpi` is independently unreliable (many Windows setups report a flat 96),
+which is why the calibration screen has always carried its own DPI caveat.
+
 ### Caveats that belong with the data, not in a footnote
 
 - **Landmark coordinates** are MediaPipe-normalized (0–1, y-down, top-left) against the **camera frame**, not

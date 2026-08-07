@@ -37,6 +37,13 @@ namespace UnitEye.Benchmark
             public string Backbone = "";
             public int ScreenWidthPx, ScreenHeightPx;
             public float ScreenWidthCm, ScreenHeightCm;
+            /// <summary>
+            /// Whether this session's centimetre figures describe real centimetres. False for anything
+            /// recorded in a windowed Editor Game view, where Screen.dpi describes the monitor while
+            /// Screen.width describes a smaller render surface. % of diagonal stays valid either way (it is
+            /// a ratio of the same units); degrees of visual angle does not.
+            /// </summary>
+            public bool PhysicalScaleTrustworthy;
             public List<Sample> Samples = new List<Sample>();
             public float AppHoldoutRmseCm = -1f;
             public string Status = "ok";
@@ -84,6 +91,10 @@ namespace UnitEye.Benchmark
                     s.ScreenHeightPx = (int)Num(j, "screenHeightPx", 0);
                     s.ScreenWidthCm = Num(j, "screenWidthCm", 0f);
                     s.ScreenHeightCm = Num(j, "screenHeightCm", 0f);
+                    //Absent in sessions recorded before this field existed. Defaulting to FALSE is the safe
+                    //direction: an old session's physical scale is genuinely unknown, and treating unknown as
+                    //trustworthy is how a bad centimetre figure ends up averaged into a headline number.
+                    s.PhysicalScaleTrustworthy = j.Contains("\"physicalScaleTrustworthy\":true");
                 }
                 if (s.ScreenWidthPx <= 0 || s.ScreenHeightPx <= 0) { s.Status = "excluded:no-screen-geometry"; return s; }
 

@@ -55,6 +55,7 @@ public static class UnitEyeSmokeTests
             TestRecordingTierOrderingIsPrivacyMonotonic();
             TestRecorderWritesInvariantNumbers();
             TestRecordingRuntimeHasNoNetworkCode();
+            TestScreenGeometryWarning();
             TestBenchmarkRoundTripAndSplit();
             TestEyeMUModelLoadsAndRuns();
             TestGazeEstimationDecode();
@@ -868,6 +869,19 @@ public static class UnitEyeSmokeTests
         Check(GazeRecordingTier.FaceVideo < GazeRecordingTier.FullFrames, "FaceVideo is less identifying than FullFrames");
     }
 
+    private static void TestScreenGeometryWarning()
+    {
+        //Runs in batch mode, so Application.isEditor is true and the render surface is not a real display -
+        //exactly the condition the warning exists for. Asserting it FIRES here is the meaningful direction:
+        //a warning that silently never appears is worse than none, because it reads as an all-clear.
+        var warning = ScreenGeometry.PhysicalScaleWarning();
+        Check(warning.Length > 0, "A non-fullscreen / Editor render surface produces a physical-scale warning");
+        Check(warning.Contains("centim", StringComparison.OrdinalIgnoreCase) || warning.Contains("CENTIM"),
+            "The warning says which figures are affected, not merely that something is wrong");
+        Check(ScreenGeometry.DisplayWidth > 0 && ScreenGeometry.DisplayHeight > 0,
+            "Display resolution is readable");
+    }
+
     private static void TestBenchmarkRoundTripAndSplit()
     {
         //Writes a synthetic session, reads it back and benchmarks it. Covers the recorder/reader seam (two
@@ -929,7 +943,17 @@ public static class UnitEyeSmokeTests
             Check(!double.IsNaN(result.RmsePctDiag), "Benchmark reports an error figure");
             Check(result.RmsePctDiag > 0.0 && result.RmsePctDiag < 25.0,
                 $"Benchmark error is in a sane range (got {result.RmsePctDiag:F3}% of diagonal)");
-            Check(!double.IsNaN(result.RmseDegrees), "Benchmark reports degrees when distanceMm is present");
+
+            //Degrees are SUPPRESSED here, and that is the point. This session is written from the Editor, so
+            //its centimetre figures come from Screen.dpi describing a monitor while Screen.width describes a
+            //Game view - the ratio is unknown and unrecoverable. % of diagonal survives (same units top and
+            //bottom); degrees would be confidently wrong, which is worse than absent.
+            Check(!session.PhysicalScaleTrustworthy,
+                "A session recorded in the Editor is flagged as having untrustworthy physical scale");
+            Check(double.IsNaN(result.RmseDegrees),
+                "Degrees are withheld when the session's centimetre scale is not trustworthy");
+            Check(!double.IsNaN(result.RmsePctDiag),
+                "% of diagonal is still reported when the physical scale is untrustworthy - it is a ratio");
 
             //--- the split actually withholds ---
             //Every fold trains WITHOUT the location it scores, so the error cannot be zero however clean the
@@ -951,6 +975,7 @@ public static class UnitEyeSmokeTests
                 });
             Check(mlp.Status == "ok", $"Benchmark completes with the MLP head (status {mlp.Status})");
             Check(!double.IsNaN(mlp.RmsePctDiag), "MLP head reports an error figure");
+            Check(double.IsNaN(mlp.RmseDegrees), "The MLP head withholds degrees on the same grounds as ridge");
             Check(mlp.RmsePctDiag > 1e-6 && mlp.RmsePctDiag < 25.0,
                 $"MLP error is in the same sane band as ridge, i.e. scored in pixels not normalized units " +
                 $"(got {mlp.RmsePctDiag:F3}% of diagonal vs ridge {result.RmsePctDiag:F3}%)");

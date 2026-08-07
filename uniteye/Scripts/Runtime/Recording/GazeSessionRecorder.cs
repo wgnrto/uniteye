@@ -136,6 +136,19 @@ namespace UnitEye
             Num(sb, "screenHeightPx", screenHeight); sb.Append(",");
             Num(sb, "screenWidthCm", screenWidthCm); sb.Append(",");
             Num(sb, "screenHeightCm", screenHeightCm); sb.Append(",");
+            //Physical-scale provenance. screenWidthCm is derived from Screen.dpi assuming one render pixel
+            //covers one physical pixel; when that is false (the usual case for a windowed Editor Game view)
+            //every centimetre and degree figure downstream is wrong by the same ratio. Recorded rather than
+            //corrected, because it cannot be corrected after the fact — but it CAN be detected, so a pooled
+            //dataset does not silently mix incompatible physical units.
+            Num(sb, "displayWidthPx", ScreenGeometry.DisplayWidth); sb.Append(",");
+            Num(sb, "displayHeightPx", ScreenGeometry.DisplayHeight); sb.Append(",");
+            Num(sb, "screenDpi", Screen.dpi); sb.Append(",");
+            Bool(sb, "renderMatchesDisplay", ScreenGeometry.RenderMatchesDisplay); sb.Append(",");
+            Bool(sb, "recordedInEditor", Application.isEditor); sb.Append(",");
+            //The single field a consumer should gate on before trusting cm or degrees from this session.
+            Bool(sb, "physicalScaleTrustworthy",
+                ScreenGeometry.RenderMatchesDisplay && !Application.isEditor && Screen.dpi > 1f); sb.Append(",");
             Num(sb, "cameraFrameWidth", frameWidth); sb.Append(",");
             Num(sb, "cameraFrameHeight", frameHeight); sb.Append(",");
             Bool(sb, "frameFlippedHorizontally", flipH); sb.Append(",");

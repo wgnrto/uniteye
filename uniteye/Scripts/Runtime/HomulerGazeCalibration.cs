@@ -321,7 +321,15 @@ namespace UnitEye
             //BEFORE any sample exists, or the first samples would be captured without an answer.
             if (leftClick && !_finished && !(_consentGate != null && _consentGate.Blocking))
             {
-                if (!_started) BeginRecordingIfConsented();
+                if (!_started)
+                {
+                    //Warned at the moment the run starts, not in OnEnable: this is when the geometry that the
+                    //whole calibration will be bound to becomes fixed, and it is the last point at which
+                    //stopping to maximise the Game view costs nothing.
+                    var geometryWarning = ScreenGeometry.PhysicalScaleWarning();
+                    if (geometryWarning.Length > 0) UnitEyeLog.Warn(geometryWarning);
+                    BeginRecordingIfConsented();
+                }
                 _started = true;
                 _showMessage = false;
                 _finishedRound = false;
