@@ -196,7 +196,6 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
-  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -224,11 +223,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
---- !u!120 &316730609 stripped
-LineRenderer:
-  m_CorrespondingSourceObject: {fileID: 3875877268573507416, guid: 8f3c9dc1c5f2b194c9cff2eb6d86013b, type: 3}
-  m_PrefabInstance: {fileID: 9103479361032634741}
-  m_PrefabAsset: {fileID: 0}
 --- !u!4 &316730610 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6166507847736631440, guid: 8f3c9dc1c5f2b194c9cff2eb6d86013b, type: 3}
@@ -318,6 +312,7 @@ GameObject:
   - component: {fileID: 785895848}
   - component: {fileID: 785895847}
   - component: {fileID: 785895850}
+  - component: {fileID: 785895851}
   m_Layer: 0
   m_Name: UnitEye using Homuler Mediapipe
   m_TagString: Untagged
@@ -365,6 +360,7 @@ MonoBehaviour:
   showGazeUI: 0
   showFaceMesh: 1
   _gazeBackbone: 0
+  _asyncGpuReadback: 0
   _calibrations: 1
   _filtering: 5
   easefactor: 0.4
@@ -373,6 +369,13 @@ MonoBehaviour:
   beta: 0.012
   mincutoff: 1
   dcutoff: 1
+  fixationAOILogging: 1
+  useErrorModel: 1
+  onlineDriftCorrection: 1
+  clickAnchors: 1
+  _flipAugmentation: 0
+  _rollNormalizeCrops: 1
+  userWearsGlasses: 0
   holdGazeDuringBlink: 1
   maxBlinkHoldSeconds: 0.5
   _frameRate: 30
@@ -408,15 +411,50 @@ MonoBehaviour:
   calibrationDot: {fileID: 2800000, guid: 5256747c2ede88a48b8744e26b8108bf, type: 3}
   speed: 6
   padding: 5
+  normalizedSafeMargin: 0.08
+  cornerVisits: 2
+  cornerDwellSeconds: 3
+  headRotationDwellSeconds: 5
+  interiorDwellSeconds: 1.5
+  settleSeconds: 0.5
+  minimumCornerSamples: 15
+  cornerOutlierZScore: 3
+  pursuitLagSeconds: 0.1
+  fixationGate: 1
+  fixationWindowSeconds: 0.3
+  fixationDispersionFraction: 0.035
   drawCheckpoints: 0
+  drawPath: 1
   currentRound: 0
   maxRoundsPerPreset: 2
   calibrationType: 1
   save: 1
+  featureAugmentation:
+    enabled: 1
+    copiesPerSample: 1
+    standardDeviationScale: 0.05
+    maximumStandardDeviations: 3
+    headPoseJitterDegrees: 3
+    seed: 12345
+  enableRidgeWarp: 1
   stopAfterPoints: 1
   quitAfterCalibration: 0
-  screen: {fileID: 0}
-  path: {fileID: 316730609}
+--- !u!114 &785895851
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 785895845}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0255ac7404b7264a821e67a2e11aa76, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UniUlm.UnitEye.Runtime::UnitEye.CalibrationRecordingConsent
+  askBeforeCalibration: 1
+  maxTierOffered: 3
+  withdrawalContact: mark.colley@yahoo.de
+  studyLabel: self-test
 --- !u!1 &963194225
 GameObject:
   m_ObjectHideFlags: 0
@@ -518,6 +556,47 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &2136784685
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2136784684}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3dff2bce253b6a4eb6a6f7d95bda791, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _webCamSource: {fileID: 2136784686}
+  _annotate: 1
+  maxNumFaces: 1
+  _useMatrixHeadPose: 1
+  _flipHorizontally: 0
+  _flipVertically: 1
+  _smoothGazeLandmarks: 1
+  _drawPreview: 1
+  _previewFlipVertically: 0
+  _previewMirror: 0
+  _overlayFlipVertically: 0
+  _overlayColor: {r: 0, g: 1, b: 0, a: 0.85}
+  _overlayDotSize: 3
+  _previewGuiDepth: 5
+--- !u!114 &2136784686
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2136784684}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6afc91cef9c41a642abfb28517d4f828, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _preferableDefaultWidth: 1920
+  _name: 
+  _requestedFps: 60
 --- !u!4 &2136784690
 Transform:
   m_ObjectHideFlags: 0
@@ -533,37 +612,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 785895849}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2136784685
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2136784684}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c3dff2bce253b6a4eb6a6f7d95bda791, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
-  _webCamSource: {fileID: 2136784686}
-  _annotate: 1
-  maxNumFaces: 1
-  _flipHorizontally: 0
-  _flipVertically: 1
---- !u!114 &2136784686
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2136784684}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6afc91cef9c41a642abfb28517d4f828, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
-  _preferableDefaultWidth: 1920
-  _name:
 --- !u!1001 &9103479361032634741
 PrefabInstance:
   m_ObjectHideFlags: 0

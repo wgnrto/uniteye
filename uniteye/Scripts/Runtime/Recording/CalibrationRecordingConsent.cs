@@ -16,6 +16,9 @@ namespace UnitEye
     /// The component NEVER uploads. It writes a folder and shows the participant where it is. Publication is
     /// a human decision made later, out of band, against the consent record it leaves behind.
     /// </summary>
+    //Grouped under UnitEye in Add Component: without this the class is reachable only by typing its exact
+    //name, which is a poor way to find a component most users will not know exists.
+    [AddComponentMenu("UnitEye/Calibration Recording Consent")]
     [DisallowMultipleComponent]
     public class CalibrationRecordingConsent : MonoBehaviour
     {
