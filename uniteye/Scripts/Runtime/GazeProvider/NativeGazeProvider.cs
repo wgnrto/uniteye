@@ -13,7 +13,7 @@ namespace UnitEye
     /// blink/drowsy/distance. This is the desktop implementation of IGazeProvider; it cannot run on WebGL
     /// (native plugin), which is exactly why the seam exists.
     /// </summary>
-    public class NativeGazeProvider : IGazeProvider
+    public class NativeGazeProvider : IGazeProvider, IGazeRecordingSource
     {
         private readonly FaceMeshSolution _faceMesh;
         private readonly WebCamSource _webcam;
@@ -189,6 +189,31 @@ namespace UnitEye
         }
 
         public void Dispose() => _backbone?.Dispose();
+
+        #region IGazeRecordingSource
+
+        //Async readback publishes frame N-1's gaze while the crop textures already hold frame N (see
+        //IGazeBackbone), so imagery and features describe different moments. Report that honestly and let
+        //the recorder refuse imagery rather than emit a dataset whose pixels and labels disagree.
+        public bool ImageryInSyncWithFeatures => !_asyncReadback;
+
+        public int LandmarkCount => _faceMesh != null && _faceMesh.FaceLandmarks != null
+            ? _faceMesh.FaceLandmarks.Count : 0;
+
+        public int TryCopyLandmarks(float[] dest) => _faceMesh != null ? _faceMesh.CopyLandmarks(dest) : 0;
+
+        public bool TryCopyEyeBlendshapes(float[] dest) =>
+            _faceMesh != null && _faceMesh.TryCopyEyeBlendshapes(dest);
+
+        public int FrameWidth => _faceMesh != null ? _faceMesh.FrameWidth : 0;
+        public int FrameHeight => _faceMesh != null ? _faceMesh.FrameHeight : 0;
+        public Texture CameraTexture => _faceMesh != null ? _faceMesh.CameraTexture : null;
+        public Rect FaceBoundsNormalized => _faceMesh != null ? _faceMesh.FaceBoundsNormalized : default;
+        public bool LandmarksSmoothed => _faceMesh != null && _faceMesh.GazeLandmarksSmoothed;
+        public bool FrameFlippedHorizontally => _faceMesh != null && _faceMesh.FrameFlippedHorizontally;
+        public bool FrameFlippedVertically => _faceMesh != null && _faceMesh.FrameFlippedVertically;
+
+        #endregion
     }
 }
 #endif

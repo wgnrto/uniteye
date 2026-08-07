@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using Newtonsoft.Json;
 using Unity.InferenceEngine;
 using UnitEye;
@@ -48,6 +50,11 @@ public static class UnitEyeSmokeTests
             TestScenesAndPrefabsHaveNoMissingScripts();
             TestScenesWireTheMediaPipeGameObject();
             TestFaceLandmarkerBundleSupportsRequestedOutputs();
+            TestConsentWordingIsPinned();
+            TestConsentRecordAndTokens();
+            TestRecordingTierOrderingIsPrivacyMonotonic();
+            TestRecorderWritesInvariantNumbers();
+            TestRecordingRuntimeHasNoNetworkCode();
             TestEyeMUModelLoadsAndRuns();
             TestGazeEstimationDecode();
             TestGazeFeaturePolynomial();
@@ -508,8 +515,21 @@ public static class UnitEyeSmokeTests
         }
 
         var mlp = new SimpleMLP(seed: 42);
+        Check(mlp.LastHoldoutRmseXCm < 0f, "SimpleMLP holdout RMSE should be the -1 sentinel before training");
         var message = mlp.Train(x, y);
         Check(message.Contains("MLP Training done"), "SimpleMLP.Train should return the accuracy message");
+
+        //Train must PUBLISH the holdout RMSE it already computes, not only embed it in the message:
+        //HomulerGazeCalibration.ProcessDataNeural feeds these into the static LastHoldoutRmseCm that drives
+        //the calibration validation gate. While they were private, an MLCalibration run left that static
+        //describing the last RidgeRegression fit (or stuck at -1 on a fresh install, silencing the gate).
+        Check(mlp.LastHoldoutRmseXCm >= 0f && mlp.LastHoldoutRmseYCm >= 0f,
+            $"SimpleMLP.Train should publish its holdout RMSE (got {mlp.LastHoldoutRmseXCm},{mlp.LastHoldoutRmseYCm})");
+        Check(message.Contains($"RMSE X: {mlp.LastHoldoutRmseXCm}") && message.Contains($"RMSE Y: {mlp.LastHoldoutRmseYCm}"),
+            "SimpleMLP's published holdout RMSE should be the same number it reports in the message");
+        //It describes a training run, not the model, so it must stay out of the persisted JSON.
+        Check(!JsonConvert.SerializeObject(mlp).Contains("LastHoldoutRmse"),
+            "SimpleMLP holdout RMSE should not be serialized into MLP.json");
 
         //Holdout accuracy: target std is ~470px/380px, an MLP that learned should be far below that
         double sx = 0, sy = 0;
@@ -699,6 +719,152 @@ public static class UnitEyeSmokeTests
         Check(checkedComponents > 0, "At least one package scene should contain a HomulerGaze");
 
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+    }
+
+    private static void TestConsentWordingIsPinned()
+    {
+        //A consent record stores the SHA-256 of the wording it was collected under. That is only worth
+        //anything if the wording cannot drift silently, so the hash is pinned here: editing any consent
+        //string fails this test until someone updates the pin DELIBERATELY (and bumps WordingVersion).
+        //If this fails and you did change the text on purpose: bump GazeConsentTexts.WordingVersion, then
+        //paste the "actual" hash below. Do not paste it without bumping the version — old records would
+        //then claim a version whose text no longer exists.
+        const string pinnedVersion = "1.0.0";
+        const string pinnedHash = "6f3b1c7dbced07b406eb8a68e19a15d6cd971e025434f52cf3df34bb767a9a29";
+        Check(GazeConsentTexts.WordingVersion == pinnedVersion,
+            $"Consent wording version should be {pinnedVersion} (got {GazeConsentTexts.WordingVersion})");
+        var actual = GazeConsentTexts.WordingHash();
+        Check(actual.Length == 64, "Consent wording hash should be a 64-char SHA-256 hex string");
+        if (pinnedHash != "PIN_ME")
+            Check(actual == pinnedHash, $"Consent wording changed without a version bump (hash {actual})");
+        else
+            Debug.Log($"UNITEYE_CONSENT_WORDING_HASH: {actual}");
+
+        //The text must not promise anonymity: a 478-point face mesh is a biometric template and the imagery
+        //tiers are plainly identifying. Saying otherwise would make the consent false, not just imprecise.
+        foreach (var text in new[] { GazeConsentTexts.Intro, GazeConsentTexts.TierChoice, GazeConsentTexts.Publication })
+            Check(text.IndexOf("anonym", StringComparison.OrdinalIgnoreCase) < 0,
+                "Consent wording must not claim anonymity");
+
+        //It must state plainly that publication cannot be fully undone; without that it is not informed.
+        Check(GazeConsentTexts.Publication.Contains("permanent"),
+            "Publication consent must warn that publication is effectively permanent");
+    }
+
+    private static void TestConsentRecordAndTokens()
+    {
+        var utc = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        var rec = GazeConsentRecord.Create(GazeRecordingTier.EyeCrops, mayPublish: true, utc, "a@b.c", "study");
+
+        Check(rec.consentedOnUtcDate == "2026-03-01", "Consent stores the calendar date it was given");
+        //Date only, never a time of day: the consent text says so, and time-of-day is a routine signal.
+        Check(!rec.consentedOnUtcDate.Contains(":"), "Consent must not store a time of day");
+        Check(rec.publicationHoldUntilUtcDate == "2026-03-15",
+            $"Publication hold should be {GazeConsentRecord.PublicationHoldDays} days out (got {rec.publicationHoldUntilUtcDate})");
+
+        //The hold is the only thing standing between "agreed" and "published", so the predicate must be strict.
+        Check(!rec.PublishableOn(utc), "Not publishable on the day consent was given");
+        Check(!rec.PublishableOn(utc.AddDays(13)), "Not publishable before the hold elapses");
+        Check(rec.PublishableOn(utc.AddDays(14)), "Publishable once the hold has elapsed");
+        var noPublish = GazeConsentRecord.Create(GazeRecordingTier.Features, mayPublish: false, utc, "a@b.c", "s");
+        Check(!noPublish.PublishableOn(utc.AddDays(365)),
+            "A session that never consented to publication is never publishable, however old");
+
+        //Tokens are the only participant identifier and the only handle for withdrawal: they must be unique
+        //and transcribable. Ambiguous glyphs (I/L/O/U) are excluded so a code read off a screen onto paper
+        //cannot become a different valid code.
+        var seen = new HashSet<string>();
+        string ambiguous = null;
+        for (int i = 0; i < 2000; i++)
+        {
+            var t = GazeConsentRecord.NewParticipantToken();
+            seen.Add(t);
+            if (ambiguous == null && t.IndexOfAny(new[] { 'I', 'L', 'O', 'U' }) >= 0) ambiguous = t;
+        }
+        Check(seen.Count == 2000, $"Participant tokens should not collide (got {seen.Count} distinct of 2000)");
+        Check(ambiguous == null, $"Participant tokens must avoid ambiguous characters (got {ambiguous})");
+        Check(GazeConsentRecord.NewParticipantToken().Length == 14, "Participant token should be grouped 4-4-4");
+    }
+
+    private static void TestRecorderWritesInvariantNumbers()
+    {
+        //The dataset is comma-separated JSON. Under a comma-decimal culture the ambient formatter renders
+        //0.4193f as "0,4193", which silently turns one number into two fields — unreadable on any other
+        //machine. This repo already formats CSV floats with the ambient culture elsewhere, so the recorder
+        //pinning InvariantCulture is worth a test rather than a comment.
+        var previous = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = new CultureInfo("de-DE");
+            //Sanity-check the hazard is real on this runtime before asserting the fix.
+            Check((0.4193f).ToString() == "0,4193", "de-DE should format a float with a decimal comma (hazard check)");
+
+            var consent = GazeConsentRecord.Create(GazeRecordingTier.Features, false,
+                new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), "a@b.c", "smoke");
+            var recorder = new GazeSessionRecorder(consent, GazeRecordingTier.Features, 1);
+            var folder = recorder.SessionFolder;
+            try
+            {
+                //0.4193 goes in as a SCALAR (iris disagreement) so it lands in the JSON row; the feature
+                //vector is a binary blob and would not exercise the formatter at all.
+                recorder.RecordSample(0, new[] { 0.4193f, -1.5f }, new Vector2(12.5f, 7.25f), new Vector2(12.5f, 7.25f),
+                    1.5, true, false, 0, 0, 512.5f, new Vector3(0.1f, 0.2f, 0.3f), 0.4193f, false, null, null);
+                recorder.Finish("test", 1.25f);
+
+                var rows = File.ReadAllText(Path.Combine(folder, "samples.jsonl"));
+                Check(rows.Contains("0.4193"), $"Recorded floats must use a decimal point under de-DE (row: {rows.Trim()})");
+                Check(!rows.Contains("0,4193"), "Recorded floats must never use a decimal comma");
+                //A decimal comma would also split one JSON number into two fields; count the commas that
+                //separate real fields to catch that even if the value above ever changes.
+                Check(!rows.Contains(",\"i\":") || rows.IndexOf("{\"i\":", StringComparison.Ordinal) == 0,
+                    "Recorded rows should be one JSON object per line");
+                Check(File.Exists(Path.Combine(folder, "consent.json")),
+                    "consent.json must be written beside the data it governs");
+
+                //Feature blob is raw float32 and must round-trip bit-exactly — it is the model's actual input.
+                var blob = File.ReadAllBytes(Path.Combine(folder, "features.f32"));
+                Check(blob.Length == 8, $"Feature blob should hold 2 float32s (got {blob.Length} bytes)");
+                Check(Mathf.Abs(BitConverter.ToSingle(blob, 0) - 0.4193f) < 1e-9f, "Feature blob should round-trip exactly");
+            }
+            finally
+            {
+                try { Directory.Delete(folder, true); } catch { }
+            }
+        }
+        finally { System.Threading.Thread.CurrentThread.CurrentCulture = previous; }
+    }
+
+    private static void TestRecordingRuntimeHasNoNetworkCode()
+    {
+        //The consent screen tells participants "we never send anything over the internet". That promise is
+        //only as good as the code, so assert it over the source rather than trusting review. Scoped to the
+        //recording/consent files: the wider runtime legitimately reaches the vendored MediaPipe, which uses
+        //UnityWebRequest to load model files from StreamingAssets.
+        var dir = Path.GetFullPath("Packages/de.uniulm.uniteye/Scripts/Runtime/Recording");
+        Check(Directory.Exists(dir), $"Recording source folder should exist at {dir}");
+        if (!Directory.Exists(dir)) return;
+
+        string[] forbidden = { "UnityWebRequest", "System.Net", "HttpClient", "WebClient", "Socket", "UploadHandler" };
+        var files = Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories);
+        Check(files.Length > 0, "Recording folder should contain source files");
+        foreach (var file in files)
+        {
+            var text = File.ReadAllText(file);
+            foreach (var needle in forbidden)
+                Check(text.IndexOf(needle, StringComparison.Ordinal) < 0,
+                    $"{Path.GetFileName(file)} must contain no networking code (found '{needle}')");
+        }
+    }
+
+    private static void TestRecordingTierOrderingIsPrivacyMonotonic()
+    {
+        //Downstream code gates imagery with `tier >= EyeCrops` and face geometry with `tier >= Landmarks`.
+        //That only stays correct while the enum is ordered least- to most-identifying, so pin the order.
+        Check((int)GazeRecordingTier.Off == 0, "Off must be 0 so a default-constructed tier records nothing");
+        Check(GazeRecordingTier.Features < GazeRecordingTier.Landmarks, "Features is less identifying than Landmarks");
+        Check(GazeRecordingTier.Landmarks < GazeRecordingTier.EyeCrops, "Landmarks is less identifying than EyeCrops");
+        Check(GazeRecordingTier.EyeCrops < GazeRecordingTier.FaceVideo, "EyeCrops is less identifying than FaceVideo");
+        Check(GazeRecordingTier.FaceVideo < GazeRecordingTier.FullFrames, "FaceVideo is less identifying than FullFrames");
     }
 
     private static void TestFaceLandmarkerBundleSupportsRequestedOutputs()

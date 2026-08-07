@@ -84,6 +84,10 @@ namespace UnitEye
         public void ClearReturned() => Returned = false;
         //Default return message for cancellation
         public string ReturnMessage { get; private set; } = "Cancelled evaluation";
+        //Set when Evaluate() switched the active calibration to the better corner model. HomulerGaze must
+        //re-apply it after RestoreSettings, which otherwise rewinds to the pre-evaluation backup and
+        //silently undoes the model the results screen just reported as "Applied.".
+        public Calibrations? AppliedCalibration { get; private set; }
 
         public Texture2D evaluationDot;
 
@@ -117,6 +121,7 @@ namespace UnitEye
             _earlyStop = false;
             _showMessage = true;
             Returned = false;
+            AppliedCalibration = null;
             _isTimerRunning = false;
             _timeRemaining = 0f;
             _currentPoint = 0;
@@ -336,6 +341,9 @@ namespace UnitEye
                 if (applyBestCornerModel)
                 {
                     _gaze.Calibrations = best;
+                    //Remembered so UnloadEvaluation can re-apply it after RestoreSettings; otherwise the
+                    //user is told the better model is in use while the pre-evaluation one actually runs.
+                    AppliedCalibration = best;
                     selection += " Applied.";
                 }
                 ReturnMessage += $" {selection}";
@@ -482,10 +490,35 @@ namespace UnitEye
         }
 
         /// <summary>
+        /// The predictions to score, and the calibration they belong to. Every consumer (the heatmap, the
+        /// accuracy/precision decomposition and the persisted error model's tag) must agree, and all must
+        /// describe the calibration that will ACTUALLY be running once the evaluation unloads — not merely
+        /// whichever model file happens to exist. The old "ridge if a ridge file exists" test meant that
+        /// with MLCalibration active and a stale ridge file still on disk, the error model was measured
+        /// from ridge predictions and tagged SourceCalibration=RidgeRegression; GazeErrorModel.AppliesTo is
+        /// strict equality, so HomulerGaze could never apply it, and the heatmap described a model the user
+        /// was not looking through. Reading _gaze.Calibrations is right here because Evaluate() has already
+        /// applied the best corner model, and UnloadEvaluation now preserves that choice.
+        /// </summary>
+        private (List<Vector2> data, Calibrations source) SelectPredictions()
+        {
+            var active = _gaze != null ? _gaze.Calibrations : Calibrations.None;
+            if (active == Calibrations.MLCalibration && _hasMlpModel)
+                return (_predMLPData, Calibrations.MLCalibration);
+            if (active == Calibrations.RidgeRegression && _hasRidgeModel)
+                return (_predRidgeData, Calibrations.RidgeRegression);
+            //Active type has no model of its own (e.g. Calibrations.None): fall back to whatever exists so
+            //the results screen still shows something, tagged with the type it genuinely measures.
+            if (_hasRidgeModel) return (_predRidgeData, Calibrations.RidgeRegression);
+            if (_hasMlpModel) return (_predMLPData, Calibrations.MLCalibration);
+            return (null, active);
+        }
+
+        /// <summary>
         /// Draws the post-evaluation accuracy heatmap: for each evaluated target, a line from the target to
         /// the MEAN measured gaze for that target (a hollow-ish marker at the target, a filled marker at the
-        /// mean), colored green/amber/red by error as a fraction of the screen diagonal. Uses the
-        /// RidgeRegression predictions when available, else the MLP's — i.e. what the calibration produced.
+        /// mean), colored green/amber/red by error as a fraction of the screen diagonal. Scores the
+        /// calibration that will actually be running — see SelectPredictions.
         /// </summary>
         /// <summary>
         /// Aggregates the evaluation samples into per-target (target, mean gaze, error color) entries.
@@ -494,7 +527,7 @@ namespace UnitEye
         private void BuildHeatmapEntries()
         {
             _heatmapEntries.Clear();
-            var predictions = _hasRidgeModel ? _predRidgeData : (_hasMlpModel ? _predMLPData : null);
+            var (predictions, _) = SelectPredictions();
             if (predictions == null || predictions.Count == 0 || _targetData.Count == 0)
                 return;
 
@@ -520,13 +553,13 @@ namespace UnitEye
 
         /// <summary>
         /// Computes the standard accuracy/precision/RMS-S2S decomposition per evaluation target on the
-        /// model the heatmap shows (ridge if present, else MLP), reports AOI-hit rates at representative
+        /// model the heatmap shows (see SelectPredictions), reports AOI-hit rates at representative
         /// AOI sizes, and persists the per-region error model (bias + covariance per target) next to the
         /// calibration so the runtime AOI layer can turn hits into calibrated probabilities.
         /// </summary>
         private string BuildErrorStatistics()
         {
-            var predictions = _hasRidgeModel ? _predRidgeData : (_hasMlpModel ? _predMLPData : null);
+            var (predictions, source) = SelectPredictions();
             if (predictions == null || predictions.Count == 0 || _targetData.Count == 0)
                 return "";
 
@@ -545,7 +578,7 @@ namespace UnitEye
             //be applied at runtime while THAT calibration is active.
             var errorModel = new GazeErrorModel
             {
-                SourceCalibration = _hasRidgeModel ? Calibrations.RidgeRegression : Calibrations.MLCalibration
+                SourceCalibration = source
             };
             float w = Screen.width, h = Screen.height;
             foreach (var pair in perTarget)

@@ -32,6 +32,12 @@ namespace UnitEye
 
         private HomulerGaze _gaze;
 
+        //Optional consented dataset recording. Both stay null unless a CalibrationRecordingConsent component
+        //is present AND the participant opted in, so the ordinary calibration path is untouched.
+        private CalibrationRecordingConsent _consentGate;
+        private GazeSessionRecorder _recorder;
+        private double _recordingStartedAt;
+
         private List<float[]> _xData = new List<float[]>();
 
         private List<float> _yXData = new List<float>();
@@ -195,6 +201,16 @@ namespace UnitEye
             _dwellGateAccepts = _dwellGateRejects = 0;
             _dwellGateBypassed = false;
             _warnedGateBypass = false;
+            //A cancelled-and-retried calibration clears the training arrays above, so any recorder opened for
+            //the abandoned attempt is now keyed to indices that no longer exist. Close it out rather than let
+            //it keep appending rows that can never be joined to a trained model.
+            if (_recorder != null)
+            {
+                _recorder.Finish("abandoned", -1f);
+                _recorder = null;
+            }
+            _consentGate = GetComponent<CalibrationRecordingConsent>();
+            _consentGate?.BeginIfNeeded();
             if (_presets != null)
             {
                 //REBUILD the presets, not just reset the position: Start() runs once per component, so a
@@ -303,9 +319,11 @@ namespace UnitEye
             //If rightclick, signal Returned
             if (rightClick && returnAfter)
                 Returned = true;
-            //Start on leftclick
-            if (leftClick && !_finished)
+            //Start on leftclick. Blocked while the consent screens are up: recording has to be answered
+            //BEFORE any sample exists, or the first samples would be captured without an answer.
+            if (leftClick && !_finished && !(_consentGate != null && _consentGate.Blocking))
             {
+                if (!_started) BeginRecordingIfConsented();
                 _started = true;
                 _showMessage = false;
                 _finishedRound = false;
@@ -401,7 +419,10 @@ namespace UnitEye
                 //sweep samples of the new round a wrong (pre-jump) pursuit-lag label.
                 _dotTrail.Clear();
                 _gazeTrail.Clear();
-                DrawPath(points);
+                //No DrawPath here: it used to push the new preset's waypoints into the LineRenderer, which
+                //had to be refreshed once per round. It now draws in immediate mode from OnGUI, which
+                //re-reads `points` every frame — and calling it here threw "You can only call GUI functions
+                //from inside OnGUI" on every round transition.
             }
 
             //If done with all rounds or if we want to stop early, finish calibration
@@ -411,6 +432,9 @@ namespace UnitEye
                 _guiMessage = "Starting training. This can take a while, please be patient!";
                 _showMessage = true;
                 _finished = true;
+                //An early stop can land mid-dwell, and no later frame can clear this (LateUpdate returns on
+                //_finished from here on), leaving the state machine claiming a dwell that will never end.
+                _isYielding = false;
 
                 //Use a coroutine to start in the next frame to allow OnGUI() to run once.
                 StartCoroutine(Training());
@@ -430,25 +454,53 @@ namespace UnitEye
             featureAugmentation.headPoseFeatureIndices =
                 _gaze != null ? HeadPoseFeatureIndices(_gaze.GazeBackbone) : null;
 
-            //Process data by calibration type
-            switch (calibrationType)
+            //Process data by calibration type. Training legitimately throws on a degenerate capture — no
+            //samples at all (face never tracked, or an early stop seconds in), or every boundary dwell group
+            //below minimumCornerSamples. An exception escaping here kills the coroutine, and since _finished
+            //was latched BEFORE StartCoroutine, LateUpdate is already inert: the overlay would sit on
+            //"Starting training…" forever, with no result, no return hint and the Gaze UI still hidden.
+            //Report the failure instead and let the rest of this method restore the UI.
+            try
             {
-                case Calibrations.RidgeRegression:
-                    ReturnMessage = $"{ProcessData()} ";
-                    message += $"{ReturnMessage}\n";
-                    break;
-                case Calibrations.MLCalibration:
-                    ReturnMessage = $"{ProcessDataNeural()} ";
-                    message += $"{ReturnMessage}\n";
-                    break;
-                default:
-                    break;
+                switch (calibrationType)
+                {
+                    case Calibrations.RidgeRegression:
+                        ReturnMessage = $"{ProcessData()} ";
+                        message += $"{ReturnMessage}\n";
+                        break;
+                    case Calibrations.MLCalibration:
+                        ReturnMessage = $"{ProcessDataNeural()} ";
+                        message += $"{ReturnMessage}\n";
+                        break;
+                    default:
+                        break;
+                }
+            }
+            catch (Exception e)
+            {
+                UnitEyeLog.Exception(e);
+                ReturnMessage = $"Calibration training failed: {e.Message} ";
+                message += $"{ReturnMessage}\n";
             }
 
             //Validation-gate advice (empty when the holdout accuracy is fine).
             var advice = ConfidenceAdvice(LastHoldoutRmseCm);
             if (advice.Length > 0)
                 message += advice.TrimStart('\n') + "\n";
+
+            //Close the recording with the session's own quality number, so a dataset folder carries the
+            //accuracy it was collected at and a bad session can be excluded without re-deriving it. Before
+            //_guiMessage is set, so the withdrawal code reaches the screen the participant is looking at.
+            if (_recorder != null)
+            {
+                _recorder.Finish("completed", LastHoldoutRmseCm);
+                if (_recorder.ImagesDropped > 0)
+                    UnitEyeLog.Warn($"Recording: {_recorder.ImagesDropped} image(s) were dropped (disk or GPU " +
+                                    "could not keep up); see summary.json. Sample rows are unaffected.");
+                message += $"Recorded {_recorder.SampleCount} samples. Withdrawal code: {_recorder.ParticipantToken}\n";
+                _recorder = null;
+                _consentGate?.ShowCompletionScreen();
+            }
 
             //Append return hint to GUI
             if (returnAfter)
@@ -462,6 +514,18 @@ namespace UnitEye
             if (quitAfterCalibration) Functions.Quit();
 
             GetComponent<HomulerGaze>().showGazeUI = true;
+        }
+
+        //A calibration abandoned by closing play mode or destroying the object must still flush and close its
+        //files; otherwise the last rows and any in-flight images are lost and the folder looks truncated with
+        //no explanation.
+        private void OnDisable()
+        {
+            if (_recorder != null)
+            {
+                _recorder.Finish("interrupted", -1f);
+                _recorder = null;
+            }
         }
 
         private void CaptureNetworkOutput()
@@ -540,6 +604,11 @@ namespace UnitEye
                 _dwellGateAccepts++;
             }
 
+            //Mirror into the dataset recording BEFORE the Add, using the index this sample is about to take.
+            //Hooked here at the successful tail — past every rejection above — so a recorded row can never
+            //exist for a sample the training set does not contain.
+            RecordSampleIfRecording(_xData.Count, features, label);
+
             //Clone: GetFeatures() returns the provider's reused per-frame buffer, so the retained training
             //sample must be an owned copy (otherwise every captured sample would alias the latest frame).
             _xData.Add((float[])features.Clone());
@@ -551,14 +620,101 @@ namespace UnitEye
             _sampleFromHeadRotation.Add(_presets[_currentPreset].IsHeadMovement);
         }
 
+        /// <summary>
+        /// Opens a recording session if the participant consented. Clamps imagery tiers away when the
+        /// provider cannot deliver imagery that belongs to the same camera frame as the features — under
+        /// async GPU readback the crops are one frame ahead of the label, which would produce a dataset whose
+        /// pixels and targets disagree with nothing downstream able to notice.
+        /// </summary>
+        private void BeginRecordingIfConsented()
+        {
+            _recorder = null;
+            if (_consentGate == null || !_consentGate.ShouldRecord) return;
+
+            var provider = _gaze != null ? _gaze.Provider : null;
+            var source = provider as IGazeRecordingSource;
+            var tier = _consentGate.Tier;
+
+            if (source == null && tier > GazeRecordingTier.Features)
+            {
+                tier = GazeRecordingTier.Features;
+                UnitEyeLog.Warn("Recording: this provider exposes no landmarks or imagery; recording features only.");
+            }
+            if (source != null && tier >= GazeRecordingTier.EyeCrops && !source.ImageryInSyncWithFeatures)
+            {
+                tier = GazeRecordingTier.Landmarks;
+                UnitEyeLog.Warn("Recording: async GPU readback puts the eye crops one camera frame ahead of the " +
+                                "features they would be labelled with, so imagery is disabled for this session. " +
+                                "Turn off HomulerGaze._asyncGpuReadback to record imagery.");
+            }
+
+            try
+            {
+                _recorder = new GazeSessionRecorder(_consentGate.Record, tier,
+                    source != null ? Mathf.Max(1, source.LandmarkCount) : 1);
+                _consentGate.ActiveRecorder = _recorder;
+                _recordingStartedAt = Time.unscaledTimeAsDouble;
+                _recorder.WriteSessionHeader(
+                    backbone: _gaze != null ? _gaze.GazeBackbone.ToString() : "unknown",
+                    screenWidth: Screen.width, screenHeight: Screen.height,
+                    screenWidthCm: Functions.PixelsToMm(Screen.width) * 0.1f,
+                    screenHeightCm: Functions.PixelsToMm(Screen.height) * 0.1f,
+                    frameWidth: source != null ? source.FrameWidth : 0,
+                    frameHeight: source != null ? source.FrameHeight : 0,
+                    flipH: source != null && source.FrameFlippedHorizontally,
+                    flipV: source != null && source.FrameFlippedVertically,
+                    landmarksSmoothed: source != null && source.LandmarksSmoothed,
+                    landmarkCount: source != null ? source.LandmarkCount : 0,
+                    rollNormalizeCrops: true, flipAugmentation: false,
+                    //Nothing in this flow asks the participant about glasses, so recording HomulerGaze's
+                    //default would claim an answer that was never given.
+                    glassesState: "not_asked");
+            }
+            catch (Exception e)
+            {
+                UnitEyeLog.Error("Could not start the calibration recording; calibrating without it.");
+                UnitEyeLog.Exception(e);
+                _recorder = null;
+            }
+        }
+
+        /// <summary>
+        /// Mirrors an accepted training sample into the recording. Called from the tail of the capture path
+        /// with the index the sample is about to take, so rows and images are 1:1 with training data by
+        /// construction rather than by a join that can drift.
+        /// </summary>
+        private void RecordSampleIfRecording(int sampleIndex, float[] features, Vector2 label)
+        {
+            if (_recorder == null || !_recorder.Recording) return;
+            var provider = _gaze != null ? _gaze.Provider : null;
+            if (provider == null) return;
+            _recorder.RecordSample(
+                sampleIndex, features, label, _crossHairPos,
+                Time.unscaledTimeAsDouble - _recordingStartedAt,
+                _isYielding, _presets[_currentPreset].IsHeadMovement, _currentPreset, currentRound,
+                provider.DistanceMm, provider.HeadPoseEuler, provider.BinocularIrisDisagreement,
+                provider.IsBlinking, provider as IGazeRecordingSource, provider);
+        }
+
         private string ProcessDataNeural()
         {
             Debug.Log("Starting MLP training");
             Debug.Log($"Total Count: {_xData.Count}");
 
+            //LastHoldoutRmseCm is static and shared with the ridge path: clear it FIRST so a throw below
+            //can never leave a previous RidgeRegression run's number standing in for this session.
+            LastHoldoutRmseCm = -1f;
+
             BuildBalancedTrainingData(out var features, out _, out _, out var targets);
             var mlp = new SimpleMLP();
             string MLPstring = mlp.Train(features, targets, featureAugmentation);
+
+            //Session confidence from the MLP's OWN untouched holdout, same Euclidean convention as the
+            //ridge path — otherwise the validation gate (ConfidenceAdvice, the CSV tag and any host-game
+            //gating) described whichever calibration happened to be trained last, or never fired at all
+            //when MLCalibration was the first calibration of a fresh install.
+            LastHoldoutRmseCm = Mathf.Sqrt(mlp.LastHoldoutRmseXCm * mlp.LastHoldoutRmseXCm +
+                                           mlp.LastHoldoutRmseYCm * mlp.LastHoldoutRmseYCm);
 
             if (save)
             {
@@ -880,6 +1036,11 @@ namespace UnitEye
 
         private void OnGUI()
         {
+            //Yield the screen entirely while the consent screens are up. Draw order between two components'
+            //OnGUI is not defined, so without this the calibration dot and the "click to start" message paint
+            //over (or under) a decision the participant is in the middle of making.
+            if (_consentGate != null && _consentGate.Blocking) return;
+
             //Show message on screen. Scale the font with resolution so the message (and the final RMSE)
             //stays legible on high-DPI displays; == baseline at 1080p, larger above it.
             if (_showMessage)
@@ -918,7 +1079,13 @@ namespace UnitEye
                 DrawPath(points);
 
             var size = 36;
-            if (calibrationDot != null)
+            //Nothing below belongs on the results screen: the dot marks the target the participant should be
+            //looking at right now, and once the run is over there is none. Without the _finished term the
+            //breathing dot, its dwell pulse ring and the countdown label all keep drawing over the RMSE
+            //readout — and after an early stop (S) the countdown freezes, because _isYielding is still set
+            //when LateUpdate latches _finished and every later frame returns before it can be cleared.
+            //(HomulerGazeEvaluation.cs got exactly this guard in f78f0ce; the calibration side was missed.)
+            if (calibrationDot != null && !_finished)
             {
                 // Draw faded out checkpoints
                 var oldColor = GUI.color;

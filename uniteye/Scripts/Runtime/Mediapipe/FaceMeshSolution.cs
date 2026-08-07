@@ -276,6 +276,53 @@ namespace Mediapipe.Unity.FaceMesh
 
         public float[] HeadGeom => new float[4] { HeadYaw, HeadPitch, HeadRoll, HeadArea };
 
+        // Exposed for dataset recording (IGazeRecordingSource): landmark-to-pixel registration depends on
+        // the flips applied on the way into MediaPipe, and whether the 6 gaze landmarks were smoothed is a
+        // caveat anyone training on the landmark block needs. Read-only — recorded, never corrected.
+        public bool FrameFlippedHorizontally => _flipHorizontally;
+        public bool FrameFlippedVertically => _flipVertically;
+        public bool GazeLandmarksSmoothed => _smoothGazeLandmarks;
+
+        /// <summary>
+        /// The live camera texture MediaPipe is reading, or null. Valid for the current frame only.
+        /// </summary>
+        public Texture CameraTexture => _webCamSource != null ? _webCamSource.GetCurrentTexture() : null;
+
+        /// <summary>
+        /// Copies the landmarks as consecutive x,y,z triplets into a caller-owned buffer, returning the
+        /// number of floats written. A copy rather than an accessor on purpose: the NormalizedLandmark
+        /// objects are allocated once and mutated in place every frame, so anything retaining the list reads
+        /// the newest frame instead of the one it meant to record.
+        /// </summary>
+        public int CopyLandmarks(float[] dest)
+        {
+            var landmarks = FaceLandmarks;
+            if (dest == null || landmarks == null) return 0;
+            int n = Mathf.Min(landmarks.Count, dest.Length / 3);
+            for (int i = 0; i < n; i++)
+            {
+                var lm = landmarks[i];
+                dest[i * 3] = lm.X;
+                dest[i * 3 + 1] = lm.Y;
+                dest[i * 3 + 2] = lm.Z;
+            }
+            return n * 3;
+        }
+
+        /// <summary>
+        /// Copies the 8 eyeLook* scores then eyeBlinkLeft/Right into <paramref name="dest"/> (10 floats).
+        /// False when this frame carried no blendshapes — the internal buffer keeps the last good frame's
+        /// values in that case, so callers must not fall back to reading it.
+        /// </summary>
+        public bool TryCopyEyeBlendshapes(float[] dest)
+        {
+            if (dest == null || dest.Length < 10 || !HasBlendshapes) return false;
+            for (int i = 0; i < 8; i++) dest[i] = _eyeLookScores[i];
+            dest[8] = _eyeBlinkLeft;
+            dest[9] = _eyeBlinkRight;
+            return true;
+        }
+
         //Reused so the per-frame EyeMU input (HomulerEyeMURunner reads this every inference) allocates no
         //float[8]. The consumer copies it straight into a tensor, so a shared buffer is safe (same as the
         //runner's _poseBuffer). Caller reads this only when FaceLandmarks is populated (after ComputeEyes).

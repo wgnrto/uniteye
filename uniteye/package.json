@@ -11,6 +11,7 @@
     "com.unity.ai.inference": "2.6.1",
     "com.unity.inputsystem": "1.19.0",
     "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.modules.imageconversion": "1.0.0",
     "com.github.homuler.mediapipe": "0.16.3"
   }
 }

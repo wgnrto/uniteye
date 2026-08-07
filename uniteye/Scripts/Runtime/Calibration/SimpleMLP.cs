@@ -37,6 +37,13 @@ namespace UnitEye
         const float BETA2 = 0.999f;
         const float EPSILON = 1e-8f;
 
+        //Holdout RMSE (cm) per axis of the most recent Train() call on THIS instance; -1 before any. Train
+        //already computes these for its return string — publishing them lets the caller feed the calibration
+        //validation gate (HomulerGazeCalibration.LastHoldoutRmseCm) instead of parsing prose. [JsonIgnore]:
+        //they describe a training run, not the model, and must not land in MLP.json.
+        [JsonIgnore] public float LastHoldoutRmseXCm { get; private set; } = -1f;
+        [JsonIgnore] public float LastHoldoutRmseYCm { get; private set; } = -1f;
+
         //Serialized model state. Weights are stored row-major: W1[h * inputCount + i].
         public int InputCount { get; set; }
         public float[] W1 { get; set; }
@@ -211,6 +218,8 @@ namespace UnitEye
 
             var errorXInCm = Functions.PixelsToMm(rmseX) * 0.1f;
             var errorYInCm = Functions.PixelsToMm(rmseY) * 0.1f;
+            LastHoldoutRmseXCm = errorXInCm;
+            LastHoldoutRmseYCm = errorYInCm;
             return $"MLP Training done. RMSE X: {errorXInCm}cm | RMSE Y: {errorYInCm}cm.";
         }
 

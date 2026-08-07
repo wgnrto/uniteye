@@ -20,6 +20,7 @@ Webcam-based eye-tracking for Unity.
 * Distance-to-camera, blinking, and drowsiness detection
 * A built-in runtime [Gaze UI](#gaze-ui) and an easy [C# API](#uniteyeapi)
 * Native desktop (Windows/macOS/Linux) **and** a browser pipeline for **WebGL**
+* Opt-in, consented [calibration-data recording](#contribute-your-calibration-data) so users can donate sessions and help improve the gaze models
 
 ## How it works
 
@@ -94,7 +95,7 @@ UnitEye targets **Unity 6.3 LTS (6000.3)** and is also verified on **Unity 6.5 (
 (`uniteye`'s own [`package.json`](uniteye/package.json) declares these, so Unity resolves them automatically once the package is added; the block above is just what ends up in the manifest.)
 
 ### Required: install the MediaPipe model files
-The native MediaPipe FaceMesh loads its model from your project's `StreamingAssets` at runtime and throws a `FileNotFoundException` (and produces no gaze) on desktop if it is missing. After adding the packages, run **`UnitEye ▸ Install MediaPipe StreamingAssets`** once — it copies the single self-contained Task-API bundle `face_landmarker_v2.bytes` (detector + 478-landmark model with iris) into `Assets/StreamingAssets/` ([`MediaPipeAssetInstaller`](uniteye/Scripts/Editor/MediaPipeAssetInstaller.cs); headless: `-executeMethod MediaPipeAssetInstaller.Install`). It is then included in your builds.
+The native MediaPipe FaceMesh loads its model from your project's `StreamingAssets` at runtime and throws a `FileNotFoundException` (and produces no gaze) on desktop if it is missing. After adding the packages, run **`UnitEye ▸ Install MediaPipe StreamingAssets`** once — it copies the single self-contained Task-API bundle `face_landmarker_v2_with_blendshapes.bytes` (detector + 478-landmark model with iris + the blendshape predictor) into `Assets/StreamingAssets/` ([`MediaPipeAssetInstaller`](uniteye/Scripts/Editor/MediaPipeAssetInstaller.cs); headless: `-executeMethod MediaPipeAssetInstaller.Install`). It is then included in your builds. The **`_with_blendshapes`** variant is required: UnitEye asks the FaceLandmarker for the 52 blendshapes (used for the blink gate and the `eyeLook*` gaze features), and requesting them from the smaller `face_landmarker_v2.bytes` bundle fails task creation outright with `BLENDSHAPES Tag and blendshapes model must be both set`. Re-run the installer if you are upgrading — it also removes the superseded bundle so it stops shipping in your builds.
 
 ## Getting started
 
@@ -167,8 +168,50 @@ For **Ridge Regression** the reported RMSE is measured on a randomly held-out 20
 
 **No default calibration is shipped:** calibration is per-person (an old one-person default extrapolated off-screen for everyone else and stuck the dot in a corner). Before you calibrate, UnitEye logs a one-time warning and uses the **raw, uncalibrated** gaze — it tracks roughly and stays on-screen but isn't accurate. Finished calibrations are saved under `StreamingAssets/Calibration Files/`, in a subfolder per calibration type and under a **per-backbone filename** (so each model keeps its own), and are therefore included in builds. Tip: set the calibration type to `None` to view the raw gaze while sanity-checking tracking.
 
+**Donating a calibration session:** a calibration can optionally be recorded to disk and shared, so the gaze models can be improved against real data — see [Contribute your calibration data](#contribute-your-calibration-data). It is off unless you add the consent component, and the participant is always asked first.
+
 ### Calibration profiles (save/load)
 Because calibrating well takes a while, the [Gaze UI](#gaze-ui) has a **Calibration profiles** panel that saves the current calibration (for the active backbone) under a name and restores it later — so you can keep a good calibration, switch between people/setups, or share one. Each profile is a single self-contained JSON file ([`CalibrationProfileStore`](uniteye/Scripts/Runtime/Calibration/CalibrationProfileStore.cs)). **Save** writes to `StreamingAssets/Calibration Files/Profiles/<name>.json`; **Load** (browse with `<` / `>`) restores the files and reloads the model live. Profiles committed to the repo live in the package under `Resources/CalibrationProfiles/` and are listed alongside your local ones — for example the bundled **MC-14-07-2026** EyeMU RidgeRegression profile (**legacy**: made for the old 19-feature layout, it now loads safely but falls back to raw gaze — recalibrate and re-save it). A profile also records whether the user **wore glasses** (toggle next to the name field); loading one made with the other state warns, since glasses shift appearance models by ~1 cm. A profile only makes sense with the backbone and feature layout it was made for; if the gaze model's feature vector changes, re-save it.
+
+## Contribute your calibration data
+
+**UnitEye gets more accurate the more faces, glasses, lighting conditions and webcams it has seen — and right now it has seen very few.** If you are willing to donate a calibration session, that is the single most useful contribution you can make to this project, more than most code changes. You do not need to write any code, and it takes about as long as the calibration you were doing anyway.
+
+Because we already ship an [evaluation](#evaluation) benchmark, donated sessions close a real loop: record → retrain or re-tune offline → re-measure against the same benchmark → keep the change only if the number improves.
+
+### How to donate a session
+
+1. Add the [`CalibrationRecordingConsent`](uniteye/Scripts/Runtime/Recording/CalibrationRecordingConsent.cs) component next to `HomulerGaze` / `HomulerGazeCalibration`.
+2. Tick **Ask Before Calibration** and fill in **Withdrawal Contact** (an address a participant can reach you at).
+3. Run a calibration as usual. Before it starts you are asked what may be saved, and separately whether it may be published.
+4. When it finishes you get a **withdrawal code**. Write it down — it is the only thing linking you to your data.
+5. Send the session folder to the maintainers, or open a PR adding it. The folder is under `Application.persistentDataPath/UnitEyeRecordings/`.
+
+### What you can choose to share
+
+Each level includes the ones above it, and you pick where to stop:
+
+| Level | What is saved | What it improves |
+|---|---|---|
+| **Measurements only** | The numbers the tracker computes, plus where the dot was | The [calibration](#calibration) fit (Ridge / MLP) |
+| **+ face shape** | 478-point 3D face map, head pose, blink scores | Head-pose handling and geometry features |
+| **+ eye close-ups** | Two 128×128 crops of your eyes | **The gaze model itself — the highest-value level** |
+| **+ face video** | Camera frames cropped to your face, no room | Face/landmark detection |
+| **+ room video** | The whole camera image | Rarely needed; asks twice before enabling |
+
+**Eye close-ups are the sweet spot.** They are what the gaze model actually looks at, they are small, and they show your eye and brow rather than your whole face or your room.
+
+### What we promise
+
+* **Nothing is uploaded, ever, by the tool.** It writes a folder on your computer and stops. Publishing is a deliberate human step afterwards. There is no network code in the recorder at all, and a test enforces that.
+* **No audio, no name, no computer name, no webcam brand, no time of day, no location.** Your data is labelled only with a random code.
+* **Publishing is a separate question.** You can let us record and still say no to publication.
+* **You can withdraw.** Before the 14-day hold, your data is deleted, no questions asked. There is also a **Delete my recording now** button on the final screen if you change your mind straight away.
+* **We will not tell you this is anonymous**, because it would not be true — a 478-point face map is biometric data, and eye crops and video are plainly identifying. The consent screen says so in those words, and warns that anything already published cannot be fully taken back, because git history keeps it recoverable.
+
+Full format, caveats and the offline conversion to video: [`docs/CALIBRATION-RECORDING.md`](docs/CALIBRATION-RECORDING.md).
+
+> **Collecting from other people?** Facial imagery and face geometry are biometric data, and special-category data under GDPR in the EU. This is a flag, not legal advice — check approval, retention and lawful basis with your institution's ethics board before recording anyone but yourself. The exact consent wording shown is SHA-256-pinned in every session folder, so you can demonstrate afterwards precisely what each participant agreed to.
 
 ## Evaluation
 To measure accuracy, run an evaluation: like a calibration, but the dot jumps between random points on a grid. Add the [`HomulerGazeEvaluation`](uniteye/Scripts/Runtime/HomulerGazeEvaluation.cs) component next to `HomulerGaze`, or start one from the [Gaze UI](#gaze-ui).
@@ -299,6 +342,7 @@ If you get no gaze at all:
 * [`docs/WEBGL.md`](docs/WEBGL.md) + [`webgl/README.md`](webgl/README.md) — the WebGL browser pipeline.
 * [`docs/HOMULER-UPGRADE.md`](docs/HOMULER-UPGRADE.md) — upgrading the vendored MediaPipe plugin.
 * [`docs/CODE-AUDIT.md`](docs/CODE-AUDIT.md) — the performance/maintainability audit (fixed + deferred).
+* [`docs/CALIBRATION-RECORDING.md`](docs/CALIBRATION-RECORDING.md) — the consented calibration-data recorder: tiers, on-disk format, caveats, and what a publication script must check.
 
 ## License
 * Unity Inference Engine (`com.unity.ai.inference`) — [Unity Companion License](https://unity.com/legal/licenses/unity-companion-license)

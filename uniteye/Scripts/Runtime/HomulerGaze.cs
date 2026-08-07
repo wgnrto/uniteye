@@ -911,6 +911,18 @@ namespace UnitEye
             if (_calibrations == Calibrations.None)
                 return;
 
+            //Same reasoning as LoadEvaluation: bail BEFORE mutating anything. _calibrationScript is
+            //deliberately unwired in HomulerGazeCalibration.unity (that scene drives its own calibration
+            //standalone), so the Gaze UI's Calibrate button reached this method with a null field and threw
+            //below — after IsRendering, ClearDrift, BackupSettings and the overlay hiding had already run,
+            //none of which RestoreSettings can undo unless UnloadCalibration gets to run.
+            if (_calibrationScript == null)
+            {
+                UnitEyeLog.Warn($"LoadCalibration ignored: no {nameof(HomulerGazeCalibration)} assigned to " +
+                                $"_calibrationScript on '{name}'.");
+                return;
+            }
+
             IsRendering = false;
 
             //A fresh calibration supersedes any drift re-centering correction.
@@ -988,6 +1000,20 @@ namespace UnitEye
         /// <param name="columns">Number of columns in the dot grid</param>
         public void LoadEvaluation(int rows = 5, int columns = 5)
         {
+            //Resolve BEFORE touching any state. HomulerGazeEvaluation is optional — every other use of
+            //_evaluationScript null-guards, and neither the UnitEyeUsingHomulerMediapipe prefab nor the
+            //HomulerGazeCalibration scene carries one — so dereferencing it here threw AFTER the hide +
+            //backup below had already run, and only UnloadEvaluation (gated on a non-null _evaluationScript)
+            //can undo those: the scene was left with every overlay off and no runtime way back.
+            var evaluation = GetComponent<HomulerGazeEvaluation>();
+            if (evaluation == null)
+            {
+                UnitEyeLog.Warn($"LoadEvaluation ignored: no {nameof(HomulerGazeEvaluation)} component on '{name}'. " +
+                                "Add one to this GameObject to run an evaluation from the Gaze UI.");
+                return;
+            }
+            _evaluationScript = evaluation;
+
             IsRendering = false;
 
             //Backup settings
@@ -1004,8 +1030,6 @@ namespace UnitEye
             if (_csvLogger != null && _csvLogger.isActiveAndEnabled && _calibrationScript == null)
                 _csvLogger.AppendNote("Started evaluation");
 
-            //Attach calibration to same gameObject
-            _evaluationScript = GetComponent<HomulerGazeEvaluation>();
             _evaluationScript.enabled = true;
 
             //Evaluation settings
@@ -1022,6 +1046,13 @@ namespace UnitEye
         {
             //Restore settings
             RestoreSettings();
+
+            //RestoreSettings rewinds _calibrations to the pre-evaluation backup, which would silently undo
+            //the model the evaluation just reported as "Applied." on its results screen. Re-assign through
+            //the PROPERTY (not the field RestoreSettings writes) so the store is loaded for the surviving
+            //type. Must come after RestoreSettings, or the restore clobbers it again.
+            if (_evaluationScript.AppliedCalibration.HasValue)
+                Calibrations = _evaluationScript.AppliedCalibration.Value;
 
             //Append a note to csv entry
             if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
