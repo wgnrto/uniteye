@@ -185,7 +185,11 @@ Because we already ship an [evaluation](#evaluation) benchmark, donated sessions
 2. Tick **Ask Before Calibration** and fill in **Withdrawal Contact** (an address a participant can reach you at).
 3. Run a calibration as usual. Before it starts you are asked what may be saved, and separately whether it may be published.
 4. When it finishes you get a **withdrawal code**. Write it down — it is the only thing linking you to your data.
-5. Send the session folder to the maintainers, or open a PR adding it. The folder is under `Application.persistentDataPath/UnitEyeRecordings/`.
+5. Open **`UnitEye ▸ Recorded Sessions`**, tick the session, and press **Package and upload…**. That zips it and opens the upload page with the file ready to drag in. Done.
+
+The window shows every recording with its tier, sample count, size and measured accuracy, and lets you delete any of them (that is how a withdrawal request gets honoured). Sessions that are **not** shareable are listed but cannot be selected, with the reason shown — participant chose local-only, still inside the 14-day hold, or missing its consent file. Those checks are the only thing enforcing the promise the consent screen made, so the button will not let you past them.
+
+Nothing is transmitted by the tool itself: it writes a zip, reveals it, and opens the page. Attaching and submitting stays your click, on a file you can inspect first.
 
 ### What you can choose to share
 

@@ -115,22 +115,38 @@ compression smearing the eye region, and exact frame-to-label pairing. To eyebal
 ffmpeg -framerate 30 -pattern_type glob -i 'frames/*.jpg' -c:v libx264 -pix_fmt yuv420p session.mp4
 ```
 
-## Publishing
+## Packaging and sharing
 
-The recorder deliberately has no upload path, and a smoke test asserts the recording sources contain no
-networking code at all. Publication is a human decision because it is the one step that cannot be undone:
-once a folder is pushed to a public repository, copies exist beyond anyone's control, and git history keeps
-it recoverable even after deletion. The consent text says exactly that, in those words.
+**`UnitEye ▸ Recorded Sessions`** ([`RecordedSessionBrowser`](../uniteye/Scripts/Editor/RecordedSessionBrowser.cs))
+lists every recording with its tier, sample count, size, measured accuracy and dropped-image count, and does
+the packaging:
 
-If you write a publication script, it must:
+* **Package … into a zip** — one archive, one folder per session named by its withdrawal code. Entry paths are
+  built explicitly rather than from the absolute source path, so the archive carries no account name.
+* **Package and upload…** — the same zip, then reveals it and opens the upload page with a summary of exactly
+  what is about to be shared (session count, size, tiers, and a distinct warning when the selection contains
+  imagery of people).
+* **Delete** — how a withdrawal request is honoured.
 
-1. Refuse any folder whose `consent.json` is missing or unreadable.
-2. Refuse any folder where `mayPublish` is false.
-3. Refuse any folder where `publicationHoldUntilUtcDate` has not elapsed — `GazeConsentRecord.PublishableOn`
-   encodes both checks. **The 14-day hold lives entirely in that script.** The recorder cannot enforce a
-   promise about publication because it never publishes; if nothing checks it, the promise on the consent
-   screen is unbacked.
-4. Keep a map from withdrawal code to published path, so a withdrawal request can actually be honoured.
+Sessions that cannot be shared are listed but not selectable, with the reason: *participant said local-only*,
+*hold until `<date>`*, *no consent.json*, or *no samples captured*. Those gates are the enforcement point for
+the promise the consent screen made — `GazeConsentRecord.PublishableOn` encodes the consent and hold checks
+together, so a folder cannot be packaged past them.
+
+The window is **Editor-only**, which is the design rather than a limitation:
+
+* The runtime that a participant runs has no network code at all, and a smoke test enforces that, so the
+  consent screen's "we never send anything over the internet" stays literally true.
+* No GitHub credential can end up in a shipped build, because there is no credential.
+* The tool stops at "here is the file, here is the page". Attaching and submitting is a human act, on a file
+  that can be inspected first — appropriate for the one step that cannot be undone. Once a folder is pushed
+  to a public repository, copies exist beyond anyone's control, and git history keeps it recoverable even
+  after deletion. The consent text says exactly that, in those words.
+
+If you automate publication later, keep a map from withdrawal code to published path — otherwise a
+withdrawal request cannot actually be honoured.
+
+Change the upload target by editing `RecordedSessionBrowser.UploadPageUrl`.
 
 Consider `.gitattributes` marking `*.f32`, `*.png` and `*.jpg` as binary, and Git LFS for the imagery tiers —
 a few minutes of `EyeCrops` is hundreds of megabytes.
