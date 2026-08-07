@@ -349,9 +349,24 @@ If you get no gaze at all:
 * [`docs/CALIBRATION-RECORDING.md`](docs/CALIBRATION-RECORDING.md) — the consented calibration-data recorder: tiers, on-disk format, caveats, and what a publication script must check.
 
 ## License
+
+UnitEye is licensed under [GPL-3.0](/LICENSE). Full attributions are in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); the short version:
+
 * Unity Inference Engine (`com.unity.ai.inference`) — [Unity Companion License](https://unity.com/legal/licenses/unity-companion-license)
 * MediaPipe Unity Plugin (homuler) — [MIT](https://github.com/homuler/MediaPipeUnityPlugin/blob/master/LICENSE); bundled MediaPipe models are Apache 2.0
-* [EyeMU](https://github.com/FIGLAB/EyeMU/blob/master/LICENSE) — GPL 2.0
-* [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation) — [MIT](https://github.com/yakhyo/gaze-estimation?tab=MIT-1-ov-file)
+* Math.NET Numerics — MIT; Google.Protobuf — BSD-3-Clause
+* OneEuroFilterUnity — MIT, © 2017 DarioMazzanti
+* [EyeMU](https://github.com/FIGLAB/EyeMU/blob/master/LICENSE) — **GPL-2.0**. Its weights ship in
+  `Resources/ONNX/EyeMUEmbedding.onnx`, and loading them is why UnitEye as a whole is GPL.
+* [yakhyo/gaze-estimation](https://github.com/yakhyo/gaze-estimation) — the **code** is MIT, but the
+  **weights are non-commercial**. That project states its models are *"trained only on Gaze360 dataset"*, and
+  [Gaze360](https://github.com/erkil1452/gaze360) is *"for non-commercial research use only"*. An MIT license
+  on the code cannot grant more than its author held, so treat `mobileone_s0_gaze` / `mobilenetv2_gaze` /
+  `resnet34_gaze` as research-use-only.
 
-UnitEye itself is therefore also GPL-licensed; we use version [3.0](/LICENSE).
+> **Planning to ship UnitEye commercially?** You cannot do so with the bundled gaze models as licensed, and
+> switching backbones does not fix it — every shipped model is either GPL (EyeMU) or non-commercial
+> (Gaze360-derived). You would need gaze weights whose license permits commercial redistribution: a grant
+> from the respective authors, or weights trained on a permissive dataset. The `IGazeBackbone` seam makes
+> substituting your own model straightforward. This is a licensing summary, not legal advice.

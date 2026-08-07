@@ -26,9 +26,7 @@ namespace UnitEye
         //Frame rate the pixels-per-frame `speed` tuning assumed (same reference EaseSmoothing/KalmanFilter use).
         private const float ReferenceFrameRate = 30f;
         //Prevents zero-variance fixation features from producing undefined z-scores.
-        private const double MinimumVarianceFloor = 1e-8;
         //Keeps spatial resampling reproducible across the Ridge and MLP calibration paths.
-        private const int SpatialBalancingSeed = 12345;
 
         private HomulerGaze _gaze;
 
@@ -791,11 +789,29 @@ namespace UnitEye
 
         /// <summary>
         /// Fits the thin-plate-spline correction on the sit-still dwell anchors (mean ridge prediction →
-        /// true target, normalized) and validates it on the trainer's untouched holdout: the warp is
-        /// returned only when it clearly improves samples the ridge never trained on, otherwise null.
-        /// With ~9-13 anchors an unvalidated spline can bend the space between anchors in wrong ways —
-        /// this gate is what makes the "local calibration" lever safe to ship enabled.
+        /// true target, normalized) and keeps it only when a LEAVE-ONE-ANCHOR-OUT check shows it helps at
+        /// screen locations it was not anchored to. With ~9-13 anchors an unvalidated spline can bend the
+        /// space between anchors in wrong ways — this gate is what makes the "local calibration" lever safe
+        /// to ship enabled, so the gate itself has to be honest.
         /// </summary>
+        /// <remarks>
+        /// Two leaks used to make this gate self-fulfilling, and both had to go:
+        ///
+        /// 1. SAME SAMPLE. The anchor loop walked all of _xData, which INCLUDES the trainer's holdout — the
+        ///    very samples the warp is then scored on. A holdout sample at target T helped define the anchor
+        ///    at T whose destination is exactly T, so the warp was fitted toward the answer it was about to
+        ///    be graded on. (The arrays are literally the same objects: _xData -> acceptedFeatures ->
+        ///    BuildBalancedTrainingData's output -> xTest -> Result.HoldoutFeatures, all by reference, so
+        ///    reference identity is an exact test for membership.)
+        /// 2. SAME LOCATION. Even with those samples removed, scoring the full warp on holdout samples at T
+        ///    still asks "does the warp help at a location it has an anchor for?" — which it always does, by
+        ///    construction. That is not the deployment question. Gaze lands everywhere, so what matters is
+        ///    whether the spline helps BETWEEN its anchors.
+        ///
+        /// So: anchors come only from training samples, and each holdout sample is scored against a warp
+        /// fitted WITHOUT the anchor at its own target. Fewer warps survive this than the old gate — the
+        /// ones that stop surviving were never earning their keep.
+        /// </remarks>
         private ThinPlateSplineWarp TryBuildValidatedWarp(RidgeCalibrationTrainer.Result result, out string note)
         {
             if (result.HoldoutFeatures == null || result.HoldoutFeatures.Length < 10)
@@ -804,13 +820,20 @@ namespace UnitEye
                 return null;
             }
 
-            //Anchors: one per unique sit-still dwell target. Head-movement dwells are excluded — their
-            //deliberate head-pose variance would smear the anchor's mean prediction.
+            //Reference identity, not value equality: these are the same float[] objects the trainer held out.
+            var holdoutSamples = new HashSet<float[]>(ReferenceEqualityComparer<float[]>.Instance);
+            foreach (var f in result.HoldoutFeatures)
+                if (f != null) holdoutSamples.Add(f);
+
+            //Anchors: one per unique sit-still dwell target, from TRAINING samples only. Head-movement dwells
+            //are excluded — their deliberate head-pose variance would smear the anchor's mean prediction.
             var sums = new Dictionary<Vector2, Vector2>();
             var counts = new Dictionary<Vector2, int>();
             for (var i = 0; i < _xData.Count; i++)
             {
                 if (!_sampleCapturedAtDwell[i] || _sampleFromHeadRotation[i])
+                    continue;
+                if (holdoutSamples.Contains(_xData[i]))
                     continue;
                 var prediction = new Vector2(result.XModel.Predict(_xData[i]), result.YModel.Predict(_xData[i]));
                 if (float.IsNaN(prediction.x) || float.IsNaN(prediction.y))
@@ -827,14 +850,13 @@ namespace UnitEye
                 return null;
             }
 
-            var source = new Vector2[sums.Count];
-            var destination = new Vector2[sums.Count];
-            var k = 0;
-            foreach (var pair in sums)
+            var anchorKeys = new List<Vector2>(sums.Keys);
+            var source = new Vector2[anchorKeys.Count];
+            var destination = new Vector2[anchorKeys.Count];
+            for (var i = 0; i < anchorKeys.Count; i++)
             {
-                destination[k] = pair.Key;
-                source[k] = pair.Value / counts[pair.Key];
-                k++;
+                destination[i] = anchorKeys[i];
+                source[i] = sums[anchorKeys[i]] / counts[anchorKeys[i]];
             }
 
             var warp = ThinPlateSplineWarp.Fit(source, destination);
@@ -844,136 +866,94 @@ namespace UnitEye
                 return null;
             }
 
-            //Holdout comparison in normalized units; require a clear (>2% MSE) improvement to keep.
+            //Leave-one-anchor-out warps. Dropping one anchor must still leave a fittable spline; if it does
+            //not, we cannot validate honestly and so discard rather than ship an unvalidated spline.
+            if (anchorKeys.Count - 1 < ThinPlateSplineWarp.MinimumAnchors)
+            {
+                note = " Corner warp discarded (too few anchors to validate without leaking).";
+                return null;
+            }
+            var withoutAnchor = new Dictionary<Vector2, ThinPlateSplineWarp>();
+            for (var j = 0; j < anchorKeys.Count; j++)
+            {
+                var src = new Vector2[anchorKeys.Count - 1];
+                var dst = new Vector2[anchorKeys.Count - 1];
+                var w = 0;
+                for (var i = 0; i < anchorKeys.Count; i++)
+                {
+                    if (i == j) continue;
+                    src[w] = source[i];
+                    dst[w] = destination[i];
+                    w++;
+                }
+                withoutAnchor[anchorKeys[j]] = ThinPlateSplineWarp.Fit(src, dst);
+            }
+
+            //Score each holdout sample against a warp that never saw an anchor at that sample's own target.
             double before = 0, after = 0;
-            var n = result.HoldoutFeatures.Length;
-            for (var i = 0; i < n; i++)
+            var n = 0;
+            for (var i = 0; i < result.HoldoutFeatures.Length; i++)
             {
                 var p = new Vector2(result.XModel.Predict(result.HoldoutFeatures[i]),
                     result.YModel.Predict(result.HoldoutFeatures[i]));
-                var warped = warp.Apply(p);
-                double ex = p.x - result.HoldoutTargetsX[i], ey = p.y - result.HoldoutTargetsY[i];
+                if (float.IsNaN(p.x) || float.IsNaN(p.y)) continue;
+
+                var key = new Vector2(result.HoldoutTargetsX[i], result.HoldoutTargetsY[i]);
+                var scoringWarp = withoutAnchor.TryGetValue(key, out var held) ? held : warp;
+                //A dropped anchor whose remaining spline would not fit leaves nothing honest to score with.
+                if (scoringWarp == null) continue;
+
+                var warped = scoringWarp.Apply(p);
+                double ex = p.x - key.x, ey = p.y - key.y;
                 before += ex * ex + ey * ey;
-                ex = warped.x - result.HoldoutTargetsX[i];
-                ey = warped.y - result.HoldoutTargetsY[i];
+                ex = warped.x - key.x;
+                ey = warped.y - key.y;
                 after += ex * ex + ey * ey;
+                n++;
             }
+            if (n < 10)
+            {
+                note = " Corner warp discarded (too few scorable holdout samples).";
+                return null;
+            }
+
+            //Require a clear (>2% MSE) improvement to keep.
             if (after < before * 0.98)
             {
-                note = $" Corner warp kept (holdout error {Math.Sqrt(before / n):F4}→{Math.Sqrt(after / n):F4} normalized).";
+                note = $" Corner warp kept (leave-one-anchor-out error {Math.Sqrt(before / n):F4}→{Math.Sqrt(after / n):F4} normalized).";
                 return warp;
             }
-            note = " Corner warp discarded (no holdout improvement).";
+            note = " Corner warp discarded (no leave-one-anchor-out improvement).";
             return null;
         }
 
+        /// <summary>
+        /// Identity comparison for reference types. Needed because the warp anchors must exclude exactly the
+        /// arrays the trainer held out, and two distinct samples can hold numerically equal feature vectors.
+        /// (System.Runtime.CompilerServices.ReferenceEqualityComparer is .NET 5+; this keeps the package on
+        /// the Unity-supported surface.)
+        /// </summary>
+        private sealed class ReferenceEqualityComparer<T> : IEqualityComparer<T> where T : class
+        {
+            public static readonly ReferenceEqualityComparer<T> Instance = new ReferenceEqualityComparer<T>();
+            public bool Equals(T a, T b) => ReferenceEquals(a, b);
+            public int GetHashCode(T obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+        }
+
+        //Thin wrapper over CalibrationSampleBalancer, which holds the actual logic so the offline benchmark
+        //trains on exactly the samples a real calibration would. Do not reimplement either side.
         private void BuildBalancedTrainingData(out float[][] features, out float[] targetsX,
             out float[] targetsY, out Vector2[] targets)
         {
-            var keep = new bool[_xData.Count];
-            for (var i = 0; i < keep.Length; i++)
-                keep[i] = true;
-            var dwellGroups = new Dictionary<Vector2, List<int>>();
-            for (var i = 0; i < _xData.Count; i++)
-            {
-                //Head-movement samples are intentionally high-variance (the head yaw/pitch/roll features
-                //swing while the eye fixates), so they are exempt from the per-target stability rejection
-                //below — grouping them would flag that wanted variance as "unstable" and discard it.
-                if (_sampleFromHeadRotation[i])
-                    continue;
-                if (!_sampleCapturedAtDwell[i] || !IsBoundaryTarget(_sampleTargets[i]))
-                    continue;
-                if (!dwellGroups.TryGetValue(_sampleTargets[i], out var group))
-                {
-                    group = new List<int>();
-                    dwellGroups.Add(_sampleTargets[i], group);
-                }
-                group.Add(i);
-            }
-
-            var rejected = 0;
-            foreach (var group in dwellGroups.Values)
-            {
-                if (group.Count < minimumCornerSamples)
-                {
-                    foreach (var index in group) keep[index] = false;
-                    rejected += group.Count;
-                    continue;
-                }
-
-                var featureCount = _xData[group[0]].Length;
-                var mean = new double[featureCount];
-                var variance = new double[featureCount];
-                foreach (var index in group)
-                    for (var feature = 0; feature < featureCount; feature++)
-                        mean[feature] += _xData[index][feature];
-                for (var feature = 0; feature < featureCount; feature++)
-                    mean[feature] /= group.Count;
-                foreach (var index in group)
-                    for (var feature = 0; feature < featureCount; feature++)
-                    {
-                        var delta = _xData[index][feature] - mean[feature];
-                        variance[feature] += delta * delta;
-                    }
-                for (var feature = 0; feature < featureCount; feature++)
-                    variance[feature] = Math.Max(MinimumVarianceFloor, variance[feature] / group.Count);
-
-                foreach (var index in group)
-                {
-                    double sumZSquared = 0;
-                    for (var feature = 0; feature < featureCount; feature++)
-                    {
-                        var delta = _xData[index][feature] - mean[feature];
-                        sumZSquared += delta * delta / variance[feature];
-                    }
-                    if (Math.Sqrt(sumZSquared / featureCount) > cornerOutlierZScore)
-                    {
-                        keep[index] = false;
-                        rejected++;
-                    }
-                }
-            }
-
-            var acceptedFeatures = new List<float[]>();
-            var acceptedX = new List<float>();
-            var acceptedY = new List<float>();
-            var acceptedTargets = new List<Vector2>();
-            for (var i = 0; i < _xData.Count; i++)
-            {
-                if (!keep[i]) continue;
-                acceptedFeatures.Add(_xData[i]);
-                acceptedX.Add(_yXData[i]);
-                acceptedY.Add(_yYData[i]);
-                acceptedTargets.Add(_yData[i]);
-            }
-            if (acceptedFeatures.Count == 0)
-                throw new InvalidOperationException("No valid calibration samples remain after corner quality checks. " +
-                    "Increase Corner Dwell Seconds, lower Minimum Corner Samples, or relax Corner Outlier Z Score.");
-
-            var selected = RidgeCalibrationTrainer.SpatiallyBalancedIndices(
-                acceptedX, acceptedY, new System.Random(SpatialBalancingSeed));
-            features = new float[selected.Length][];
-            targetsX = new float[selected.Length];
-            targetsY = new float[selected.Length];
-            targets = new Vector2[selected.Length];
-            for (var i = 0; i < selected.Length; i++)
-            {
-                var index = selected[i];
-                features[i] = acceptedFeatures[index];
-                targetsX[i] = acceptedX[index];
-                targetsY[i] = acceptedY[index];
-                targets[i] = acceptedTargets[index];
-            }
-            Debug.Log($"Calibration kept {acceptedFeatures.Count}/{_xData.Count} raw samples " +
-                $"({rejected} unstable/undersampled boundary samples rejected), spatially balanced to {features.Length}.");
+            CalibrationSampleBalancer.Build(
+                _xData, _yXData, _yYData, _yData, _sampleTargets, _sampleCapturedAtDwell, _sampleFromHeadRotation,
+                Screen.width, Screen.height, minimumCornerSamples, cornerOutlierZScore,
+                out features, out targetsX, out targetsY, out targets, out var report);
+            Debug.Log(report);
         }
 
         private bool IsBoundaryTarget(Vector2 target)
-        {
-            var x = target.x / Screen.width;
-            var y = target.y / Screen.height;
-            return x <= 1f / 3f || x >= 2f / 3f || y <= 1f / 3f || y >= 2f / 3f;
-        }
+            => CalibrationSampleBalancer.IsBoundaryTarget(target, Screen.width, Screen.height);
 
         /// <summary>
         /// The newest dot position at least <paramref name="lagSeconds"/> old — the pursuit-lag corrected
@@ -1022,17 +1002,7 @@ namespace UnitEye
         /// with HomulerEyeMURunner.FillEyeMUFeatures and GazeEstimationRunner.FillGazeFeatures.
         /// </summary>
         private static int[] HeadPoseFeatureIndices(GazeBackbone backbone)
-        {
-            switch (backbone)
-            {
-                case GazeBackbone.GazeMobileOne:
-                case GazeBackbone.GazeMobileNetV2:
-                case GazeBackbone.GazeResNet34:
-                    return new[] { 7, 8, 9 };
-                default: // EyeMU + the ensemble (whose vector STARTS with the full EyeMU block)
-                    return new[] { 11, 12, 13 };
-            }
-        }
+            => CalibrationSampleBalancer.HeadPoseFeatureIndices(backbone);
 
         private void OnGUI()
         {

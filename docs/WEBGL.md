@@ -61,8 +61,9 @@ Do the CV in the browser; keep Unity as the app/logic host (or drop Unity from t
 1. **Capture:** JS `getUserMedia()` → hidden `<video>` element (over **HTTPS** — mandatory for the camera).
 2. **Landmarks:** MediaPipe **FaceLandmarker** (`@mediapipe/tasks-vision`, WASM) — *not* the deprecated
    `facemesh` CDN package.
-3. **EyeMU:** run the model in the browser — the existing EyeMU **TF.js** graph (it shipped a web demo,
-   which is what `Resources/ONNX/EyeMUBaseJs.onnx` is a remnant of) or **onnxruntime-web**. Eye-corner
+3. **EyeMU:** run the model in the browser — the existing EyeMU **TF.js** graph (it shipped a web demo) or
+   **onnxruntime-web**; `webgl/models/eyemu.onnx` is what the pipeline loads. (A second remnant conversion,
+   `Resources/ONNX/EyeMUBaseJs.onnx`, was removed — it was unreferenced.) Eye-corner
    indices: right 33/133, left 362/263; two 128×128 eye crops.
 4. **Bridge:** a `UnitEyeWebGL.jslib` plugin pushes the final gaze `(x,y)` (and optionally the feature
    vector) into Unity via `SendMessage` / an emscripten callback → `WebGLGazeProvider.ReportGaze(...)`.

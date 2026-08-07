@@ -55,6 +55,7 @@ public static class UnitEyeSmokeTests
             TestRecordingTierOrderingIsPrivacyMonotonic();
             TestRecorderWritesInvariantNumbers();
             TestRecordingRuntimeHasNoNetworkCode();
+            TestBenchmarkRoundTripAndSplit();
             TestEyeMUModelLoadsAndRuns();
             TestGazeEstimationDecode();
             TestGazeFeaturePolynomial();
@@ -867,6 +868,110 @@ public static class UnitEyeSmokeTests
         Check(GazeRecordingTier.FaceVideo < GazeRecordingTier.FullFrames, "FaceVideo is less identifying than FullFrames");
     }
 
+    private static void TestBenchmarkRoundTripAndSplit()
+    {
+        //Writes a synthetic session, reads it back and benchmarks it. Covers the recorder/reader seam (two
+        //pieces of hand-rolled JSON written at different times - exactly where silent corruption lives) and
+        //the two properties that make the benchmark's number mean anything.
+        var consent = GazeConsentRecord.Create(GazeRecordingTier.Features, false,
+            new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), "a@b.c", "bench-smoke");
+        var recorder = new GazeSessionRecorder(consent, GazeRecordingTier.Features, 1);
+        var folder = recorder.SessionFolder;
+        try
+        {
+            const int W = 1920, H = 1080;
+            recorder.WriteSessionHeader("EyeMU", W, H, 52f, 29f, 640, 480, false, true, true, 478, true, false, "not_asked");
+
+            //13 dwell locations on a 3x3 + interior layout, 40 samples each. Features are a linear function
+            //of the target plus tiny noise, so a ridge fit should recover it and the reported error should be
+            //small but non-zero - enough to tell "it ran" from "it silently returned garbage".
+            var rng = new System.Random(7);
+            var locs = new List<Vector2>();
+            foreach (var fy in new[] { 0.1f, 0.5f, 0.9f })
+                foreach (var fx in new[] { 0.1f, 0.5f, 0.9f })
+                    locs.Add(new Vector2(fx * W, fy * H));
+            foreach (var fy in new[] { 0.25f, 0.75f })
+                foreach (var fx in new[] { 0.25f, 0.75f })
+                    locs.Add(new Vector2(fx * W, fy * H));
+
+            int i = 0;
+            foreach (var loc in locs)
+                for (var k = 0; k < 40; k++)
+                {
+                    float nx = loc.x / W, ny = loc.y / H;
+                    var f = new[]
+                    {
+                        nx + (float)(rng.NextDouble() - 0.5) * 0.004f,
+                        ny + (float)(rng.NextDouble() - 0.5) * 0.004f,
+                        1f,
+                    };
+                    recorder.RecordSample(i++, f, loc, loc, i * 0.03, atDwell: true, headRotation: false,
+                        preset: 0, round: 0, distanceMm: 600f, headPose: new Vector3(0.01f, 0.02f, 0f),
+                        irisDisagreement: 0.01f, blinking: false, source: null, provider: null);
+                }
+            recorder.Finish("completed", 0.9f);
+
+            //--- reader inverts the writer ---
+            var session = UnitEye.Benchmark.GazeDatasetReader.Load(folder);
+            Check(session.Usable, $"A recorded session reads back as usable (status {session.Status})");
+            Check(session.Samples.Count == locs.Count * 40,
+                $"Reader recovers every row (got {session.Samples.Count}, expected {locs.Count * 40})");
+            Check(session.ScreenWidthPx == W && session.ScreenHeightPx == H, "Reader recovers screen geometry");
+            Check(session.Samples[0].Features.Length == 3, "Reader recovers the feature vector length");
+            Check(Mathf.Abs(session.Samples[0].LabelPx.x - locs[0].x) < 0.01f, "Reader recovers the label");
+            Check(!float.IsNaN(session.Samples[0].DistanceMm), "Reader recovers an optional field that was present");
+
+            //--- the benchmark runs and produces a sane number ---
+            var result = UnitEye.Benchmark.GazeBenchmark.BenchmarkSession(session,
+                new UnitEye.Benchmark.GazeBenchmark.Config { Name = "t", Augmentation = false });
+            Check(result.Status == "ok", $"Benchmark completes on a synthetic session (status {result.Status})");
+            Check(result.Locations == locs.Count, $"Benchmark finds every dwell location (got {result.Locations})");
+            Check(!double.IsNaN(result.RmsePctDiag), "Benchmark reports an error figure");
+            Check(result.RmsePctDiag > 0.0 && result.RmsePctDiag < 25.0,
+                $"Benchmark error is in a sane range (got {result.RmsePctDiag:F3}% of diagonal)");
+            Check(!double.IsNaN(result.RmseDegrees), "Benchmark reports degrees when distanceMm is present");
+
+            //--- the split actually withholds ---
+            //Every fold trains WITHOUT the location it scores, so the error cannot be zero however clean the
+            //data is. A zero here would mean the held-out rows leaked into training - the exact failure the
+            //whole design exists to prevent, and one that looks like a great result.
+            Check(result.RmsePctDiag > 1e-6,
+                "A leave-one-target-out benchmark cannot report zero error - that would mean the split leaked");
+
+            //--- the MLP head is scored in the same space as the ridge head ---
+            //The two heads natively disagree on units: the ridge pair predicts normalized, SimpleMLP predicts
+            //pixels. If the benchmark ever scored one in the wrong space the error would be off by a factor of
+            //~W, so assert the MLP lands in the same plausible band rather than merely "runs".
+            var mlp = UnitEye.Benchmark.GazeBenchmark.BenchmarkSession(session,
+                new UnitEye.Benchmark.GazeBenchmark.Config
+                {
+                    Name = "t-mlp",
+                    Model = UnitEye.Benchmark.GazeBenchmark.Head.Mlp,
+                    Augmentation = false,
+                });
+            Check(mlp.Status == "ok", $"Benchmark completes with the MLP head (status {mlp.Status})");
+            Check(!double.IsNaN(mlp.RmsePctDiag), "MLP head reports an error figure");
+            Check(mlp.RmsePctDiag > 1e-6 && mlp.RmsePctDiag < 25.0,
+                $"MLP error is in the same sane band as ridge, i.e. scored in pixels not normalized units " +
+                $"(got {mlp.RmsePctDiag:F3}% of diagonal vs ridge {result.RmsePctDiag:F3}%)");
+
+            //Determinism: a seeded re-run must reproduce the number, or an A/B is measuring RNG.
+            var mlpAgain = UnitEye.Benchmark.GazeBenchmark.BenchmarkSession(session,
+                new UnitEye.Benchmark.GazeBenchmark.Config
+                {
+                    Name = "t-mlp",
+                    Model = UnitEye.Benchmark.GazeBenchmark.Head.Mlp,
+                    Augmentation = false,
+                });
+            Check(Math.Abs(mlp.RmsePctDiag - mlpAgain.RmsePctDiag) < 1e-9,
+                "A seeded MLP benchmark reproduces its number exactly across runs");
+        }
+        finally
+        {
+            try { Directory.Delete(folder, true); } catch { }
+        }
+    }
+
     private static void TestFaceLandmarkerBundleSupportsRequestedOutputs()
     {
         //FaceMeshSolution asks the FaceLandmarker for blendshapes and transformation matrixes. Both come
@@ -1254,6 +1359,29 @@ public static class UnitEyeSmokeTests
             "TPS refuses to fit on too few anchors");
         var malformed = new ThinPlateSplineWarp();
         Check(malformed.Apply(probe) == probe, "A malformed warp falls back to identity");
+
+        //The property that makes HomulerGazeCalibration.TryBuildValidatedWarp's gate honest: a warp fitted
+        //WITHOUT an anchor must not be able to reproduce that anchor's displacement. The old gate scored the
+        //full warp on holdout samples whose target WAS an anchor, which it always "improves" by construction
+        //— so it kept warps that did nothing between anchors. Leave-one-anchor-out is what makes the check
+        //answer the deployment question (gaze lands everywhere, not only on calibration targets).
+        var displaced = (Vector2[])source.Clone();
+        var bump = new Vector2(0.08f, 0.06f);
+        displaced[0] = source[0] + bump;                  //only the held-out anchor moves
+
+        var withAnchor = ThinPlateSplineWarp.Fit(source, displaced);
+        Check(Vector2.Distance(withAnchor.Apply(source[0]), displaced[0]) < 0.02f,
+            "A warp WITH the anchor reproduces that anchor's displacement");
+
+        var looSource = new List<Vector2>(source); looSource.RemoveAt(0);
+        var looDest = new List<Vector2>(displaced); looDest.RemoveAt(0);
+        var withoutAnchor = ThinPlateSplineWarp.Fit(looSource.ToArray(), looDest.ToArray());
+        Check(withoutAnchor != null, "A warp still fits with one anchor left out");
+        //Every remaining anchor is an identity pair, so an honest LOO warp leaves the held-out point alone.
+        var looError = Vector2.Distance(withoutAnchor.Apply(source[0]), displaced[0]);
+        Check(looError > 0.5f * bump.magnitude,
+            $"A leave-one-anchor-out warp must NOT reproduce the held-out displacement (error {looError:F4}, " +
+            $"displacement {bump.magnitude:F4}) - otherwise the validation gate is scoring its own fit");
     }
 
     private static void TestCalibrationProfiles()
