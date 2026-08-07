@@ -123,33 +123,110 @@ the packaging:
 
 * **Package … into a zip** — one archive, one folder per session named by its withdrawal code. Entry paths are
   built explicitly rather than from the absolute source path, so the archive carries no account name.
-* **Package and upload…** — the same zip, then reveals it and opens the upload page with a summary of exactly
-  what is about to be shared (session count, size, tiers, and a distinct warning when the selection contains
-  imagery of people).
+* **Package + open upload page…** — the same zip, then reveals it and opens the upload page in a browser. No
+  credential needed.
+* **Post to GitHub…** — uploads directly, as a release asset. See below.
 * **Delete** — how a withdrawal request is honoured.
+
+Every path shows a summary before anything leaves the machine: session count, size, tiers, and a distinct
+warning when the selection contains imagery of people.
+
+### Posting directly to GitHub
+
+Set a token in the environment and restart Unity (it reads the environment at launch):
+
+```bash
+setx UNITEYE_GITHUB_TOKEN "github_pat_..."
+```
+
+Use a **fine-grained** token scoped to the one target repository with **Contents: Read and write**, and set an
+expiry. A classic `repo` token grants read/write to every private repository the account can reach — a poor
+blast radius for a credential sitting in an environment variable on a lab machine. Until the variable is set,
+the button stays disabled with an explanatory line, so it never looks available when it is not.
+
+Set owner / repo / release tag in the window. Then **Post to GitHub…**
+([`GitHubReleaseUploader`](../uniteye/Scripts/Editor/GitHubReleaseUploader.cs)):
+
+1. Confirms which account the token belongs to and shows it. Publishing biometric data from the wrong account
+   is unrecoverable and easy to do.
+2. Uploads **one asset per session**, not one combined zip — so honouring a withdrawal costs a single
+   `DELETE`, instead of repackaging and re-uploading everyone else's data to remove one person.
+3. Lands on a **draft** release. Draft assets are visible only to accounts with push access, so the gap
+   between "uploaded" and "world-readable" stays under your control. Draft is *not* private and *not*
+   encrypted — it is on GitHub's servers and visible to every collaborator.
+4. Writes **`publication-receipt.json`** into each session folder (owner, repo, release id, asset id,
+   download URL). This is the map from withdrawal code to published asset; without it you would know someone
+   wants out but not which asset is theirs. It contains no credential.
+5. Publishing the draft is a **separate, second confirmation**. That is the irreversible step.
+
+The token is read from the environment at point of use, never cached, never serialized, and scrubbed from
+every error string. It is Editor-only, so the smoke test asserting the runtime contains no network code still
+passes and no credential can reach a build. The server-supplied `upload_url` is host-validated before use —
+it decides where a token plus facial imagery gets sent.
 
 Sessions that cannot be shared are listed but not selectable, with the reason: *participant said local-only*,
 *hold until `<date>`*, *no consent.json*, or *no samples captured*. Those gates are the enforcement point for
 the promise the consent screen made — `GazeConsentRecord.PublishableOn` encodes the consent and hold checks
 together, so a folder cannot be packaged past them.
 
-The window is **Editor-only**, which is the design rather than a limitation:
+All of this is **Editor-only**, which is the design rather than a limitation: the runtime a participant runs
+has no network code at all and a smoke test enforces that, so the consent screen's "we never send anything
+over the internet" stays literally true, and no credential can reach a shipped build.
 
-* The runtime that a participant runs has no network code at all, and a smoke test enforces that, so the
-  consent screen's "we never send anything over the internet" stays literally true.
-* No GitHub credential can end up in a shipped build, because there is no credential.
-* The tool stops at "here is the file, here is the page". Attaching and submitting is a human act, on a file
-  that can be inspected first — appropriate for the one step that cannot be undone. Once a folder is pushed
-  to a public repository, copies exist beyond anyone's control, and git history keeps it recoverable even
-  after deletion. The consent text says exactly that, in those words.
+Publication is irreversible in a way that deserves the friction. Once a folder is public, copies exist beyond
+anyone's control and git history keeps it recoverable even after deletion — the consent text says exactly
+that, in those words.
 
-If you automate publication later, keep a map from withdrawal code to published path — otherwise a
-withdrawal request cannot actually be honoured.
-
-Change the upload target by editing `RecordedSessionBrowser.UploadPageUrl`.
+Change the browser-upload target by editing `RecordedSessionBrowser.UploadPageUrl`.
 
 Consider `.gitattributes` marking `*.f32`, `*.png` and `*.jpg` as binary, and Git LFS for the imagery tiers —
 a few minutes of `EyeCrops` is hundreds of megabytes.
+
+## Benchmarking the donated data
+
+**`UnitEye ▸ Run Gaze Benchmark`** ([`GazeBenchmark`](../uniteye/Scripts/Editor/Benchmark/GazeBenchmark.cs)),
+or headless:
+
+```bash
+Unity.exe -batchmode -projectPath <host project> -executeMethod UnitEye.Benchmark.GazeBenchmark.Run -logFile bench.log
+```
+
+This is what closes the loop: change something, re-run, and see whether accuracy moved **across every donated
+session** rather than across one calibration you happened to run by hand. Results go to
+`UnitEyeRecordings/benchmark.tsv`, one row per session per config, plus per-group summaries.
+
+Out of the box it compares the four shipped combinations: `ridge-aug`, `ridge-noaug`, `mlp-aug`, `mlp-noaug`.
+MLP folds are ~200 epochs each and dominate runtime — trim `DefaultConfigs` for a quick ridge-only A/B.
+
+Three things make the number trustworthy, and all three are easy to get wrong:
+
+* **The split is by screen location, not by sample.** Consecutive dwell rows are the same target, same head
+  pose, milliseconds apart — near-duplicates. A per-sample split puts near-copies on both sides and reports a
+  flatteringly low error. One whole dwell location is held out per fold, and a spatial **buffer**
+  (6% of the diagonal) additionally removes *sweep* rows passing through it. Without the buffer the held-out
+  location is not actually held out, because sweeps carry the correct label straight through it.
+* **It trains through the shipped code.** `CalibrationSampleBalancer` and `RidgeCalibrationTrainer` /
+  `SimpleMLP` are the same types the calibration uses, with the same augmentation and head-pose feature
+  indices. A reimplementation would benchmark a pipeline nobody runs.
+* **Both heads are scored in pixels.** The ridge pair predicts normalized units and `SimpleMLP` predicts
+  pixels; each is converted at the point of fitting so the two are comparable.
+
+**Expect worse numbers than the calibration reports.** `summary.json`'s `holdoutRmseCm` comes from the
+shipped trainer's per-sample split, which has exactly the leak described above. Both are printed side by
+side, and if a majority of sessions score *better* than the app's self-report the report emits a `# WARNING`:
+that means the split has broken, not that the config improved.
+
+Aggregation is **median and IQR per feature-layout group** (`backbone/featureCount`), never pooled across
+groups — a 36-value EyeMU vector and a 32-value direction vector describe different systems. Accuracy is
+reported as % of screen diagonal always, and in **degrees of visual angle** where rows carried `distanceMm`
+(converted per row, then RMS-ed — viewing distance varies within a session).
+
+Sessions that cannot be benchmarked are reported with a reason (`excluded:too-few-locations`,
+`excluded:jagged-features`, `excluded:no-consent`, …) rather than skipped silently.
+
+Not yet covered: the **thin-plate-spline warp** as a config. Its anchors are built from the raw captured
+arrays, so benchmarking it needs the same leave-one-anchor-out treatment the shipped gate now uses — wired
+naively it would train on the labels it is scored against and always appear to win.
 
 ## Withdrawal
 

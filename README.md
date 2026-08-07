@@ -185,11 +185,11 @@ Because we already ship an [evaluation](#evaluation) benchmark, donated sessions
 2. Tick **Ask Before Calibration** and fill in **Withdrawal Contact** (an address a participant can reach you at).
 3. Run a calibration as usual. Before it starts you are asked what may be saved, and separately whether it may be published.
 4. When it finishes you get a **withdrawal code**. Write it down — it is the only thing linking you to your data.
-5. Open **`UnitEye ▸ Recorded Sessions`**, tick the session, and press **Package and upload…**. That zips it and opens the upload page with the file ready to drag in. Done.
+5. Open **`UnitEye ▸ Recorded Sessions`**, tick the session, and either **Package + open upload page…** (zips it and opens the browser, no setup) or **Post to GitHub…** (uploads it directly as a release asset). Done.
 
-The window shows every recording with its tier, sample count, size and measured accuracy, and lets you delete any of them (that is how a withdrawal request gets honoured). Sessions that are **not** shareable are listed but cannot be selected, with the reason shown — participant chose local-only, still inside the 14-day hold, or missing its consent file. Those checks are the only thing enforcing the promise the consent screen made, so the button will not let you past them.
+The window shows every recording with its tier, sample count, size and measured accuracy, and lets you delete any of them (that is how a withdrawal request gets honoured). Sessions that are **not** shareable are listed but cannot be selected, with the reason shown — participant chose local-only, still inside the 14-day hold, or missing its consent file. Those checks are the only thing enforcing the promise the consent screen made, so no upload path gets past them.
 
-Nothing is transmitted by the tool itself: it writes a zip, reveals it, and opens the page. Attaching and submitting stays your click, on a file you can inspect first.
+Direct posting needs a `UNITEYE_GITHUB_TOKEN` environment variable (fine-grained, **Contents: Read and write**, that repository only); the button stays disabled with an explanation until it is set. Uploads land on a **draft** release and publishing is a separate confirmation, and each session gets a `publication-receipt.json` so a withdrawal request can be matched to the asset to delete. Full details: [`docs/CALIBRATION-RECORDING.md`](docs/CALIBRATION-RECORDING.md).
 
 ### What you can choose to share
 
@@ -213,7 +213,17 @@ Each level includes the ones above it, and you pick where to stop:
 * **You can withdraw.** Before the 14-day hold, your data is deleted, no questions asked. There is also a **Delete my recording now** button on the final screen if you change your mind straight away.
 * **We will not tell you this is anonymous**, because it would not be true — a 478-point face map is biometric data, and eye crops and video are plainly identifying. The consent screen says so in those words, and warns that anything already published cannot be fully taken back, because git history keeps it recoverable.
 
-Full format, caveats and the offline conversion to video: [`docs/CALIBRATION-RECORDING.md`](docs/CALIBRATION-RECORDING.md).
+### Measuring whether donated data actually helps
+
+**`UnitEye ▸ Run Gaze Benchmark`** ([`GazeBenchmark`](uniteye/Scripts/Editor/Benchmark/GazeBenchmark.cs)) trains and scores a calibration across **every** donated session and writes a diff-friendly `benchmark.tsv`. Change something, re-run, compare — that is what makes donated data worth collecting rather than just archiving. It compares `ridge` vs `mlp` and augmentation on/off out of the box, and runs headless for CI:
+
+```bash
+Unity.exe -batchmode -projectPath <host project> -executeMethod UnitEye.Benchmark.GazeBenchmark.Run -logFile bench.log
+```
+
+It holds out whole **screen locations** rather than individual samples, because consecutive dwell samples are near-duplicates and splitting between them leaks. **Its numbers are therefore worse than the RMSE the calibration prints** — that one uses the leaky per-sample split. Both appear side by side, and the report warns you if the honest split ever scores *better*, which would mean the split broke rather than the change helped. Details and caveats: [`docs/CALIBRATION-RECORDING.md`](docs/CALIBRATION-RECORDING.md#benchmarking-the-donated-data).
+
+Full recording format, caveats and the offline conversion to video: [`docs/CALIBRATION-RECORDING.md`](docs/CALIBRATION-RECORDING.md).
 
 > **Collecting from other people?** Facial imagery and face geometry are biometric data, and special-category data under GDPR in the EU. This is a flag, not legal advice — check approval, retention and lawful basis with your institution's ethics board before recording anyone but yourself. The exact consent wording shown is SHA-256-pinned in every session folder, so you can demonstrate afterwards precisely what each participant agreed to.
 
