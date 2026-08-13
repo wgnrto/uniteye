@@ -317,6 +317,14 @@ namespace UnitEye
             //If rightclick, signal Returned
             if (rightClick && returnAfter)
                 Returned = true;
+            //Escape aborts too. Right-click already did this, but calibration takes over the whole
+            //screen and nothing on it says so, so a user who wants out has no discoverable way back —
+            //in an overlay app that is click-through outside its own panel, "just right-click" is not
+            //something anyone guesses. Escape is the near-universal convention for "get me out of this
+            //modal thing". Same clean path: Returned makes HomulerGaze run UnloadCalibration, which
+            //restores the settings BackupSettings captured.
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame && returnAfter)
+                Returned = true;
             //Start on leftclick. Blocked while the consent screens are up: recording has to be answered
             //BEFORE any sample exists, or the first samples would be captured without an answer.
             if (leftClick && !_finished && !(_consentGate != null && _consentGate.Blocking))

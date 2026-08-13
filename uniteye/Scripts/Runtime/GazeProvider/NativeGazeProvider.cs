@@ -34,6 +34,18 @@ namespace UnitEye
         private readonly bool _flipAugmentation;
         //Whether the direction backbones roll-normalize their face crop (2D data normalization).
         private readonly bool _rollNormalize;
+        //Delivered camera rate, used to warn when the webcam — not inference — is the bottleneck.
+        //Gaze can only update as often as the camera produces frames (see the didUpdateThisFrame gate
+        //in Tick), so a camera running slowly caps the whole pipeline no matter how fast the machine is.
+        private float _camRateWindowStart;
+        private int _camFramesInWindow;
+        private bool _lowFrameRateWarned;
+        //Below this fraction of the requested rate the camera is considered the limiting factor.
+        private const float LowFrameRateFraction = 0.5f;
+        //Do not warn before this many seconds of samples: startup, autofocus and auto-exposure settling
+        //all produce a legitimately slow first second.
+        private const float RateWarnAfterSeconds = 3f;
+
         //eyeBlink blendshape score above which the frame counts as a blink (both eyes maxed). The
         //blendshape gate replaces the EAR heuristic when blendshapes are available: the attention model
         //separates lid closure from downward gaze, which EAR conflates (downward gaze looked like a blink).
@@ -102,6 +114,52 @@ namespace UnitEye
             _backbone = CreateBackbone(backbone);
         }
 
+        /// <summary>
+        /// Warn once if the camera is delivering far fewer frames than requested.
+        ///
+        /// Gaze updates are gated on didUpdateThisFrame, so the delivered camera rate is a hard ceiling
+        /// on the gaze rate — 5fps from the camera means 5 gaze updates per second regardless of GPU,
+        /// model or frame rate. That failure mode is invisible from inside the app: everything reports
+        /// healthy, the renderer is fast, inference is fast, and gaze simply feels laggy.
+        ///
+        /// It is also usually not a code problem. Webcams commonly drop to 5-7.5fps in low light because
+        /// auto-exposure lengthens exposure time, and a requested width/fps combination the device does
+        /// not support can silently fall back to a slow mode. Saying so directly turns an afternoon of
+        /// profiling into "turn a light on".
+        /// </summary>
+        private void TrackCameraFrameRate()
+        {
+            _camFramesInWindow++;
+
+            if (_camRateWindowStart <= 0f)
+            {
+                _camRateWindowStart = Time.unscaledTime;
+                return;
+            }
+
+            float elapsed = Time.unscaledTime - _camRateWindowStart;
+            if (elapsed < RateWarnAfterSeconds) return;
+
+            float actual = _camFramesInWindow / elapsed;
+            _camFramesInWindow = 0;
+            _camRateWindowStart = Time.unscaledTime;
+
+            int requested = _webcam != null ? _webcam.requestedFps : 0;
+            if (requested <= 0 || _lowFrameRateWarned) return;
+
+            if (actual < requested * LowFrameRateFraction)
+            {
+                _lowFrameRateWarned = true;
+                Debug.LogWarning(
+                    $"UnitEye: the webcam is delivering only {actual:F1} fps (requested {requested}). " +
+                    "Gaze cannot update faster than the camera, so this — not inference speed — is the " +
+                    "limiting factor. Most often this is low light (auto-exposure lengthens exposure " +
+                    "time and drops the frame rate), a resolution/fps combination the device does not " +
+                    "support, or another application holding the camera. Try brighter lighting or a " +
+                    "lower requested resolution.");
+            }
+        }
+
         public bool Tick()
         {
             // FaceMeshSolution only updates landmarks when the webcam provides a new image. Running the
@@ -109,6 +167,8 @@ namespace UnitEye
             // calibration/evaluation samples and make the filter appear more responsive than the camera.
             if (_webcam == null || !_webcam.didUpdateThisFrame)
                 return false;
+
+            TrackCameraFrameRate();
 
             if (!_backbone.PerformInference(_webcam))
                 return false;

@@ -54,6 +54,13 @@ namespace Mediapipe.Unity
         public int textureHeight => _webCamTexture != null ? _webCamTexture.height : 0;
         public Resolution resolution => new Resolution(textureWidth, textureHeight);
 
+        /// <summary>
+        /// The frame rate this source asked the device for. Exposed so consumers can compare it with
+        /// the rate actually delivered: gaze updates are gated on new camera frames, so a camera
+        /// running well below its requested rate silently caps the entire pipeline.
+        /// </summary>
+        public int requestedFps => _requestedFps;
+
         public Texture GetCurrentTexture() => _webCamTexture;
 
         // On mobile, the camera permission must be granted BEFORE WebCamTexture.Play(); otherwise the
