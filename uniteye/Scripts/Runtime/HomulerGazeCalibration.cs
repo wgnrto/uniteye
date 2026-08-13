@@ -328,6 +328,19 @@ namespace UnitEye
             var keyboard = Keyboard.current;
             bool leftClick = mouse != null && mouse.leftButton.wasPressedThisFrame;
             bool rightClick = mouse != null && mouse.rightButton.wasPressedThisFrame;
+            bool escapePressed = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+            //Belt and braces: in at least one host player (VIP-Sim, a transparent topmost
+            //overlay built with activeInputHandler = Both), the new Input System delivered
+            //no mouse or keyboard events at all while the legacy Input class worked fine --
+            //leaving the calibration screen up with no way to start, advance or cancel it.
+            //Read both. Compiled out for projects on the new Input System only, where the
+            //legacy API would throw.
+            leftClick |= Input.GetMouseButtonDown(0);
+            rightClick |= Input.GetMouseButtonDown(1);
+            escapePressed |= Input.GetKeyDown(KeyCode.Escape);
+#endif
 
             //If finished and leftclick, signal Returned
             if (leftClick && returnAfter && _finished)
@@ -341,8 +354,11 @@ namespace UnitEye
             //something anyone guesses. Escape is the near-universal convention for "get me out of this
             //modal thing". Same clean path: Returned makes HomulerGaze run UnloadCalibration, which
             //restores the settings BackupSettings captured.
-            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame && returnAfter)
+            if (escapePressed && returnAfter)
                 Returned = true;
+            //Log the cancel; a modal fullscreen overlay ending must be attributable in the player log.
+            if (Returned && (rightClick || escapePressed))
+                UnitEyeLog.Info("Calibration cancelled by the user.");
             //Start on leftclick. Blocked while the consent screens are up: recording has to be answered
             //BEFORE any sample exists, or the first samples would be captured without an answer.
             if (leftClick && !_finished && !(_consentGate != null && _consentGate.Blocking))
@@ -356,6 +372,8 @@ namespace UnitEye
                     if (geometryWarning.Length > 0) UnitEyeLog.Warn(geometryWarning);
                     BeginRecordingIfConsented();
                 }
+                if (!_started)
+                    UnitEyeLog.Info("Calibration round started (click received).");
                 _started = true;
                 _showMessage = false;
                 _finishedRound = false;

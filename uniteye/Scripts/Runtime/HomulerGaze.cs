@@ -567,6 +567,23 @@ namespace UnitEye
             if (_provider == null)
                 return;
 
+            //Unload calibration/evaluation the moment they signal Returned -- deliberately ABOVE the
+            //Tick() gate. These checks used to sit below it, which made LEAVING the fullscreen modal
+            //depend on the camera still delivering frames: a webcam that stalls (USB hiccup, lid closed,
+            //another app grabbing the device) or a run started with nobody in front of the camera left
+            //the calibration overlay up with Returned set and nothing ever consuming it -- no click,
+            //Escape or right-click could exit. Exiting a modal must not require working eye tracking.
+            if (_calibrationScript != null && _calibrationScript.Returned)
+            {
+                //CSV note marking the calibration end (PauseCSVLogging is still true here). No fresh
+                //sample exists on this path, so the last known gaze stands in for both columns.
+                if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
+                    _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, _distance, _provider.EyeFeature, _blinking, System.DateTime.Now, new List<string>(aoiNameList)));
+                UnloadCalibration();
+            }
+            if (_evaluationScript != null && _evaluationScript.Returned)
+                UnloadEvaluation();
+
             //Click anchors are collected on EVERY render frame, BEFORE the fresh-sample gate below: the
             //camera runs at ~30fps while the display runs 60-144, so `wasPressedThisFrame` is true on
             //exactly one render frame that usually carries NO new camera sample — gating clicks on fresh
@@ -724,19 +741,8 @@ namespace UnitEye
             if (_provider.IsCalibratingDrowsy)
                 _provider.CalibrateDrowsy(false);
 
-            //Unload Calibration if calibration is done
-            if (_calibrationScript != null && _calibrationScript.Returned)
-            {
-                //Add one entry for the note because PauseCSVLogging is currently true (owned AOI copy:
-                //CSVData keeps the list reference until the queue flush)
-                if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
-                    _csvLogger.Append(new CSVData(gazeLocation.x, gazeLocation.y, gazeLocation.x / Screen.width, gazeLocation.y / Screen.height, unfilteredGaze.x / Screen.width, unfilteredGaze.y / Screen.height, _distance, _provider.EyeFeature, _blinking, now, new List<string>(aoiNameList)));
-                UnloadCalibration();
-            }
-
-            //Unload Evaluation if evaluation is done
-            if (_evaluationScript != null && _evaluationScript.Returned)
-                UnloadEvaluation();
+            //(Calibration/evaluation unload runs at the TOP of LateUpdate, above the Tick() gate --
+            //see the comment there. Keeping a second copy here would be dead code.)
         }
 
         public virtual void OnGUI()
