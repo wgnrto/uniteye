@@ -106,6 +106,24 @@ namespace UnitEye
 
         public Texture2D calibrationDot;
 
+        /// <summary>
+        /// Full-screen backdrop drawn behind the calibration dot.
+        ///
+        /// Calibration previously drew straight over whatever the application was
+        /// already rendering. In a transparent overlay (VIP-Sim) that is the user's
+        /// live desktop, so the dot competes with arbitrary content and is genuinely
+        /// hard to find — which defeats the point, since calibration accuracy depends
+        /// on the user actually fixating the dot.
+        ///
+        /// A plain backdrop is also standard practice in eye tracking: a uniform,
+        /// mid-to-light field keeps pupil size stable across the whole calibration,
+        /// whereas a background that jumps between bright and dark changes pupil
+        /// diameter and adds noise to the very samples being fitted.
+        ///
+        /// Alpha 0 restores the old see-through behaviour.
+        /// </summary>
+        public Color backgroundColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+
         public float speed = 6.0f;
 
         public float padding = 10.0f;
@@ -1022,6 +1040,15 @@ namespace UnitEye
 
         private void OnGUI()
         {
+            //Backdrop first, so everything else in this OnGUI draws on top of it.
+            if (backgroundColor.a > 0f)
+            {
+                var prevBg = GUI.color;
+                GUI.color = backgroundColor;
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
+                GUI.color = prevBg;
+            }
+
             //Yield the screen entirely while the consent screens are up. Draw order between two components'
             //OnGUI is not defined, so without this the calibration dot and the "click to start" message paint
             //over (or under) a decision the participant is in the middle of making.
