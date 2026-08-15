@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -1211,6 +1211,52 @@ public static class UnitEyeSmokeTests
         }
     }
 
+    //A confident head: peaked in LOGIT space, so the softmax floor is negligible and the expectation
+    //lands on the peak.
+    private static float[] GazeBinGaussian(int centre, float sigma)
+    {
+        var bins = new float[90];
+        for (int i = 0; i < bins.Length; i++)
+            bins[i] = -((i - centre) * (i - centre)) / (2f * sigma * sigma);
+        return bins;
+    }
+
+    //A broad unimodal lobe, the shape the MobileGaze heads actually emit — unlike a one-hot spike.
+
+    private static float[] GazeBinLobe(int centre, float falloff)
+
+    {
+
+        var bins = new float[90];
+
+        for (int i = 0; i < bins.Length; i++)
+
+            bins[i] = 4f * Mathf.Exp(-Mathf.Abs(i - centre) * falloff);
+
+        return bins;
+
+    }
+
+
+    //Two lobes, the second scaled by secondHeight. The shape that makes a windowed decode bistable.
+
+    private static float[] GazeBinTwoLobes(int a, int b, float secondHeight)
+
+    {
+
+        var bins = new float[90];
+
+        for (int i = 0; i < bins.Length; i++)
+
+            bins[i] = 2f * Mathf.Exp(-Mathf.Abs(i - a) * 0.35f)
+
+                    + secondHeight * Mathf.Exp(-Mathf.Abs(i - b) * 0.35f);
+
+        return bins;
+
+    }
+
+
     private static float[] GazeBinSpike(int index)
     {
         var b = new float[90];
@@ -1234,20 +1280,51 @@ public static class UnitEyeSmokeTests
 
     private static void TestGazeEstimationDecode()
     {
-        //L2CS decode: softmax + expectation over 90 bins, index*4deg - 180deg -> radians. Pure math.
-        //Center bin (45) -> 45*4-180 = 0 deg; bin 0 -> -180 deg = -pi; bin 89 -> 176 deg.
-        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(45)), 0f, 0.02f, "Gaze decode: center bin ~ 0 rad");
-        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(0)), -Mathf.PI, 0.02f, "Gaze decode: bin 0 ~ -pi rad");
-        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinSpike(89)), (89f * 4f - 180f) * Mathf.Deg2Rad, 0.02f, "Gaze decode: bin 89");
+        //Decode: softmax + expectation over all 90 bins, index*4deg - 180deg -> radians. Pure math.
+        //A one-hot spike is NOT what a trained head emits, and against a flat floor the full expectation is
+        //legitimately pulled toward the mean of that floor, so the spike cases are checked on the windowed
+        //decode and the default is checked on a smooth lobe — which is the shape the network actually
+        //produces.
+        CheckClose(GazeEstimationRunner.DecodeAngleRadiansWindowed(GazeBinSpike(45)), 0f, 0.02f, "Gaze decode: center bin ~ 0 rad");
+        CheckClose(GazeEstimationRunner.DecodeAngleRadiansWindowed(GazeBinSpike(0)), -Mathf.PI, 0.02f, "Gaze decode: bin 0 ~ -pi rad");
+        CheckClose(GazeEstimationRunner.DecodeAngleRadiansWindowed(GazeBinSpike(89)), (89f * 4f - 180f) * Mathf.Deg2Rad, 0.02f, "Gaze decode: bin 89");
 
-        //Windowed decode: broad low-level logit noise far from the argmax must NOT drag the expectation
-        //toward the centre (the classic full-range soft-argmax compression). With a flat logit floor of 0
-        //and a spike of 5 at bin 60, a full-range expectation lands several degrees centre-ward; the
-        //±5-bin window keeps it at the spike.
+        //Default decode on a CONFIDENT head (peaked in logit space): lands exactly on the peak.
+        CheckClose(GazeEstimationRunner.DecodeAngleRadians(GazeBinGaussian(60, 3f)), (60f * 4f - 180f) * Mathf.Deg2Rad, 0.02f,
+            "Gaze decode: full expectation lands on a confident peak");
+
+        //Default decode on a BROAD head — which is what these exports actually emit. The contract is
+        //MONOTONE, not exact: the full expectation compresses (bin 65 reads +43.7° rather than +80°)
+        //because a broad floor drags it toward the mean. That is a scale error, and absorbing scale errors
+        //is what the calibration is for. Asserting exactness here would be asserting something false, and
+        //asserting nothing would let a decode that has stopped tracking pass.
+        float prev = float.NegativeInfinity;
+        foreach (int centre in new[] { 35, 45, 55, 65 })
+        {
+            float deg = GazeEstimationRunner.DecodeAngleRadians(GazeBinLobe(centre, 0.35f)) * Mathf.Rad2Deg;
+            Check(deg > prev + 1f, $"Gaze decode: broad head still tracks monotonically (bin {centre} -> {deg:F1} deg)");
+            prev = deg;
+        }
+
+        //Windowed decode, on a spike over a flat floor, resists the far-bin drag. Real, and the reason the
+        //window was introduced — it just does not describe these heads.
         var noisy = new float[90];
         noisy[60] = 5f;
-        CheckClose(GazeEstimationRunner.DecodeAngleRadians(noisy), (60f * 4f - 180f) * Mathf.Deg2Rad, 0.05f,
+        CheckClose(GazeEstimationRunner.DecodeAngleRadiansWindowed(noisy), (60f * 4f - 180f) * Mathf.Deg2Rad, 0.05f,
             "Gaze decode: windowed expectation resists far-bin noise (no centre drag)");
+
+        //WHY THE WINDOW IS NOT THE DEFAULT. Two lobes of near-equal height, far apart — the shape the
+        //MobileGaze heads actually produce, where the softmax peak is only ~6x uniform. Nudging the second
+        //lobe past the first by an amount far too small to be an eye movement swings the windowed decode
+        //the whole distance between the lobes; the full expectation barely moves.
+        float aWin = GazeEstimationRunner.DecodeAngleRadiansWindowed(GazeBinTwoLobes(40, 85, 1.99f));
+        float aFull = GazeEstimationRunner.DecodeAngleRadians(GazeBinTwoLobes(40, 85, 1.99f));
+        float bWin = GazeEstimationRunner.DecodeAngleRadiansWindowed(GazeBinTwoLobes(40, 85, 2.01f));
+        float bFull = GazeEstimationRunner.DecodeAngleRadians(GazeBinTwoLobes(40, 85, 2.01f));
+        Check(Mathf.Abs(aWin - bWin) * Mathf.Rad2Deg > 100f,
+            "Gaze decode: windowed decode jumps between lobes on a nudge (why it is not the default)");
+        Check(Mathf.Abs(aFull - bFull) * Mathf.Rad2Deg < 10f,
+            "Gaze decode: full expectation is stable across the same nudge");
     }
 
     private static void TestGazeFeaturePolynomial()

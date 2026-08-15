@@ -1,4 +1,4 @@
-// Excluded from WebGL player builds: depends on the native MediaPipe plugin + Inference Engine.
+﻿// Excluded from WebGL player builds: depends on the native MediaPipe plugin + Inference Engine.
 #if !UNITY_WEBGL || UNITY_EDITOR
 using Mediapipe.Unity;
 using Mediapipe.Unity.FaceMesh;
@@ -446,20 +446,69 @@ namespace UnitEye
         }
 
         //Softmax-expectation window: bins outside argmax ± this take no part in the expectation.
-        //Desktop gaze spans ~±25° (~6 of the 90 4°-bins); the other ~80 bins carry only softmax noise,
-        //and any probability mass there pulls the full-range expectation toward the centre — the classic
-        //soft-argmax compression, worst at the screen corners. A static compression would be absorbed by
-        //the calibration's cubic terms; what the window removes is the frame-to-frame NOISE of that far-bin
-        //mass and its head-pose-dependent component, which the polynomial cannot absorb.
+        //NO LONGER THE DEFAULT — see DecodeAngleRadians. Kept because the property it was written for is
+        //real on a PEAKED head, and because reverting is then one call away.
+        //
+        //The original reasoning: desktop gaze spans ~±25° (~6 of the 90 4°-bins); the other ~80 bins carry
+        //only softmax noise, and any probability mass there pulls the full-range expectation toward the
+        //centre — the classic soft-argmax compression, worst at the screen corners. All true. The step that
+        //does not follow is the conclusion that the window is therefore safer. What the window actually
+        //does is make the output depend on WHICH LOBE HOLDS THE ARGMAX, and the MobileGaze heads are not
+        //peaked: measured against mobilenetv2_gaze.onnx on a well-framed, stable face crop, the softmax
+        //maximum runs about 6x uniform (0.065 against 0.011) spread over several lobes. The argmax then
+        //hops between lobes on noise, and the decoded angle hops the whole distance between them.
+        //
+        //Measured, same face, ten consecutive frames, no deliberate eye movement:
+        //  windowed          +158, +19, -20, +18, +158, +158, +158, +17, -20, +159
+        //  full expectation  +3.3, -2.4, +1.3, +7.4, +9.6, +1.1, +5.2, +1.9, +2.5, +12.7
+        //Within one 12-sample fixation the windowed decode reached a standard deviation of 49°. No
+        //calibration can fit that; the compression the window was avoiding is a SCALE error and the
+        //calibration absorbs scale errors by construction.
         public const int DecodeWindowBins = 5;
 
         /// <summary>
-        /// L2CS-style decode of one output head: softmax over the bins, take the expected bin index within
-        /// a ±<see cref="DecodeWindowBins"/> window around the argmax, then map bin -> angle
+        /// Decode of one output head: softmax over ALL bins, expected bin index, then map bin -> angle
         /// (index * bin_width - offset, in degrees) and return radians. Mutates the passed array in place
         /// (it is an owned per-frame readback buffer).
+        ///
+        /// This is what the reference implementation these exports come from does
+        /// (yakhyo/gaze-estimation, "MobileGaze": <c>sum(softmax * idx) * 4 - 180</c>). UnitEye previously
+        /// took the expectation over a ±<see cref="DecodeWindowBins"/> window around the argmax; see the
+        /// comment on that constant for the measurements that changed it back.
+        ///
+        /// CAVEAT ON THE EVIDENCE: verified on one machine, one camera, one participant, with
+        /// mobilenetv2_gaze.onnx. The failure it fixes is stark enough to act on, but it has not been
+        /// re-measured across the other exports or other users. <see cref="DecodeAngleRadiansWindowed"/>
+        /// is still there if this turns out to be narrower than it looks.
         /// </summary>
         public static float DecodeAngleRadians(float[] bins)
+        {
+            float max = float.NegativeInfinity;
+            for (int i = 0; i < bins.Length; i++)
+                if (bins[i] > max) max = bins[i];
+
+            float sum = 0f;
+            for (int i = 0; i < bins.Length; i++)
+            {
+                bins[i] = Mathf.Exp(bins[i] - max);
+                sum += bins[i];
+            }
+
+            float expectation = 0f;
+            if (sum > 0f)
+                for (int i = 0; i < bins.Length; i++)
+                    expectation += (bins[i] / sum) * i;
+
+            float degrees = expectation * BIN_WIDTH_DEG - ANGLE_OFFSET_DEG;
+            return degrees * Mathf.Deg2Rad;
+        }
+
+        /// <summary>
+        /// The previous decode: softmax and expectation restricted to ±<see cref="DecodeWindowBins"/> bins
+        /// around the argmax. Retained for comparison and for the regression test that shows why it is not
+        /// the default. Mutates the passed array in place.
+        /// </summary>
+        public static float DecodeAngleRadiansWindowed(float[] bins)
         {
             float max = float.NegativeInfinity;
             int argmax = 0;
