@@ -48,9 +48,23 @@ namespace UnitEye.Benchmark
             public float AppHoldoutRmseCm = -1f;
             public string Status = "ok";
 
+            /// <summary>
+            /// Generation of the feature pipeline that produced this session (GazeSessionRecorder
+            /// .FeaturePipelineVersion). 0 = recorded before the field existed, i.e. UNKNOWN — kept as its
+            /// own group rather than assumed to be v1, because the whole point of the field is that the
+            /// generations are not distinguishable from the data itself.
+            /// </summary>
+            public int FeaturePipelineVersion;
+
             public bool Usable => Status == "ok" && Samples.Count > 0;
-            /// <summary>Feature layout key. Models must never be trained across differing layouts.</summary>
-            public string GroupKey => $"{Backbone}/{(Samples.Count > 0 ? Samples[0].Features.Length : 0)}";
+            /// <summary>
+            /// Feature layout key. Models must never be trained across differing layouts — and, just as
+            /// importantly, results must never be POOLED across differing ones. The pipeline version is part
+            /// of the key because a semantic change (the 8c66d89 decode) leaves the length untouched: two
+            /// sessions can agree on backbone and vector length and still describe different systems.
+            /// </summary>
+            public string GroupKey =>
+                $"{Backbone}/{(Samples.Count > 0 ? Samples[0].Features.Length : 0)}/v{FeaturePipelineVersion}";
         }
 
         /// <summary>
@@ -95,6 +109,9 @@ namespace UnitEye.Benchmark
                     //direction: an old session's physical scale is genuinely unknown, and treating unknown as
                     //trustworthy is how a bad centimetre figure ends up averaged into a headline number.
                     s.PhysicalScaleTrustworthy = j.Contains("\"physicalScaleTrustworthy\":true");
+                    //0 when absent: sessions predating the field are of UNKNOWN generation, and "unknown"
+                    //must not collapse into whichever generation happens to be convenient.
+                    s.FeaturePipelineVersion = (int)Num(j, "featurePipelineVersion", 0f);
                 }
                 if (s.ScreenWidthPx <= 0 || s.ScreenHeightPx <= 0) { s.Status = "excluded:no-screen-geometry"; return s; }
 

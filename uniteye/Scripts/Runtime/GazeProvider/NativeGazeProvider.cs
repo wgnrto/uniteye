@@ -202,6 +202,7 @@ namespace UnitEye
         //Tick; the calibration capture, which retains samples, clones it (see HomulerGazeCalibration).
         public float[] GetFeatures() => _backbone.Features;
         public double CaptureTimestamp => _backbone.CaptureTimestamp;
+        public Vector2 GazeAngularUncertainty => _backbone.AngularUncertainty;
         public float BinocularIrisDisagreement { get; private set; }
         public bool IsFacePresent => _faceMesh != null && _faceMesh.FaceLandmarks != null;
         public bool IsBlinking => _isBlinking;

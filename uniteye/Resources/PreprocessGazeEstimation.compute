@@ -20,6 +20,11 @@ int _Size;
 [numthreads(8, 8, 1)]
 void Preprocess(uint3 id : SV_DispatchThreadID)
 {
+    // The input side comes from the model's own graph, so it need not be a multiple of the 8x8 group
+    // size; the dispatch rounds UP and the tail threads are discarded here.
+    if (id.x >= (uint)_Size || id.y >= (uint)_Size)
+        return;
+
     // Rotate the sampling position around the crop centre.
     float half_size = _Size * 0.5;
     float2 centered = float2(id.xy) + 0.5 - half_size;

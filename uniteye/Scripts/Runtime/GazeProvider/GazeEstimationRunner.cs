@@ -31,7 +31,15 @@ namespace UnitEye
     /// </summary>
     public class GazeEstimationRunner : IGazeBackbone
     {
-        const int INPUT_SIZE = 448;
+        /// <summary>
+        /// Input side used when the model's own shape cannot be read. Every export shipped here is 448, but
+        /// the size is DERIVED from the loaded graph rather than assumed — the reference implementation does
+        /// the same (uniface `input_size = input_shape[2:4][::-1]`), and a future export at another
+        /// resolution would otherwise be silently mis-preprocessed: the crop, the compute dispatch and the
+        /// tensor would all stay 448 while the model expected something else, producing plausible-looking
+        /// garbage rather than an error.
+        /// </summary>
+        const int DEFAULT_INPUT_SIZE = 448;
         const int NUM_BINS = 90;
         const float BIN_WIDTH_DEG = 4f;      // L2CS/Gaze360 bin width
         const float ANGLE_OFFSET_DEG = 180f; // bin 0 -> -180 deg; center bin ~ straight ahead
@@ -50,8 +58,15 @@ namespace UnitEye
         private bool _enabled;
         private static bool s_warnedMissing;
 
-        private readonly RenderTexture _faceCrop = new RenderTexture(INPUT_SIZE, INPUT_SIZE, 0, RenderTextureFormat.ARGB32);
-        private readonly RenderTexture _tensorTex = new RenderTexture(INPUT_SIZE, INPUT_SIZE, 0, RenderTextureFormat.ARGBHalf);
+        /// <summary>Input side this model actually wants, read from its graph (see DEFAULT_INPUT_SIZE).</summary>
+        private readonly int _inputSize;
+        /// <summary>Compute-shader threadgroups per axis; ceil so a non-multiple-of-8 side still covers the
+        /// image (the kernel bounds-checks the tail threads).</summary>
+        private readonly int _dispatchGroups;
+        //Not readonly: sized from _inputSize, which is only known after the model loads (a readonly field
+        //cannot be assigned from the helper that allocates both).
+        private RenderTexture _faceCrop;
+        private RenderTexture _tensorTex;
         private readonly TextureTransform _nchw = new TextureTransform().SetTensorLayout(TensorLayout.NCHW);
         private Tensor<float> _inputTensor;
         // Calibration feature vector: a polynomial expansion of the gaze angles + linear head pose (see
@@ -77,6 +92,10 @@ namespace UnitEye
         private readonly float[] _tailPending = new float[TailLength];
         private readonly float[] _tailPublished = new float[TailLength];
         private double _timestampPending, _timestampPublished;
+        //Softmax spread of the CURRENTLY PUBLISHED inference, per axis, in radians (see
+        //DecodeAngleRadians(float[], out float)). NaN until the first inference publishes, which is what
+        //"this backbone has no uncertainty to report" means to every consumer.
+        private Vector2 _sigmaPublished = new Vector2(float.NaN, float.NaN);
 
         //Horizontal-flip test-time augmentation: run the crop AND its mirror, negate the mirrored yaw,
         //average — a standard 3-8% angular-error reduction for appearance models at 2x inference cost.
@@ -107,14 +126,20 @@ namespace UnitEye
                                      "or the PreprocessGazeEstimation compute shader. Switch the backbone to EyeMU " +
                                      "or fix the assets (see docs/GAZE-BACKBONES.md).");
                 }
+                //Still allocate at the default size: the debug thumbnail properties are read by the Gaze UI
+                //and the dataset recorder whether or not the backbone came up, and they were never null before.
+                _inputSize = DEFAULT_INPUT_SIZE;
+                _dispatchGroups = Mathf.CeilToInt(_inputSize / 8f);
+                AllocateTextures();
                 return;
             }
 
             _model = ModelLoader.Load(modelAsset);
+            _inputSize = ReadInputSize(_model, modelResourcePath);
+            _dispatchGroups = Mathf.CeilToInt(_inputSize / 8f);
+            AllocateTextures();
             _worker = new Worker(_model, BackendType.GPUCompute);
-            _tensorTex.enableRandomWrite = true;
-            _tensorTex.Create();
-            _inputTensor = new Tensor<float>(new TensorShape(1, 3, INPUT_SIZE, INPUT_SIZE));
+            _inputTensor = new Tensor<float>(new TensorShape(1, 3, _inputSize, _inputSize));
 
             //Embedding-head personalization: the shipped ONNX files carry a third output "embedding" — the
             //pre-logit GAP feature vector (512/1024/1280-d depending on the model), tapped via graph edit.
@@ -130,6 +155,53 @@ namespace UnitEye
             //carries no shape — so the feature array is sized lazily at the first readback
             //(EnsureEmbeddingSized), before any Features consumer sees a sample.
             _enabled = true;
+        }
+
+        private void AllocateTextures()
+        {
+            _faceCrop = new RenderTexture(_inputSize, _inputSize, 0, RenderTextureFormat.ARGB32);
+            _tensorTex = new RenderTexture(_inputSize, _inputSize, 0, RenderTextureFormat.ARGBHalf);
+            _tensorTex.enableRandomWrite = true;
+            _tensorTex.Create();
+        }
+
+        /// <summary>
+        /// The square input side the model declares, from its input tensor's H/W. These are NCHW image
+        /// models, so the shape is (1, 3, H, W) and H == W for every export in this family; a non-square or
+        /// unreadable shape falls back to <see cref="DEFAULT_INPUT_SIZE"/> with a warning rather than
+        /// guessing, because every downstream size (crop RT, compute dispatch, input tensor) derives from
+        /// this one number and a wrong value mis-preprocesses silently instead of failing.
+        /// </summary>
+        private static int ReadInputSize(Model model, string modelResourcePath)
+        {
+            try
+            {
+                foreach (var input in model.inputs)
+                {
+                    if (input.name != INPUT_NAME && model.inputs.Count > 1) continue;
+                    var shape = input.shape;
+                    //rank ASSERTS on a dynamic-rank shape, so this guard is required, not defensive.
+                    if (shape.isRankDynamic || shape.rank != 4) break;
+                    //Get() is the public per-axis accessor (the DynamicTensorDim indexer is internal) and
+                    //returns -1 for a dynamic dim — which carries no number to size buffers from.
+                    int h = shape.Get(2), w = shape.Get(3);
+                    if (h <= 0 || w <= 0) break;
+                    if (h != w)
+                    {
+                        UnitEyeLog.Warn($"GazeEstimation backbone: '{modelResourcePath}' wants a non-square " +
+                                        $"{w}x{h} input; this runner crops square. Using {h}.");
+                    }
+                    return h;
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnitEyeLog.Exception(e);
+            }
+            UnitEyeLog.Warn($"GazeEstimation backbone: could not read an input size from '{modelResourcePath}'; " +
+                            $"falling back to {DEFAULT_INPUT_SIZE}. If this model is not {DEFAULT_INPUT_SIZE}px " +
+                            "square its preprocessing is wrong — see docs/GAZE-BACKBONES.md.");
+            return DEFAULT_INPUT_SIZE;
         }
 
         const string OUTPUT_EMBEDDING = "embedding";
@@ -204,6 +276,7 @@ namespace UnitEye
         public int EmbeddingDim => _embeddingDim;
 
         public Vector2 RawGaze => _rawGaze;
+        public Vector2 AngularUncertainty => _sigmaPublished;
         public float[] Features => _fullFeatures ?? _features;
         public double CaptureTimestamp => _timestampPublished;
         public RenderTexture LeftEyeTexture => _faceCrop;   // the face crop doubles as the debug thumbnail
@@ -226,8 +299,8 @@ namespace UnitEye
                 if (!_outYaw.IsReadbackRequestDone() || !_outPitch.IsReadbackRequestDone() ||
                     (_outEmbedding != null && !_outEmbedding.IsReadbackRequestDone()))
                     return false;
-                float pendingYaw = DecodeAngleRadians(_outYaw.DownloadToArray());
-                float pendingPitch = DecodeAngleRadians(_outPitch.DownloadToArray());
+                float pendingYaw = DecodeAngleRadians(_outYaw.DownloadToArray(), out float pendingSigmaYaw);
+                float pendingPitch = DecodeAngleRadians(_outPitch.DownloadToArray(), out float pendingSigmaPitch);
                 if (_outEmbedding != null)
                 {
                     _embeddingPublished = _outEmbedding.DownloadToArray();
@@ -235,7 +308,9 @@ namespace UnitEye
                 }
                 System.Array.Copy(_tailPending, _tailPublished, _tailPublished.Length);
                 _timestampPublished = _timestampPending;
-                PublishResult(pendingYaw, pendingPitch, _tailPublished);
+                //The sigma comes out of THIS readback, so unlike the head/iris tail it needs no
+                //snapshot-at-schedule-time: it is already consistent with the angles it was decoded from.
+                PublishResult(pendingYaw, pendingPitch, pendingSigmaYaw, pendingSigmaPitch, _tailPublished);
                 _outYaw = null;
                 _outPitch = null;
                 _outEmbedding = null;
@@ -288,10 +363,10 @@ namespace UnitEye
             float roll = _rollNormalize ? _faceMesh.HeadRoll : 0f;
             _preprocess.SetFloat("_RotCos", Mathf.Cos(roll));
             _preprocess.SetFloat("_RotSin", Mathf.Sin(roll));
-            _preprocess.SetInt("_Size", INPUT_SIZE);
+            _preprocess.SetInt("_Size", _inputSize);
             _preprocess.SetTexture(0, "_Texture", _faceCrop);
             _preprocess.SetTexture(0, "_Tensor", _tensorTex);
-            _preprocess.Dispatch(0, INPUT_SIZE / 8, INPUT_SIZE / 8, 1);
+            _preprocess.Dispatch(0, _dispatchGroups, _dispatchGroups, 1);
             TextureConverter.ToTensor(_tensorTex, _inputTensor, _nchw);
 
             _worker.SetInput(INPUT_NAME, _inputTensor);
@@ -321,8 +396,8 @@ namespace UnitEye
 
             //Sync mode: block on the results now. The embedding is read BEFORE the flip-TTA pass below —
             //that pass re-schedules the worker with the mirrored input, which would overwrite the outputs.
-            float yaw = DecodeAngleRadians(yawT.DownloadToArray());
-            float pitch = DecodeAngleRadians(pitchT.DownloadToArray());
+            float yaw = DecodeAngleRadians(yawT.DownloadToArray(), out float sigmaYaw);
+            float pitch = DecodeAngleRadians(pitchT.DownloadToArray(), out float sigmaPitch);
             if (embeddingT != null)
             {
                 _embeddingPublished = embeddingT.DownloadToArray();
@@ -338,7 +413,7 @@ namespace UnitEye
                 _preprocess.SetFloat("_RotSin", Mathf.Sin(_rollNormalize ? -_faceMesh.HeadRoll : 0f));
                 _preprocess.SetTexture(0, "_Texture", _faceCrop);
                 _preprocess.SetTexture(0, "_Tensor", _tensorTex);
-                _preprocess.Dispatch(0, INPUT_SIZE / 8, INPUT_SIZE / 8, 1);
+                _preprocess.Dispatch(0, _dispatchGroups, _dispatchGroups, 1);
                 TextureConverter.ToTensor(_tensorTex, _inputTensor, _nchw);
                 _worker.SetInput(INPUT_NAME, _inputTensor);
                 _worker.Schedule();
@@ -346,8 +421,13 @@ namespace UnitEye
                 var pitchM = _worker.PeekOutput(OUTPUT_PITCH) as Tensor<float>;
                 if (yawM != null && pitchM != null)
                 {
-                    yaw = (yaw - DecodeAngleRadians(yawM.DownloadToArray())) * 0.5f;
-                    pitch = (pitch + DecodeAngleRadians(pitchM.DownloadToArray())) * 0.5f;
+                    yaw = (yaw - DecodeAngleRadians(yawM.DownloadToArray(), out float mirrorSigmaYaw)) * 0.5f;
+                    pitch = (pitch + DecodeAngleRadians(pitchM.DownloadToArray(), out float mirrorSigmaPitch)) * 0.5f;
+                    //Both passes measure the same underlying breadth, so the averaged estimate carries the
+                    //averaged spread. (Averaging two estimates would strictly shrink the error of the MEAN,
+                    //but only if their errors were independent — two views of one frame are not.)
+                    sigmaYaw = (sigmaYaw + mirrorSigmaYaw) * 0.5f;
+                    sigmaPitch = (sigmaPitch + mirrorSigmaPitch) * 0.5f;
                 }
                 //Restore the unmirrored crop so the debug thumbnail matches what the primary pass saw.
                 Graphics.Blit(tex, _faceCrop, scale, offset);
@@ -355,7 +435,7 @@ namespace UnitEye
 
             CaptureFeatureTail(_tailPublished);
             _timestampPublished = _faceMesh.LastCaptureTimestamp;
-            PublishResult(yaw, pitch, _tailPublished);
+            PublishResult(yaw, pitch, sigmaYaw, sigmaPitch, _tailPublished);
             return true;
         }
 
@@ -371,8 +451,11 @@ namespace UnitEye
         }
 
         //Turns decoded gaze angles + the matching feature tail into RawGaze and the calibration features.
-        private void PublishResult(float yaw, float pitch, float[] tail)
+        private void PublishResult(float yaw, float pitch, float sigmaYaw, float sigmaPitch, float[] tail)
         {
+            //Published together with the features it was decoded alongside, so a consumer that reads both
+            //in the same frame can never pair one inference's angles with another's confidence.
+            _sigmaPublished = new Vector2(sigmaYaw, sigmaPitch);
             // Rough pre-calibration screen point (calibration refines from Features). yaw -> x, pitch -> y.
             float nx = Mathf.Clamp01(0.5f + yaw * ANGLE_TO_SCREEN_GAIN);
             float ny = Mathf.Clamp01(0.5f - pitch * ANGLE_TO_SCREEN_GAIN);
@@ -390,6 +473,9 @@ namespace UnitEye
             // distance interaction terms (see HomulerFunctions.FillContextFeatures).
             HomulerFunctions.FillContextFeatures(f, ContextFeatureStart, yaw, pitch,
                 tail[0], tail[1], tail, TailContextStart);
+            // Softmax-breadth block: lets the fit undo the head-dependent soft-argmax compression
+            // (see FillSigmaFeatures).
+            FillSigmaFeatures(f, SigmaFeatureStart, yaw, pitch, sigmaYaw, sigmaPitch);
             // Backbone embedding tail (embedding-head personalization; zero-length for unedited models):
             // the raw 512-1280-d GAP vector compressed to 64 dims via the fixed sparse-JL projection.
             if (_embeddingDim > 0 && _embeddingPublished != null)
@@ -405,18 +491,56 @@ namespace UnitEye
         /// <summary>
         /// Length of the calibration feature vector: FillGazeFeatures' 11 terms [gaze-angle polynomial 7,
         /// head pose 4], the 4 iris-offset features (indices 11..14, HomulerFunctions.FillIrisFeatures),
-        /// then the shared 17-feature context block (head translation/depth, eyeLook blendshapes,
-        /// gaze interaction terms — HomulerFunctions.FillContextFeatures). Blocks are APPENDED so the
-        /// head-pose slots (7/8/9, targeted by the augmentation jitter) keep their positions.
+        /// the shared 17-feature context block (head translation/depth, eyeLook blendshapes, gaze
+        /// interaction terms — HomulerFunctions.FillContextFeatures), then the 4 softmax-breadth terms
+        /// (FillSigmaFeatures). Blocks are APPENDED so the head-pose slots (7/8/9, targeted by the
+        /// augmentation jitter) keep their positions.
         /// Changing this length stales saved calibrations (NaN -> raw fallback); recalibrate.
         /// </summary>
-        public const int FeatureCount = 15 + HomulerFunctions.ContextFeatureCount;
+        public const int FeatureCount = 15 + HomulerFunctions.ContextFeatureCount + SigmaFeatureCount;
         /// <summary>Number of leading gaze-angle polynomial terms (used by the ensemble backbone).</summary>
         public const int GazeAngleTermCount = 7;
         /// <summary>Index of the first iris-offset feature.</summary>
         public const int IrisFeatureStart = 11;
         /// <summary>Index of the first shared-context feature.</summary>
         public const int ContextFeatureStart = 15;
+        /// <summary>Index of the first softmax-breadth feature.</summary>
+        public const int SigmaFeatureStart = 15 + HomulerFunctions.ContextFeatureCount;
+        /// <summary>[sigmaYaw, sigmaPitch, sigmaYaw*yaw, sigmaPitch*pitch] — see FillSigmaFeatures.</summary>
+        public const int SigmaFeatureCount = 4;
+
+        /// <summary>
+        /// Softmax-breadth block: the per-axis spread of the model's own output distribution, and its
+        /// interaction with the decoded angle.
+        ///
+        /// WHY THESE ARE NOT REDUNDANT WITH THE POLYNOMIAL. The full-range soft-argmax decode is
+        /// systematically COMPRESSED: probability mass in the far bins pulls the expectation toward the
+        /// centre bin, so a true +80 deg reads +43.7 deg on a broad head. Compression alone would be
+        /// harmless — it is a gain error, and fitting gains is exactly what the calibration does. The
+        /// problem is that the compression factor is a function of the BREADTH, and the breadth moves
+        /// frame to frame with crop framing, head pose and lighting. A polynomial in (yaw, pitch) is a
+        /// FIXED map and cannot represent a gain that changes underneath it; given sigma it can, because
+        /// sigma*angle is the first-order term of exactly that varying gain. This is the same reasoning as
+        /// the gaze x head-pose cross terms in FillContextFeatures, applied to the decode instead of the
+        /// geometry.
+        ///
+        /// The 64-d projected embedding is pre-logit and so carries some of this information already, but
+        /// lossily (a random projection of a 512-1280-d vector) and without the explicit product term.
+        /// Four extra standardized columns are cheap next to that; ridge's CV-lambda drops them if they do
+        /// not pay.
+        /// </summary>
+        public static void FillSigmaFeatures(float[] f, int start, float yaw, float pitch,
+            float sigmaYaw, float sigmaPitch)
+        {
+            //A NaN here would propagate into the fit and poison every prediction, so an unavailable spread
+            //enters as 0 — which standardizes to "the session's mean breadth", i.e. contributes nothing.
+            if (float.IsNaN(sigmaYaw) || float.IsInfinity(sigmaYaw)) sigmaYaw = 0f;
+            if (float.IsNaN(sigmaPitch) || float.IsInfinity(sigmaPitch)) sigmaPitch = 0f;
+            f[start] = sigmaYaw;
+            f[start + 1] = sigmaPitch;
+            f[start + 2] = sigmaYaw * yaw;
+            f[start + 3] = sigmaPitch * pitch;
+        }
 
         /// <summary>
         /// Fills the calibration feature vector with a low-order polynomial of the gaze angles plus linear
@@ -481,7 +605,26 @@ namespace UnitEye
         /// re-measured across the other exports or other users. <see cref="DecodeAngleRadiansWindowed"/>
         /// is still there if this turns out to be narrower than it looks.
         /// </summary>
-        public static float DecodeAngleRadians(float[] bins)
+        public static float DecodeAngleRadians(float[] bins) => DecodeAngleRadians(bins, out _);
+
+        /// <summary>
+        /// As <see cref="DecodeAngleRadians(float[])"/>, and additionally reports the SPREAD of the softmax
+        /// distribution (its standard deviation, converted from bins to radians) — free, because the
+        /// expectation loop already has the probabilities.
+        ///
+        /// This number is the head's own confidence and it is worth more than it looks. These heads are
+        /// broad (the measurement on the <see cref="DecodeWindowBins"/> comment: max ~6x uniform, several
+        /// lobes), and crucially they are VARIABLY broad — breadth moves with crop framing, head pose and
+        /// lighting. Two consequences the rest of the pipeline consumes:
+        ///  - It is a per-frame QUALITY signal, where everything downstream previously had only static
+        ///    uncertainty (the AOI error ellipse is measured once at evaluation time). See GazeConfidence.
+        ///  - It parameterizes the soft-argmax COMPRESSION. A broad distribution pulls the expectation
+        ///    toward the centre bin; that is why the full expectation reads bin 65 as +43.7 deg rather than
+        ///    +80. Calibration absorbs a CONSTANT scale error by construction, but this one is not constant
+        ///    — it varies with the breadth — so sigma (and its interaction with the angle) enters the
+        ///    calibration feature vector to give the fit a basis for undoing it. See FillGazeFeatures.
+        /// </summary>
+        public static float DecodeAngleRadians(float[] bins, out float sigmaRadians)
         {
             float max = float.NegativeInfinity;
             for (int i = 0; i < bins.Length; i++)
@@ -494,10 +637,20 @@ namespace UnitEye
                 sum += bins[i];
             }
 
-            float expectation = 0f;
+            float expectation = 0f, expectationSq = 0f;
             if (sum > 0f)
                 for (int i = 0; i < bins.Length; i++)
-                    expectation += (bins[i] / sum) * i;
+                {
+                    float p = bins[i] / sum;
+                    expectation += p * i;
+                    expectationSq += p * i * i;
+                }
+
+            //Var[i] = E[i^2] - E[i]^2, clamped at 0 (float cancellation can make it slightly negative when
+            //the distribution is a single spike). Bins -> degrees -> radians via the same bin width as the
+            //mean; the OFFSET does not apply, a spread is a difference of angles.
+            float varianceBins = Mathf.Max(0f, expectationSq - expectation * expectation);
+            sigmaRadians = Mathf.Sqrt(varianceBins) * BIN_WIDTH_DEG * Mathf.Deg2Rad;
 
             float degrees = expectation * BIN_WIDTH_DEG - ANGLE_OFFSET_DEG;
             return degrees * Mathf.Deg2Rad;
@@ -508,7 +661,16 @@ namespace UnitEye
         /// around the argmax. Retained for comparison and for the regression test that shows why it is not
         /// the default. Mutates the passed array in place.
         /// </summary>
-        public static float DecodeAngleRadiansWindowed(float[] bins)
+        public static float DecodeAngleRadiansWindowed(float[] bins) => DecodeAngleRadiansWindowed(bins, out _);
+
+        /// <summary>
+        /// Windowed decode with the same spread output as <see cref="DecodeAngleRadians(float[], out float)"/>,
+        /// so the two are drop-in interchangeable at the call sites. Note the sigma this reports is the
+        /// spread WITHIN THE WINDOW and is therefore bounded by it — it cannot see the far-bin mass that
+        /// makes the windowed decode hop, so it is not a usable confidence signal. Another reason the full
+        /// expectation is the default.
+        /// </summary>
+        public static float DecodeAngleRadiansWindowed(float[] bins, out float sigmaRadians)
         {
             float max = float.NegativeInfinity;
             int argmax = 0;
@@ -525,10 +687,17 @@ namespace UnitEye
                 sum += bins[i];
             }
 
-            float expectation = 0f;
+            float expectation = 0f, expectationSq = 0f;
             if (sum > 0f)
                 for (int i = lo; i <= hi; i++)
-                    expectation += (bins[i] / sum) * i;
+                {
+                    float p = bins[i] / sum;
+                    expectation += p * i;
+                    expectationSq += p * i * i;
+                }
+
+            float varianceBins = Mathf.Max(0f, expectationSq - expectation * expectation);
+            sigmaRadians = Mathf.Sqrt(varianceBins) * BIN_WIDTH_DEG * Mathf.Deg2Rad;
 
             float degrees = expectation * BIN_WIDTH_DEG - ANGLE_OFFSET_DEG;
             return degrees * Mathf.Deg2Rad;

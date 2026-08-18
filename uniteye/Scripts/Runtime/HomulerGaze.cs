@@ -86,6 +86,18 @@ namespace UnitEye
         //calibration, fed by validated anchors (clicks, pursuit of registered game objects, attention
         //events). Holds calibrated accuracy across the session instead of letting it decay.
         private readonly DriftCorrector _driftCorrector = new DriftCorrector();
+        //Per-frame model confidence (bin-classification backbones only; EyeMU leaves it inert). Consumed
+        //by the AOI error ellipse, the drift anchor weights and the calibration capture gate.
+        private readonly GazeConfidence _gazeConfidence = new GazeConfidence();
+        /// <summary>
+        /// The gaze model's own confidence in the current frame, 0..1, relative to this session's typical
+        /// output spread — 1 when the active backbone reports no uncertainty (EyeMU, WebGL) or during
+        /// warmup. Host games can surface or gate on it; see <see cref="GazeConfidence"/> for what it does
+        /// and does not measure.
+        /// </summary>
+        public float GazeModelConfidence => _gazeConfidence.Confidence;
+        /// <summary>True once the active backbone is actually supplying per-frame uncertainty.</summary>
+        public bool HasGazeModelConfidence => _gazeConfidence.HasSignal;
         //Ring buffer of recent PRE-corrector calibrated gaze (normalized) for the pre-click fixation
         //window: gaze leads a click by 100-200ms, so the honest sample is the fixation BEFORE the click.
         private readonly List<(double t, Vector2 gazeNorm)> _gazeTrail = new List<(double, Vector2)>(64);
@@ -295,8 +307,20 @@ namespace UnitEye
                 Mathf.Clamp01(1f - mp.y / Screen.height));
 
             if (TryMedianTrailGaze(ClickWindowStart, ClickWindowEnd, out var gazeNorm))
-                _driftCorrector.AddAnchor(gazeNorm, clickNorm, 1f);
+                _driftCorrector.AddAnchor(gazeNorm, clickNorm, AnchorWeight(1f));
         }
+
+        /// <summary>
+        /// Scales an anchor's influence by the model's confidence on this frame. The drift corrector
+        /// already rejects anchors whose RESIDUAL is an outlier, but that test cannot see a frame that was
+        /// simply badly observed and landed plausibly anyway — those quietly drag the affine fit.
+        ///
+        /// The click and pursuit anchors read gaze from a window ~100-350ms back while this confidence
+        /// describes the latest camera sample. That mismatch is deliberate and safe: the degradations this
+        /// catches (crop framing, head turn, lighting) persist across many frames, while a single-frame
+        /// spike is already suppressed by the median those anchors take over the window.
+        /// </summary>
+        private float AnchorWeight(float baseWeight) => baseWeight * _gazeConfidence.Confidence;
 
         /// <summary>
         /// Attention-event anchors: the game declares "something attention-grabbing appeared at P"
@@ -318,7 +342,7 @@ namespace UnitEye
                 if (age > 0.1 && _fixationAggregator.InFixation &&
                     (currentGazeNorm - pos).magnitude < 0.1f)
                 {
-                    _driftCorrector.AddAnchor(currentGazeNorm, pos, 0.3f);
+                    _driftCorrector.AddAnchor(currentGazeNorm, pos, AnchorWeight(0.3f));
                     _attentionEvents.RemoveAt(i);
                 }
             }
@@ -367,7 +391,7 @@ namespace UnitEye
             var (gazeTime, gazeNorm) = _gazeTrail[_gazeTrail.Count - 1];
             if (correlator.Feed(gazeNorm, gazeTime, normalizedPosition, Time.unscaledTimeAsDouble,
                     out var pairedGaze, out var pairedTarget))
-                _driftCorrector.AddAnchor(pairedGaze, pairedTarget, 0.5f);
+                _driftCorrector.AddAnchor(pairedGaze, pairedTarget, AnchorWeight(0.5f));
         }
 
         /// <summary>Stop tracking a pursuit target (e.g. the object despawned).</summary>
@@ -598,6 +622,11 @@ namespace UnitEye
 
             GazeSampleSequence++;
 
+            //Per-frame model confidence, from the backbone's own output distribution. Observed here —
+            //once per FRESH sample, before anything consumes it — so the baseline window counts camera
+            //frames rather than render frames (see GazeConfidence.Observe).
+            _gazeConfidence.Observe(_provider.GazeAngularUncertainty);
+
             //Drowsy, blinking and distance
             _drowsy = _provider.IsDrowsy;
             _blinking = _provider.IsBlinking;
@@ -704,7 +733,22 @@ namespace UnitEye
             //drift corrector — subtracting it here too double-corrected); the covariance feeds P(AOI|...).
             float covXX = 0f, covXY = 0f, covYY = 0f;
             if (useErrorModel && _errorModel != null)
+            {
                 _errorModel.Query(aoiNorm, out _, out covXX, out covXY, out covYY);
+                //The error model is measured ONCE, at evaluation time, so on its own it says the same thing
+                //about a clean fixation and one taken while the face was half out of frame. Inflate it by
+                //how much broader the model's output distribution is on THIS frame than it usually is, so
+                //P(AOI|fixation) widens when the estimate is genuinely shakier. Scaling the variances also
+                //scales the covariance (cov_xy of scaled axes = sx*sy*cov_xy), which keeps the ellipse's
+                //correlation intact instead of quietly rounding it toward axis-aligned.
+                if (_gazeConfidence.HasSignal)
+                {
+                    float sx = _gazeConfidence.VarianceScaleX, sy = _gazeConfidence.VarianceScaleY;
+                    covXX *= sx;
+                    covYY *= sy;
+                    covXY *= Mathf.Sqrt(sx * sy);
+                }
+            }
 
             _aoiManager.CheckAOIList(aoiNorm, aoiNameList);
 

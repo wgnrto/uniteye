@@ -59,6 +59,20 @@ namespace UnitEye.Benchmark
             public double RmsePctDiag = double.NaN;
             public double RmseDegrees = double.NaN;
             public float AppHoldoutRmseCm = -1f;
+            /// <summary>
+            /// Error of the trivial predictor — always answer "screen centre" — over the SAME folds and the
+            /// SAME test rows. A session's difficulty (how spread its targets are, how big the screen is,
+            /// how much the participant moved) sets this, so dividing by it removes exactly the part of the
+            /// score that is about the session rather than the system.
+            /// </summary>
+            public double CentreBaselinePctDiag = double.NaN;
+            /// <summary>
+            /// RmsePctDiag / CentreBaselinePctDiag. Below 1 means the calibration beat "always guess
+            /// centre"; 1 means it learned nothing. THIS is the number that may be compared across
+            /// backbones and feature layouts — the absolute error may not, which is why the per-group
+            /// aggregation refuses to pool it.
+            /// </summary>
+            public double SkillScore = double.NaN;
         }
 
         [MenuItem("UnitEye/Run Gaze Benchmark")]
@@ -109,7 +123,10 @@ namespace UnitEye.Benchmark
             report.AppendLine($"# sessions\t{usable.Count} usable of {sessions.Count}");
             report.AppendLine($"# split\tleave-one-target-out buffer={BufferFraction.ToString("F3", CultureInfo.InvariantCulture)}");
             report.AppendLine("# note\tthese numbers are expected to be WORSE than appHoldout (which uses a leaky per-sample split)");
-            report.AppendLine("config\tsession\tbackbone\tfeatures\tlocations\ttestRows\trmse_pctdiag\trmse_deg\tappHoldout_cm\tstatus");
+            report.AppendLine("# skill\trmse / centre-baseline rmse on the same rows; <1 beats \"always guess centre\". " +
+                              "Compare BACKBONES on this, never on rmse_pctdiag");
+            report.AppendLine("config\tsession\tbackbone\tfeatures\tlocations\ttestRows\trmse_pctdiag\trmse_deg\t" +
+                              "centre_pctdiag\tskill\tappHoldout_cm\tstatus");
 
             foreach (var config in configs)
             {
@@ -133,6 +150,7 @@ namespace UnitEye.Benchmark
                         r.Locations.ToString(CultureInfo.InvariantCulture),
                         r.TestRows.ToString(CultureInfo.InvariantCulture),
                         Fmt(r.RmsePctDiag), Fmt(r.RmseDegrees),
+                        Fmt(r.CentreBaselinePctDiag), Fmt(r.SkillScore),
                         r.AppHoldoutRmseCm >= 0 ? Fmt(r.AppHoldoutRmseCm) : "-", r.Status));
 
                 //Aggregate per feature-layout group. Absolute accuracy never pools across groups: a 36-value
@@ -157,6 +175,8 @@ namespace UnitEye.Benchmark
                                           "scored BETTER than the app's leaky holdout - the split is probably broken, " +
                                           "not the config improved");
                 }
+
+                AppendBackboneRanking(report, config.Name, results);
             }
 
             var outPath = Path.Combine(Application.persistentDataPath, "UnitEyeRecordings", "benchmark.tsv");
@@ -170,6 +190,58 @@ namespace UnitEye.Benchmark
                     $"Benchmarked {usable.Count} session(s) across {configs.Count} config(s).\n\n{outPath}", "OK");
             }
             return true;
+        }
+
+        /// <summary>
+        /// Cross-backbone ranking on the SKILL score.
+        ///
+        /// This exists because the per-group summary above deliberately refuses to pool absolute error
+        /// across feature layouts — correctly, since a 36-value EyeMU vector and a 36-value direction vector
+        /// describe different systems — and that left the question "which backbone is actually better?"
+        /// unanswerable from this report. It is not an academic question: resnet34_gaze was written off as
+        /// having a dead yaw head, and that verdict was reached through the windowed decode that 8c66d89
+        /// removed. Re-scored against the centre baseline it came out at 0.209 versus 0.4721, i.e. clearly
+        /// informative. Every backbone comparison made before that decode change is suspect for the same
+        /// reason, so the report needs to make re-deriving one cheap.
+        ///
+        /// Skill is comparable where absolute error is not, because it divides out the per-session
+        /// difficulty that the different backbones were never measured against a common version of.
+        ///
+        /// TWO CAVEATS, both fatal to a naive reading, so they are printed with the table:
+        ///  - Each session used ONE backbone, so this is a between-subjects comparison. With a handful of
+        ///    sessions per backbone the participant and their setup are confounded with the model.
+        ///  - Sessions of unknown feature-pipeline generation (v0, recorded before the field existed) are
+        ///    listed separately: they may have been captured under the old decode, and pooling them would
+        ///    reintroduce exactly the contamination this is trying to undo.
+        /// </summary>
+        private static void AppendBackboneRanking(StringBuilder report, string configName, List<SessionResult> results)
+        {
+            var scored = results.Where(r => r.Status == "ok" && !double.IsNaN(r.SkillScore)).ToList();
+            if (scored.Count == 0) return;
+
+            report.AppendLine($"# ranking\t{configName}\tskill = rmse / centre-baseline; lower is better, " +
+                              "1.0 = learned nothing. BETWEEN-SUBJECTS: each session used one backbone");
+            foreach (var group in scored.GroupBy(r => $"{r.Backbone}/v{PipelineVersionOf(r)}")
+                                        .OrderBy(g => g.Select(r => r.SkillScore).Average()))
+            {
+                var vals = group.Select(r => r.SkillScore).OrderBy(v => v).ToList();
+                var median = vals[vals.Count / 2];
+                var best = vals[0];
+                var worst = vals[vals.Count - 1];
+                report.AppendLine($"# ranking\t{configName}\t{group.Key}\tn={vals.Count}\tmedian_skill={Fmt(median)}" +
+                                  $"\tbest={Fmt(best)}\tworst={Fmt(worst)}");
+            }
+            if (scored.Any(r => PipelineVersionOf(r) == 0))
+                report.AppendLine($"# ranking\t{configName}\tNOTE some sessions are pipeline v0 (unknown generation, " +
+                                  "possibly the pre-8c66d89 decode) and are ranked in their own rows - do not merge them");
+        }
+
+        //The generation is carried in GroupKey's trailing "/v<n>" segment (see GazeDatasetReader.GroupKey).
+        private static int PipelineVersionOf(SessionResult r)
+        {
+            var i = r.GroupKey?.LastIndexOf("/v", StringComparison.Ordinal) ?? -1;
+            return i >= 0 && int.TryParse(r.GroupKey.Substring(i + 2), NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out var v) ? v : 0;
         }
 
         private static double ToCm(SessionResult r, List<GazeDatasetReader.Session> sessions)
@@ -209,6 +281,8 @@ namespace UnitEye.Benchmark
             double sumSq = 0, sumSqDeg = 0;
             int n = 0, nDeg = 0;
             var perLocation = new List<double>();
+            var perLocationCentre = new List<double>();
+            var screenCentre = new Vector2(w * 0.5f, h * 0.5f);
 
             foreach (var held in locations)
             {
@@ -276,7 +350,7 @@ namespace UnitEye.Benchmark
                 }
                 catch (Exception) { continue; }
 
-                double locSumSq = 0; int locN = 0;
+                double locSumSq = 0, locSumSqCentre = 0; int locN = 0;
                 foreach (var sample in test)
                 {
                     var p = predictPx(sample.Features);
@@ -286,6 +360,11 @@ namespace UnitEye.Benchmark
                     double d = Math.Sqrt(ex * ex + ey * ey);
                     locSumSq += d * d; locN++;
                     sumSq += d * d; n++;
+                    //Same row, trivial predictor. Accumulated inside the identical guard so the baseline is
+                    //measured on exactly the rows the model was scored on — a baseline over a different row
+                    //set would make the ratio meaningless.
+                    double dc = (screenCentre - sample.LabelPx).magnitude;
+                    locSumSqCentre += dc * dc;
 
                     //Degrees where the row recorded a viewing distance AND the session's centimetres are
                     //real. A windowed Editor Game view makes screenWidthCm wrong by the viewport ratio, and
@@ -299,13 +378,19 @@ namespace UnitEye.Benchmark
                         sumSqDeg += deg * deg; nDeg++;
                     }
                 }
-                if (locN > 0) perLocation.Add(Math.Sqrt(locSumSq / locN));
+                if (locN > 0)
+                {
+                    perLocation.Add(Math.Sqrt(locSumSq / locN));
+                    perLocationCentre.Add(Math.Sqrt(locSumSqCentre / locN));
+                }
             }
 
             if (n == 0 || perLocation.Count == 0) { r.Status = "excluded:no-scorable-folds"; return r; }
             r.TestRows = n;
             //Macro-average over locations so a target that happened to collect more samples does not dominate.
             r.RmsePctDiag = 100.0 * Math.Sqrt(perLocation.Sum(v => v * v) / perLocation.Count) / diagPx;
+            r.CentreBaselinePctDiag = 100.0 * Math.Sqrt(perLocationCentre.Sum(v => v * v) / perLocationCentre.Count) / diagPx;
+            if (r.CentreBaselinePctDiag > 1e-9) r.SkillScore = r.RmsePctDiag / r.CentreBaselinePctDiag;
             if (nDeg > 0) r.RmseDegrees = Math.Sqrt(sumSqDeg / nDeg);
             return r;
         }

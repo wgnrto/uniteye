@@ -41,6 +41,13 @@ namespace UnitEye
 
         public Vector2 RawGaze => _eyeMU.RawGaze;
 
+        /// <summary>
+        /// From the direction sub-backbone — the only half with an output distribution. RawGaze comes from
+        /// EyeMU, but the ensemble's calibrated prediction is fit on BOTH feature blocks, so a frame the
+        /// direction model was unsure about is a frame the ensemble's fit is shakier on too.
+        /// </summary>
+        public Vector2 AngularUncertainty => _direction.AngularUncertainty;
+
         public float[] Features
         {
             get

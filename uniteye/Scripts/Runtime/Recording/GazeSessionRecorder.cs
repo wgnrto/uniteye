@@ -53,6 +53,19 @@ namespace UnitEye
 
         public bool Recording { get; private set; }
         public GazeRecordingTier Tier => _tier;
+
+        /// <summary>
+        /// Generation of the feature pipeline these recordings describe. BUMP THIS whenever a change alters
+        /// what a feature value MEANS without altering the vector's length — a decode change, a
+        /// normalization change, a units change. Length changes are already caught downstream, silent
+        /// semantic changes are not, and pooling two generations into one benchmark population is how a
+        /// regression hides inside a median.
+        ///
+        /// 1 = the original layout. 2 = full-90-bin decode (8c66d89) + the appended softmax-breadth block.
+        /// Sessions written before this field existed read back as 0 = "unknown", and analysis tools must
+        /// keep those in their own group rather than assuming either generation.
+        /// </summary>
+        public const int FeaturePipelineVersion = 2;
         public string SessionFolder => _root;
         public int SampleCount => _samples;
         public int ImagesDropped => _imagesDropped;
@@ -157,6 +170,12 @@ namespace UnitEye
             Num(sb, "landmarkCount", landmarkCount); sb.Append(",");
             Bool(sb, "rollNormalizeCrops", rollNormalizeCrops); sb.Append(",");
             Bool(sb, "flipAugmentation", flipAugmentation); sb.Append(",");
+            //Feature-pipeline generation. The feature LENGTH already separates most incompatible layouts,
+            //but not all of them: the 90-bin decode changed in 8c66d89 (windowed expectation -> full
+            //expectation) WITHOUT changing the vector's length, so sessions recorded either side of it look
+            //identical to a consumer and would be pooled into one population that is really two. Anything
+            //that changes what the numbers MEAN without changing how many there are must bump this.
+            Num(sb, "featurePipelineVersion", FeaturePipelineVersion); sb.Append(",");
             Str(sb, "glassesState", glassesState); sb.Append(",");
             //Recorded so a consumer knows the landmark block's coordinate convention without guessing.
             Str(sb, "landmarkSpace", "mediapipe-normalized-0-1-ydown-cameraframe"); sb.Append(",");

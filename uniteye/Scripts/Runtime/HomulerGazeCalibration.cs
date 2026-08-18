@@ -62,6 +62,17 @@ namespace UnitEye
         private int _dwellGateAccepts, _dwellGateRejects;
         private bool _dwellGateBypassed;
         private bool _warnedGateBypass;
+        /// <summary>
+        /// Confidence below which a calibration frame is dropped: 0.25 == the model's output distribution
+        /// came out ~4x broader than this session's baseline. Set as a catastrophe threshold, not a quality
+        /// one — see the gate in CaptureNetworkOutput for why it must stay far out in the tail.
+        /// </summary>
+        private const float ConfidenceGateFloor = 0.25f;
+        //Model-confidence gate counters, mirroring the dwell gate's bypass so a target the model is simply
+        //always unsure about (plausible at extreme angles) cannot be starved of samples.
+        private int _confidenceGateAccepts, _confidenceGateRejects;
+        private bool _confidenceGateBypassed;
+        private bool _warnedConfidenceBypass;
 
         private int _currentPoint = 0;
 
@@ -217,6 +228,9 @@ namespace UnitEye
             _dwellGateAccepts = _dwellGateRejects = 0;
             _dwellGateBypassed = false;
             _warnedGateBypass = false;
+            _confidenceGateAccepts = _confidenceGateRejects = 0;
+            _confidenceGateBypassed = false;
+            _warnedConfidenceBypass = false;
             //A cancelled-and-retried calibration clears the training arrays above, so any recorder opened for
             //the abandoned attempt is now keyed to indices that no longer exist. Close it out rather than let
             //it keep appending rows that can never be joined to a trained model.
@@ -411,6 +425,8 @@ namespace UnitEye
                         _gazeTrail.Clear();
                         _dwellGateAccepts = _dwellGateRejects = 0;
                         _dwellGateBypassed = false;
+                        _confidenceGateAccepts = _confidenceGateRejects = 0;
+                        _confidenceGateBypassed = false;
                     }
 
                     if (_currentPoint >= points.Count)
@@ -653,6 +669,36 @@ namespace UnitEye
                 }
                 _dwellGateAccepts++;
             }
+
+            //Model-confidence gate: drop frames the BACKBONE itself was unusually unsure about — its output
+            //distribution came out far broader than this session's typical (see GazeConfidence). Those
+            //frames carry a decoded angle that is both noisier and more compressed than the rest, and a
+            //training row cannot say so; the fit just absorbs them as scatter around the target.
+            //
+            //Deliberately a CATASTROPHE gate, not a quality filter. The threshold is 4x the session's own
+            //typical spread, which by construction almost nothing reaches. That matters because breadth may
+            //well correlate with screen REGION (extreme gaze angles are off-distribution for a model
+            //trained on Gaze360), and a gate that quietly strips the corners would repeat exactly the
+            //mistake the blink gate above is commented for. The dwell-level bypass is the second guard: a
+            //target the model is always unsure about still gets its samples.
+            if (_gaze.HasGazeModelConfidence && !_confidenceGateBypassed &&
+                _gaze.GazeModelConfidence < ConfidenceGateFloor)
+            {
+                _confidenceGateRejects++;
+                if (_confidenceGateRejects > 3 * Mathf.Max(1, _confidenceGateAccepts))
+                {
+                    _confidenceGateBypassed = true;
+                    if (!_warnedConfidenceBypass)
+                    {
+                        _warnedConfidenceBypass = true;
+                        UnitEyeLog.Warn("Calibration confidence gate: the gaze model's output spread stayed " +
+                            "far above this session's baseline at a target; capturing ungated for the rest " +
+                            "of it (warned once per run — check face framing, lighting and camera distance).");
+                    }
+                }
+                return;
+            }
+            _confidenceGateAccepts++;
 
             //Mirror into the dataset recording BEFORE the Add, using the index this sample is about to take.
             //Hooked here at the successful tail — past every rejection above — so a recorded row can never

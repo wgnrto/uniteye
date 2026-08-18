@@ -6,6 +6,11 @@
 > changed twice over): RECALIBRATE every backbone, then run an EVALUATION — the evaluation now
 > measures and persists the per-region error model that powers runtime bias correction and
 > probabilistic AOI logging.**
+>
+> **Update (uniface-v4.0.0 review round, §6 "Shipped later"): the DIRECTION backbones' vector changed
+> again**, 32 → 36 engineered terms (the appended σ block). EyeMU and the ensemble are untouched. A
+> stale-length calibration already falls back to raw gaze rather than mispredicting, but that means
+> **recalibrate GazeMobileOne / GazeMobileNetV2 / GazeResNet34 or they run uncalibrated.**
 
 *Compiled August 2026 from a multi-angle research sweep (SOTA models 2021–2026, personalization
 literature, implicit-calibration literature, geometric methods, commercial-tracker teardowns,
@@ -124,9 +129,14 @@ relative-improvement evidence, not promises.
 8. **Interior TPS anchors**: one new dwell preset (center + 4 points at 25 %/75 %, ~1.5 s each,
    +8–12 s calibration) → 13 anchors instead of 8 boundary-only. The existing holdout gate makes it
    strictly-no-worse. Targets mid-screen, where the game's AOIs actually live.
-9. **Windowed (top-k) softmax decode** for the 90-bin heads: expectation over ±5 bins around argmax
-   instead of all 90 (the far bins' softmax mass drags estimates toward center — worst at corners).
-   ~10 lines in `DecodeAngleRadians` + smoke test.
+9. ~~**Windowed (top-k) softmax decode** for the 90-bin heads~~ — **shipped, then reverted; see §6.**
+   The premise (the far bins' softmax mass drags the expectation toward centre, worst at corners) is
+   real, but the cure was worse. These heads are *not* peaked — the softmax maximum runs ~6× uniform
+   (0.065 vs 0.011) spread over several lobes — so windowing makes the decoded angle depend on which
+   lobe holds the argmax, and the argmax hops on noise: 49° SD *within a single 12-sample fixation*.
+   The centre drag it avoids is a **scale** error, and absorbing scale errors is what the calibration
+   is for. Full 90-bin expectation is also exactly what the reference does (uniface v4.0.0
+   `uniface/gaze/models.py`: `sum(softmax * idx) * 4 - 180`).
 10. **Calibration validation gate with retry** (RealEye/Labvanced practice): after calibration, a
     short validation sweep; fail → targeted redo. Also produces a **per-session confidence score**
     to tag AOI logs (Tobii's webcam numbers rest on a 63 % session-pass gate — quality gating is how
@@ -344,7 +354,10 @@ evaluation** (feature vectors changed; the evaluation now feeds the runtime erro
 - **1.7 Interaction terms**: shared 17-feature context block [tx, ty, dist, eyeLook×8, gaze×pose,
   gaze×translation, gaze×distance] on every backbone. EyeMU 19→**36** features, direction 15→**32**(+embedding), ensemble 43(+…).
 - **1.8 Interior TPS anchors**: new `InteriorPreset` (centre + 4 quadrant dwells, ~8 s) in every calibration.
-- **1.9 Windowed decode**: softmax expectation over argmax±5 bins (kills far-bin centre drag).
+- **1.9 Windowed decode**: shipped, then **reverted** (`8c66d89`) — see Phase 1 item 9. The default is
+  again the full 90-bin softmax expectation (`DecodeAngleRadians`), which is what the reference
+  implementation does (uniface v4.0.0, unchanged since); the windowed path survives as
+  `DecodeAngleRadiansWindowed` for comparison and is pinned by its own smoke tests.
 - **1.10 Validation gate**: holdout-RMSE confidence bands with recalibrate advice on the results screen
   (`HomulerGazeCalibration.LastHoldoutRmseCm` for host-game gating).
 - **1.11/1.12 AOI layer**: fixation-centroid AOI stream (runtime I-DT `FixationAggregator`) with the
@@ -368,9 +381,56 @@ evaluation** (feature vectors changed; the evaluation now feeds the runtime erro
 - **3G Glasses**: profile metadata + Gaze-UI toggle + load-mismatch warning.
 - **Robustness**: `Mouse.current`/`Keyboard.current` null guards (headless/touch devices crashed per-frame).
 
-### Opt-in (default off — needs one webcam sanity check first)
-- **Flip TTA** (`_flipAugmentation`): mirrored-crop average for the direction models. If the mirror
-  convention is wrong on a device the average collapses toward centre — verify once, then enable.
+### Shipped later (August 2026, uniface-v4.0.0 review round)
+
+Prompted by re-checking UnitEye against uniface v4.0.0 — which turned out to change *nothing* for the gaze
+path (no gaze file touched; the decode this package reverted to in `8c66d89` is still exactly what the
+reference does) but did surface stale claims and a set of follow-ups worth taking. See
+[GAZE-BACKBONES.md](GAZE-BACKBONES.md) for the full write-ups.
+
+- **Softmax breadth (σ) as a per-frame confidence.** The decode now also returns the spread of each output
+  distribution (`DecodeAngleRadians(float[], out float)`; verified exact — a σ=3-bin Gaussian head reports
+  12.00° = 3 × the 4° bin width). [`GazeConfidence`](../uniteye/Scripts/Runtime/Utility/GazeConfidence.cs)
+  scores it against the session's own running baseline — no per-backbone constant — and three consumers use
+  it: the AOI error ellipse inflates per frame, drift anchor weights scale, and calibration capture drops
+  frames at ~4× typical spread (with the fixation gate's per-dwell bypass, so it cannot strip a screen
+  region). Backbones without an output distribution report NaN and are entirely unaffected.
+  **Closes the gap that 3F left open**: `BinocularIrisDisagreement` was a per-frame quality proxy that
+  nothing consumed.
+- **σ in the calibration features** (`FillSigmaFeatures`; direction backbones 32 → **36** engineered
+  terms). The soft-argmax compression is a function of the breadth, and the breadth varies frame to frame,
+  so it is a *time-varying* gain — which a fixed polynomial in (yaw, pitch) cannot represent and the
+  calibration therefore cannot absorb, contrary to what the decode revert assumed. σ and σ·angle give the
+  fit that basis.
+- **Input size derived from the ONNX** instead of a hardcoded 448, as uniface does
+  (`input_size = input_shape[2:4][::-1]`). A future export at another resolution used to be silently
+  mis-preprocessed; the compute dispatch rounds up and the kernel bounds-checks its tail threads.
+- **Flip TTA measured offline; the catastrophe risk is ruled out.** `(yaw - yawMirrored) * 0.5` returns
+  the mirror-**antisymmetric** component and cancels the model's mirror-symmetric **bias** — so the only
+  catastrophic failure is an antisymmetric component of zero (gaze pinned to centre). Measured on the
+  shipped weights it is **60.07° / 34.14° / 21.16°** (mobilenetv2 / mobileone / resnet34, threshold 2°),
+  with 12–36° of bias being cancelled. `TestFlipAugmentationSignConvention` prints the verdict; the
+  numbers were cross-checked through onnxruntime outside Unity. Default stays **off**: safe to enable is
+  not the same as shown to help, and it costs 2× inference. See
+  [GAZE-BACKBONES.md](GAZE-BACKBONES.md) — including the **wrong first version of this test**, which
+  measured bias dominance rather than sign and would have condemned a working configuration.
+- **Benchmark: skill score + generation tagging.** `GazeBenchmark` now scores every session against the
+  trivial "always guess screen centre" predictor on the same folds and reports `skill = rmse / centre`,
+  which *is* comparable across backbones and feature layouts where absolute error is not — so the
+  backbone ranking can actually be re-derived. This matters because the "resnet34 has a dead yaw head"
+  verdict was reached through the windowed decode; re-scored it came out 0.209 vs 0.4721. Sessions also
+  carry a `featurePipelineVersion` now: the decode change altered what the numbers *mean* without changing
+  how many there are, so sessions either side of it were indistinguishable and would have been pooled.
+  Ranking rows print the between-subjects caveat and keep unknown-generation (v0) sessions separate.
+
+
+### Opt-in (default off)
+- **Flip TTA** (`_flipAugmentation`): mirrored-crop pass for the direction models. The blocker — "the
+  mirror convention might be wrong and collapse gaze to centre" — is **resolved**: measured, the
+  antisymmetric component is 21–60° on all three exports, so it cannot collapse (see "Shipped later"
+  above). What remains is a straight cost/benefit call the measurement cannot make: **2× inference per
+  frame** (sync mode only) against an unproven accuracy gain on real faces. Enable it and run an
+  evaluation if you want the answer.
 
 ### Deferred, with reasons
 - **Photometric crop normalization**: changing input statistics under a FROZEN ImageNet-normalized

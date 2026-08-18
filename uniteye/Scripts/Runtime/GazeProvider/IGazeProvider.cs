@@ -46,6 +46,17 @@ namespace UnitEye
         /// failures. 0 when unavailable.</summary>
         float BinocularIrisDisagreement { get; }
 
+        /// <summary>
+        /// The gaze model's own per-frame uncertainty about the current estimate: angular standard
+        /// deviation per axis (yaw, pitch) in radians, or NaN when the model has none to report (see
+        /// IGazeBackbone.AngularUncertainty). Only the bin-classification backbones fill this in.
+        ///
+        /// Raw and un-normalized on purpose. It is not comparable across models or across people, so
+        /// consumers must not threshold it directly — feed it to a <see cref="GazeConfidence"/> tracker,
+        /// which scores a frame against the session's own running baseline.
+        /// </summary>
+        Vector2 GazeAngularUncertainty { get; }
+
         /// <summary>Estimated distance from the camera in mm (negative sentinel if unavailable).</summary>
         float DistanceMm { get; }
 

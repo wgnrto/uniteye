@@ -44,6 +44,13 @@ namespace UnitEye
         //IGazeBackbone: the raw (pre-calibration) gaze in pixels. NetworkOutput already holds pixel coords.
         public Vector2 RawGaze => new Vector2(NetworkOutput[0], NetworkOutput[1]);
 
+        /// <summary>
+        /// NaN: EyeMU regresses a screen POINT, so there is no output distribution whose spread could be
+        /// read as a confidence. Reporting a made-up number here would be worse than reporting none —
+        /// consumers would weight frames by noise. See IGazeBackbone.AngularUncertainty.
+        /// </summary>
+        public Vector2 AngularUncertainty => new Vector2(float.NaN, float.NaN);
+
         #region Head pose (re-enabled so the feature vector and UnitEyeAPI.GetHeadPose match the former Holistic path)
         public float HeadYaw => _faceMesh.HeadYaw;
         public float HeadPitch => _faceMesh.HeadPitch;

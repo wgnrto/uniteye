@@ -78,6 +78,9 @@ namespace UnitEye
         public bool IsBlinking => s_blinking;
         public bool IsDrowsy => false;                 // TODO: compute browser-side if you need drowsiness
         public float BinocularIrisDisagreement => 0f;  // TODO: compute browser-side if needed
+        //The browser path runs EyeMU, which has no output distribution to measure (and the JS side does not
+        //ship the direction models at all), so there is genuinely nothing to report here.
+        public Vector2 GazeAngularUncertainty => new Vector2(float.NaN, float.NaN);
         public float DistanceMm => -1000f;             // TODO: browser-side distance if needed
         public float EyeFeature => float.NaN;
         public Vector3 HeadPoseEuler => Vector3.zero;  // TODO: head pose from FaceLandmarker if needed
