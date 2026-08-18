@@ -4,3 +4,4 @@ webgl/build*/
 # OS noise
 Thumbs.db
 .DS_Store
+.claude
