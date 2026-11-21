@@ -336,7 +336,7 @@ namespace UnitEye.EditorTools
         }
 
         private static string Quote(string s)
-            => "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n") + "\"";
+            => "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t") + "\"";
 
         private static string ExtractString(string json, string key)
         {
@@ -344,8 +344,27 @@ namespace UnitEye.EditorTools
             int i = json != null ? json.IndexOf(needle, StringComparison.Ordinal) : -1;
             if (i < 0) return "";
             int start = i + needle.Length, end = start;
-            while (end < json.Length && json[end] != '"') { if (json[end] == '\\') end++; end++; }
-            return end <= json.Length ? json.Substring(start, end - start) : "";
+            var sb = new StringBuilder();
+            while (end < json.Length && json[end] != '"')
+            {
+                if (json[end] == '\\' && end + 1 < json.Length)
+                {
+                    end++;
+                    switch (json[end])
+                    {
+                        case 'n': sb.Append('\n'); break;
+                        case 'r': sb.Append('\r'); break;
+                        case 't': sb.Append('\t'); break;
+                        default: sb.Append(json[end]); break;
+                    }
+                }
+                else
+                {
+                    sb.Append(json[end]);
+                }
+                end++;
+            }
+            return sb.ToString();
         }
 
         private static long ExtractLong(string json, string key)

@@ -14,6 +14,7 @@ namespace UnitEye
         SerializedProperty showEyes;
         SerializedProperty visualizeAOI;
         SerializedProperty showGazeUI;
+        SerializedProperty showFaceMesh;
 
         SerializedProperty calibrations;
         SerializedProperty gazeLocation;
@@ -28,12 +29,26 @@ namespace UnitEye
 
         SerializedProperty frameRate;
         SerializedProperty gazeBackbone;
+        SerializedProperty asyncGpuReadback;
+        SerializedProperty flipAugmentation;
+        SerializedProperty rollNormalizeCrops;
+        SerializedProperty userWearsGlasses;
+        SerializedProperty holdGazeDuringBlink;
+        SerializedProperty maxBlinkHoldSeconds;
+        SerializedProperty fixationAOILogging;
+        SerializedProperty useErrorModel;
+        SerializedProperty onlineDriftCorrection;
+        SerializedProperty clickAnchors;
 
 
         void OnEnable()
         {
             mediaPipeGO = serializedObject.FindProperty("_mediaPipeGO");
             gazeBackbone = serializedObject.FindProperty("_gazeBackbone");
+            asyncGpuReadback = serializedObject.FindProperty("_asyncGpuReadback");
+            flipAugmentation = serializedObject.FindProperty("_flipAugmentation");
+            rollNormalizeCrops = serializedObject.FindProperty("_rollNormalizeCrops");
+            userWearsGlasses = serializedObject.FindProperty("userWearsGlasses");
             calibration = serializedObject.FindProperty("_calibrationScript");
             dot = serializedObject.FindProperty("dot");
             csvLogger = serializedObject.FindProperty("_csvLogger");
@@ -41,6 +56,7 @@ namespace UnitEye
             showEyes = serializedObject.FindProperty("showEyes");
             visualizeAOI = serializedObject.FindProperty("visualizeAOI");
             showGazeUI = serializedObject.FindProperty("showGazeUI");
+            showFaceMesh = serializedObject.FindProperty("showFaceMesh");
             calibrations = serializedObject.FindProperty("_calibrations");
             gazeLocation = serializedObject.FindProperty("gazeLocation");
             filtering = serializedObject.FindProperty("_filtering");
@@ -52,6 +68,13 @@ namespace UnitEye
             mincutoff = serializedObject.FindProperty("mincutoff");
             dcutoff = serializedObject.FindProperty("dcutoff");
 
+            holdGazeDuringBlink = serializedObject.FindProperty("holdGazeDuringBlink");
+            maxBlinkHoldSeconds = serializedObject.FindProperty("maxBlinkHoldSeconds");
+            fixationAOILogging = serializedObject.FindProperty("fixationAOILogging");
+            useErrorModel = serializedObject.FindProperty("useErrorModel");
+            onlineDriftCorrection = serializedObject.FindProperty("onlineDriftCorrection");
+            clickAnchors = serializedObject.FindProperty("clickAnchors");
+
             frameRate = serializedObject.FindProperty("_frameRate");
         }
 
@@ -62,6 +85,10 @@ namespace UnitEye
             EditorGUILayout.PropertyField(mediaPipeGO);
             EditorGUILayout.PropertyField(calibration);
             EditorGUILayout.PropertyField(gazeBackbone, new GUIContent("Gaze Backbone (model)"));
+            EditorGUILayout.PropertyField(asyncGpuReadback, new GUIContent("Async GPU Readback"));
+            EditorGUILayout.PropertyField(rollNormalizeCrops, new GUIContent("Roll-Normalize Face Crops"));
+            EditorGUILayout.PropertyField(flipAugmentation, new GUIContent("Flip Augmentation (sync only)"));
+            EditorGUILayout.PropertyField(userWearsGlasses, new GUIContent("User Wears Glasses"));
             EditorGUILayout.Separator();
 
             EditorGUILayout.PropertyField(dot, new GUIContent("Gaze Location Dot:"));
@@ -74,6 +101,7 @@ namespace UnitEye
             //Undo/Reset and multi-object editing and ignored external changes to the value).
             EditorGUILayout.PropertyField(drawDot, new GUIContent("Draw Dot?"));
             EditorGUILayout.PropertyField(showEyes, new GUIContent("Show Eyecrops?"));
+            EditorGUILayout.PropertyField(showFaceMesh, new GUIContent("Show FaceMesh?"));
             EditorGUILayout.PropertyField(visualizeAOI, new GUIContent("Visualize AOIs?"));
             EditorGUILayout.PropertyField(showGazeUI, new GUIContent("Show Gaze UI button?"));
             EditorGUILayout.Separator();
@@ -110,6 +138,18 @@ namespace UnitEye
                 default:
                     break;
             }
+
+            EditorGUILayout.Separator();
+            EditorGUILayout.PropertyField(holdGazeDuringBlink, new GUIContent("Hold Gaze During Blink"));
+            if (holdGazeDuringBlink.boolValue)
+                EditorGUILayout.PropertyField(maxBlinkHoldSeconds, new GUIContent("Max Blink Hold (s)"));
+
+            EditorGUILayout.Separator();
+            EditorGUILayout.PropertyField(fixationAOILogging, new GUIContent("Fixation AOI Logging"));
+            EditorGUILayout.PropertyField(useErrorModel, new GUIContent("Use Error Model"));
+            EditorGUILayout.PropertyField(onlineDriftCorrection, new GUIContent("Online Drift Correction"));
+            if (onlineDriftCorrection.boolValue)
+                EditorGUILayout.PropertyField(clickAnchors, new GUIContent("Click Drift Anchors"));
 
             EditorGUILayout.Separator();
             EditorGUILayout.PropertyField(frameRate);
