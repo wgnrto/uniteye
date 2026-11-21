@@ -43,7 +43,7 @@
     const statusEl = document.getElementById('status');
     const logEl = document.getElementById('log');
     const aois = Array.from(document.querySelectorAll('.aoi'));
-    let engine = null, focused = null;
+    let engine = null, focused = null, runId = 0;
 
     // demo state exposed for automated testing
     window.__demo = { gaze: { x: 0, y: 0 }, focused: null, blink: false, facePresent: false, logCount: 0 };
@@ -84,8 +84,11 @@
 
     async function startMock() {
       stop();
-      engine = new UnitEyeWeb({ mock: true, onGaze });
-      await engine.init();
+      const myRun = ++runId;
+      const localEngine = new UnitEyeWeb({ mock: true, onGaze });
+      await localEngine.init();
+      if (myRun !== runId) { localEngine.stop(); return; }
+      engine = localEngine;
       engine.start();
       window.__engine = engine;   // exposed for automated testing (set engine._mouse directly)
       statusEl.textContent = 'running (mock / mouse)';
@@ -94,19 +97,25 @@
     }
     async function startReal() {
       stop();
+      const myRun = ++runId;
       statusEl.textContent = 'loading models + camera…';
+      const localEngine = new UnitEyeWeb({ mock: false, modelUrl: 'models/eyemu.onnx', onGaze });
       try {
-        engine = new UnitEyeWeb({ mock: false, modelUrl: 'models/eyemu.onnx', onGaze });
-        await engine.init();
+        await localEngine.init();
+        if (myRun !== runId) { localEngine.stop(); return; }
+        engine = localEngine;
         engine.start();
         statusEl.textContent = 'running (webcam)';
         log('started webcam mode');
       } catch (e) {
+        localEngine.stop();
+        if (myRun !== runId) return;
         statusEl.textContent = 'error: ' + e.message;
         log('ERROR ' + e.message);
       }
     }
     function stop() {
+      runId++;
       if (engine) { engine.stop(); engine = null; }
       statusEl.textContent = 'idle';
     }

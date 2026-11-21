@@ -51,6 +51,13 @@
       var expT = 0.3 * 0.5 + 0.0001 * 500 + 0.05;
       check("trainRidge recovers a linear map", close(predT, expT, 0.02), "got " + predT.toFixed(4) + " expected " + expT.toFixed(4));
 
+      // 3b. trainRidge must NOT penalize the intercept: constant target 0.7 under large lambda=10
+      var constFeats = [], constTargs = [];
+      for (var i = 0; i < 60; i++) { constFeats.push([rnd(), rnd() * 100, rnd()]); constTargs.push(0.7); }
+      var constModel = C.trainRidge(constFeats, constTargs, 10.0);
+      var constPred = constModel.predict(constFeats[0]);
+      check("trainRidge does not penalize intercept (lambda=10)", close(constPred, 0.7, 1e-4), "got " + constPred);
+
       // 4. RidgeModel dot-product math against a historic (12-length) weight set. This pins the solver,
       //    not the current feature layout — the live vector is 19 terms (checked in section 9 below).
       var regX_W = [0.104463741, 0.010691735, -0.00440568523, 0.00266113342, -0.0188193135, -4.1600335E-05, 0.000105519161, -0.194871455, -0.8815033, -3.26503229, -2.26206422, 5.49777869E-05, 0.000420249];
@@ -67,12 +74,24 @@
       for (var i = 100; i < 200; i++) { var raw = 5 + ((i % 2 === 0) ? 1 : -1); var out = f.filter(raw, raw, i / 60); maxDev = Math.max(maxDev, Math.abs(out.x - 5)); }
       check("OneEuro attenuates alternating jitter", maxDev < 0.5, "max deviation " + maxDev.toFixed(3));
 
+      // 5b. OneEuro duplicate and non-monotonic timestamps must not explode freq to 1e6
+      var fDup = new C.OneEuro2D(60, 1.0, 0.01, 1.0);
+      fDup.filter(10, 20, 1.0);
+      fDup.filter(12, 22, 1.0);
+      var outBack = fDup.filter(14, 24, 0.98);
+      check("OneEuro keeps freq bounded on duplicate/non-monotonic timestamps",
+        isFinite(outBack.x) && fDup.fx.freq < 1000 && fDup.fx.lasttime === 1.0,
+        "freq=" + fDup.fx.freq + " lasttime=" + fDup.fx.lasttime);
+
       // 6. AOI box hit-tests (normalized)
       check("pointInBox inside", C.pointInBox(0.5, 0.5, 0.2, 0.2, 0.8, 0.8, false) === true);
       check("pointInBox outside", C.pointInBox(0.1, 0.1, 0.2, 0.2, 0.8, 0.8, false) === false);
       check("pointInBox inverted", C.pointInBox(0.1, 0.1, 0.2, 0.2, 0.8, 0.8, true) === true);
       check("pointInCircle inside", C.pointInCircle(0.5, 0.5, 0.5, 0.5, 0.1, 1, false) === true);
       check("pointInCircle outside", C.pointInCircle(0.9, 0.5, 0.5, 0.5, 0.1, 1, false) === false);
+      check("pointInCircle normalized-space parity with C# AOICircle (aspect-independent)",
+        C.pointInCircle(0.5, 0.58, 0.5, 0.5, 0.1, 16 / 9, false) === true &&
+        C.pointInCircle(0.5, 0.61, 0.5, 0.5, 0.1, 16 / 9, false) === false);
 
       // 7. Eye-crop geometry produces a sane square crop
       var lm = []; for (var i = 0; i < 500; i++) lm.push({ x: 0.5, y: 0.5 });
