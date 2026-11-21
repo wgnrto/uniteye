@@ -6,8 +6,10 @@ library(devtools)
 source_url("https://raw.githubusercontent.com/M-Colley/rCode/main/r_functionality.R")
 
 
-main_df <- read_delim(file = "data.csv", delim = ";")
+data_path <- if (file.exists("data.csv")) "data.csv" else if (file.exists("../data/data.csv")) "../data/data.csv" else "data/data.csv"
+main_df <- read_delim(file = data_path, delim = ";")
 main_df <- as.data.frame(main_df)
+dir.create("plots", showWarnings = FALSE, recursive = TRUE)
 names(main_df)
 
 main_df$participant <- as.factor(main_df$participant)
@@ -122,6 +124,15 @@ BA.plot <- function(m1, m2) {
 # 1 cm = 0.956 degree
 scaling_factor <- 0.956
 
+partial_eta_sq <- function(art_anova) {
+  f_col <- if ("F value" %in% names(art_anova)) "F value" else "F"
+  f_val <- art_anova[[f_col]]
+  df1 <- art_anova$Df
+  df2 <- art_anova$Df.res
+  term_col <- if ("Term" %in% names(art_anova)) art_anova$Term else rownames(art_anova)
+  data.frame(Term = term_col, Df = df1, Df.res = df2, eta_p2 = (f_val * df1) / (f_val * df1 + df2))
+}
+
 #### euclidean ####
 checkAssumptionsForAnovaTwoFactors(data = main_df, y = "euclidean", factor_1 = "condition", factor_2 = "event")
 
@@ -129,10 +140,7 @@ modelArt <- art(euclidean ~ condition * event + Error(participant / (condition *
 modelArt
 reportART(modelArt, dv = "euclidean distance")
 
-# condition - Tobii vs UnitEye
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 44 * 12)
-# validation point
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[2], N = 44 * 12)
+partial_eta_sq(modelArt)
 
 main_df %>% ggplot() +
   aes(x = condition, y = euclidean_cm, fill = event, colour = event, group = event) +
@@ -160,7 +168,7 @@ modelArt <- art(euclidean ~ condition * area + Error(participant / (condition * 
 modelArt
 reportART(modelArt, dv = "euclidean distance")
 
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 66 * 12)
+partial_eta_sq(modelArt)
 
 
 main_df %>% ggplot() +
@@ -189,10 +197,7 @@ modelArt <- art(rmss2s ~ condition * event + Error(participant / (condition * ev
 modelArt
 reportART(modelArt, dv = "RMS-S2S")
 
-# condition - Tobii vs UnitEye
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 44 * 12)
-# validation point
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[2], N = 44 * 12)
+partial_eta_sq(modelArt)
 
 main_df %>% ggplot() +
   aes(x = condition, y = rmss2s_cm, fill = event, colour = event, group = event) +
@@ -222,9 +227,7 @@ modelArt <- art(rmss2s ~ condition * area + Error(participant / (condition * are
 modelArt
 reportART(modelArt, dv = "RMS-S2S")
 
-# condition - Tobii vs UnitEye
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 66 * 12)
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[2], N = 66 * 12)
+partial_eta_sq(modelArt)
 
 
 main_df %>% ggplot() +
@@ -255,10 +258,7 @@ modelArt <- art(sd_x ~ condition * event + Error(participant / (condition * even
 modelArt
 reportART(modelArt, dv = "SD in x direction")
 
-# condition - Tobii vs UnitEye
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 44 * 12)
-# validation point
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[2], N = 44 * 12)
+partial_eta_sq(modelArt)
 
 main_df %>% ggplot() +
   aes(x = condition, y = sd_x_cm, fill = event, colour = event, group = event) +
@@ -286,9 +286,7 @@ modelArt <- art(sd_x ~ condition * area + Error(participant / (condition * area)
 modelArt
 reportART(modelArt, dv = "SD in x direction")
 
-# condition - Tobii vs UnitEye
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 66 * 12)
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[2], N = 66 * 12)
+partial_eta_sq(modelArt)
 
 main_df %>% ggplot() +
   aes(x = condition, y = sd_x_cm, fill = area, colour = area, group = area) +
@@ -319,10 +317,7 @@ modelArt <- art(sd_y ~ condition * event + Error(participant / (condition * even
 modelArt
 reportART(modelArt, dv = "SD in y direction")
 
-# condition - Tobii vs UnitEye
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 44 * 12)
-# validation point
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[2], N = 44 * 12)
+partial_eta_sq(modelArt)
 
 main_df %>% ggplot() +
   aes(x = condition, y = sd_y_cm, fill = event, colour = event, group = event) +
@@ -349,9 +344,7 @@ modelArt <- art(sd_y ~ condition * area + Error(participant / (condition * area)
 modelArt
 reportART(modelArt, dv = "SD in y direction")
 
-# condition - Tobii vs UnitEye
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 66 * 12)
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[2], N = 66 * 12)
+partial_eta_sq(modelArt)
 
 
 main_df %>% ggplot() +
@@ -381,10 +374,7 @@ modelArt <- art(dist_x ~ condition * event + Error(participant / (condition * ev
 modelArt
 reportART(modelArt, dv = "dist_x")
 
-# condition - Tobii vs UnitEye
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 44 * 12)
-# validation point
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[2], N = 44 * 12)
+partial_eta_sq(modelArt)
 
 main_df %>% ggplot() +
   aes(x = condition, y = dist_x_cm, fill = event, colour = event, group = event) +
@@ -432,10 +422,7 @@ modelArt <- art(dist_y ~ condition * event + Error(participant / (condition * ev
 modelArt
 reportART(modelArt, dv = "dist_y")
 
-# condition - Tobii vs UnitEye
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[1], N = 44 * 12)
-# validation point
-rFromNPAV(pvalue = modelArt$`Pr(>F)`[2], N = 44 * 12)
+partial_eta_sq(modelArt)
 
 main_df %>% ggplot() +
   aes(x = condition, y = dist_y_cm, fill = event, colour = event, group = event) +
@@ -476,10 +463,10 @@ ggsave("plots/dist_y_area.pdf", width = pdfwidth, height = pdfheight + 2, device
 
 
 
-# not available in the csv.
-
-# mean(main_df$lux)
-# sd(main_df$lux)
+if ("lux" %in% names(main_df)) {
+  mean(main_df$lux, na.rm = TRUE)
+  sd(main_df$lux, na.rm = TRUE)
+}
 
 
 
@@ -492,22 +479,25 @@ library(BlandAltmanLeh)
 
 main_df$rmss2s <- as.numeric(main_df$rmss2s)
 
-test <- NULL
+test <- list()
 test$tobii <- main_df |>
   dplyr::filter(condition == "Tobii") |>
-  pull(rmss2s) # Using pull to extract the vector directly
+  dplyr::arrange(participant, order, event) |>
+  dplyr::pull(rmss2s)
 
 test$uniteye <- main_df |>
   dplyr::filter(condition == "UnitEye") |>
-  dplyr::pull(rmss2s) 
+  dplyr::arrange(participant, order, event) |>
+  dplyr::pull(rmss2s)
 
 test$uniteye_filtered <- main_df |>
   dplyr::filter(condition == "UnitEye Smoothed") |>
+  dplyr::arrange(participant, order, event) |>
   dplyr::pull(rmss2s)
 
 
 
-bland.altman.plot(test$tobi, test$uniteye, graph.sys = "ggplot2") +
+bland.altman.plot(test$tobii, test$uniteye, graph.sys = "ggplot2") +
   xlab("Mean value of the measurements for RMS-S2S") +
   ylab("Mean value difference for RMS-S2S") +
   ggtitle("Bland-Altman-Plot - Tobii vs UnitEye") +
@@ -516,7 +506,7 @@ ggsave("plots/bland-altman-rmss2s-tobii-uniteye.pdf", width = pdfwidth, height =
 
 
 
-bland.altman.plot(test$tobi, test$uniteye_filtered, graph.sys = "ggplot2") +
+bland.altman.plot(test$tobii, test$uniteye_filtered, graph.sys = "ggplot2") +
   xlab("Mean value of the measurements for RMS-S2S") +
   ylab("Mean value difference for RMS-S2S") +
   ggtitle("Bland-Altman-Plot- Tobii vs UnitEye Smoothed") +
@@ -524,11 +514,12 @@ bland.altman.plot(test$tobi, test$uniteye_filtered, graph.sys = "ggplot2") +
 ggsave("plots/bland-altman-rmss2s-tobii-uniteye-smoothed.pdf", width = pdfwidth, height = pdfheight + 2, device = cairo_pdf)
 
 
-# bland.altman.plot(test$tobi, test$uniteye_filtered, sunflower = TRUE)
+# bland.altman.plot(test$tobii, test$uniteye_filtered, sunflower = TRUE)
 
 # see: https://www.sciencedirect.com/science/article/pii/S2213398421001391
-BA.plot(test$tobi, test$uniteye_filtered)
-ggsave("plots/bland-altman-rmss2s-tobii-uniteye-smoothed_BAPlot.pdf", width = pdfwidth, height = pdfheight + 2, device = cairo_pdf)
+cairo_pdf("plots/bland-altman-rmss2s-tobii-uniteye-smoothed_BAPlot.pdf", width = pdfwidth, height = pdfheight + 2)
+BA.plot(test$tobii, test$uniteye_filtered)
+dev.off()
 
 
 
