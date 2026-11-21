@@ -29,14 +29,24 @@ namespace UnitEye
         void ShowDeviceSelector(Rect rect)
         {
             var menu = new GenericMenu();
-
-            foreach (var device in WebCamTexture.devices)
-                menu.AddItem(new GUIContent(device.name), false,
-                             () => {
-                                 serializedObject.Update();
-                                 webCamName.stringValue = device.name;
-                                 serializedObject.ApplyModifiedProperties();
-                             });
+            var devices = WebCamTexture.devices;
+            if (devices.Length == 0)
+            {
+                menu.AddDisabledItem(new GUIContent("No webcams detected"));
+            }
+            else
+            {
+                foreach (var device in devices)
+                {
+                    var selectedName = device.name;
+                    menu.AddItem(new GUIContent(selectedName), webCamName.stringValue == selectedName, () =>
+                    {
+                        serializedObject.Update();
+                        webCamName.stringValue = selectedName;
+                        serializedObject.ApplyModifiedProperties();
+                    });
+                }
+            }
 
             menu.DropDown(rect);
         }
@@ -46,14 +56,6 @@ namespace UnitEye
             serializedObject.Update();
 
             EditorGUILayout.BeginHorizontal();
-
-            //Initialize first available device if none is selected or device is not found and reset resolution to WebCamInput.DefaultResolution
-            if (webCamName.stringValue == "" || !WebCamInput.CheckValidWebCam(webCamName.stringValue))
-            {
-                if (WebCamTexture.devices.Length > 0)
-                    webCamName.stringValue = WebCamTexture.devices[0].name;
-                webCamResolution.vector2Value = WebCamInput.DefaultResolution;
-            }
 
             EditorGUILayout.PropertyField(webCamName, new GUIContent("Webcam Name"));
 

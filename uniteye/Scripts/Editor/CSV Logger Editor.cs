@@ -32,24 +32,18 @@ namespace UnitEye
 
             GUILayout.Space(15);
 
-            //Folder Selection
-            if (!Directory.Exists(_baseFolderPath.stringValue)) _baseFolderPath.stringValue = "";
-
-            EditorGUILayout.LabelField("Use Application.dataPath/CSVLogs folder?");
+            EditorGUILayout.LabelField("Use default CSVLogs folder (Editor: Assets/CSVLogs, Builds: persistentDataPath/CSVLogs)?");
             //Bind directly (was mirrored through a cached bool, breaking Undo/multi-object editing).
             EditorGUILayout.PropertyField(useDefaultFolder, new GUIContent(" "));
 
             if (!useDefaultFolder.boolValue)
             {
-                //Default to Application.dataPath/CSVLogs/ folder
-                //For editor this is Assets/Logs, windows build is executablename_Data/CSVLogs/, Android uses persistentDataPath which points to /storage/emulated/0/Android/data/<packagename>/files/CSVLogs
-                _baseFolderPath.stringValue = Application.platform == RuntimePlatform.Android ? $"{Application.persistentDataPath}/CSVLogs" : _baseFolderPath.stringValue == "" ? $"{Application.dataPath}/CSVLogs" : _baseFolderPath.stringValue;
                 EditorGUILayout.PropertyField(_baseFolderPath, new GUIContent("Current folder: "));
-                EditorGUILayout.LabelField($"Make sure the folder will be valid when building!");
+                EditorGUILayout.LabelField("Leave empty to use the platform default folder, or select a custom folder:");
                 if (GUILayout.Button("Select folder"))
                 {
-                    var newPath = EditorUtility.OpenFolderPanel("Select folder to store CSV files in", "", "");
-                    if (!newPath.Equals(""))
+                    var newPath = EditorUtility.OpenFolderPanel("Select folder to store CSV files in", _baseFolderPath.stringValue, "");
+                    if (!string.IsNullOrEmpty(newPath))
                         _baseFolderPath.stringValue = newPath;
                 }
             }

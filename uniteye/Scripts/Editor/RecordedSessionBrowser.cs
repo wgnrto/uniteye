@@ -434,8 +434,27 @@ public class RecordedSessionBrowser : EditorWindow
         var needle = $"\"{key}\":\"";
         int i = json.IndexOf(needle, StringComparison.Ordinal);
         if (i < 0) return "";
-        int start = i + needle.Length;
-        int end = json.IndexOf('"', start);
-        return end > start ? json.Substring(start, end - start) : "";
+        int start = i + needle.Length, end = start;
+        var sb = new System.Text.StringBuilder();
+        while (end < json.Length && json[end] != '"')
+        {
+            if (json[end] == '\\' && end + 1 < json.Length)
+            {
+                end++;
+                switch (json[end])
+                {
+                    case 'n': sb.Append('\n'); break;
+                    case 'r': sb.Append('\r'); break;
+                    case 't': sb.Append('\t'); break;
+                    default: sb.Append(json[end]); break;
+                }
+            }
+            else
+            {
+                sb.Append(json[end]);
+            }
+            end++;
+        }
+        return sb.ToString();
     }
 }

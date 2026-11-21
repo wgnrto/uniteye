@@ -12,24 +12,36 @@ namespace UnitEye
 
         SerializedProperty _name;
         SerializedProperty _preferableDefaultWidth;
+        SerializedProperty _requestedFps;
 
         void OnEnable()
         {
             _name = serializedObject.FindProperty("_name");
             _preferableDefaultWidth = serializedObject.FindProperty("_preferableDefaultWidth");
+            _requestedFps = serializedObject.FindProperty("_requestedFps");
         }
 
         void ShowDeviceSelector(Rect rect)
         {
             var menu = new GenericMenu();
-
-            foreach (var device in WebCamTexture.devices)
-                menu.AddItem(new GUIContent(device.name), false,
-                             () => {
-                                 serializedObject.Update();
-                                 _name.stringValue = device.name;
-                                 serializedObject.ApplyModifiedProperties();
-                             });
+            var devices = WebCamTexture.devices;
+            if (devices.Length == 0)
+            {
+                menu.AddDisabledItem(new GUIContent("No webcams detected"));
+            }
+            else
+            {
+                foreach (var device in devices)
+                {
+                    var selectedName = device.name;
+                    menu.AddItem(new GUIContent(selectedName), _name.stringValue == selectedName, () =>
+                    {
+                        serializedObject.Update();
+                        _name.stringValue = selectedName;
+                        serializedObject.ApplyModifiedProperties();
+                    });
+                }
+            }
 
             menu.DropDown(rect);
         }
@@ -40,13 +52,8 @@ namespace UnitEye
 
             EditorGUILayout.BeginHorizontal();
 
-            //Initialize first available device if none is selected or device is not found and reset resolution to WebCamInput.DefaultResolution
-            if (_name.stringValue == "" || !WebCamInput.CheckValidWebCam(_name.stringValue))
-            {
-                if (WebCamTexture.devices.Length > 0)
-                    _name.stringValue = WebCamTexture.devices[0].name;
-            }
-
+            //Do NOT query WebCamTexture.devices or overwrite _name on every GUI pass: enumerating DirectShow
+            //devices every frame stalls the Inspector, and mutating _name on selection marks scenes/prefabs dirty.
             EditorGUILayout.PropertyField(_name, new GUIContent("Webcam Name"));
 
             var rect = EditorGUILayout.GetControlRect(false, GUILayout.Width(60));
@@ -55,7 +62,9 @@ namespace UnitEye
 
             EditorGUILayout.EndHorizontal();
 
-            EditorGUILayout.PropertyField(_preferableDefaultWidth, new GUIContent("Webcam Resolution"));
+            EditorGUILayout.PropertyField(_preferableDefaultWidth, new GUIContent("Webcam Resolution (Width)"));
+            if (_requestedFps != null)
+                EditorGUILayout.PropertyField(_requestedFps, new GUIContent("Target Camera FPS"));
 
             serializedObject.ApplyModifiedProperties();
         }

@@ -16,6 +16,7 @@ public static class GazeModelInspector
     static readonly string[] Models = {
         "ONNX/GazeEstimation/mobileone_s0_gaze",
         "ONNX/GazeEstimation/mobilenetv2_gaze",
+        "ONNX/GazeEstimation/resnet34_gaze",
     };
 
     [MenuItem("UnitEye/Inspect Gaze Models")]
