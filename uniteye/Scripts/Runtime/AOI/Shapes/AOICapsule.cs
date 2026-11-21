@@ -41,6 +41,14 @@ namespace UnitEye
             float X = endpoint.x - startpoint.x;
             float Y = endpoint.y - startpoint.y;
             float distance = Mathf.Sqrt(X * X + Y * Y);
+            if (distance <= 1e-6f)
+            {
+                GL.Begin(GL.LINE_STRIP);
+                GL.Color(color);
+                DrawGLCircle(new Vector2(startpoint.x, 1f - startpoint.y), radius);
+                GL.End();
+                return;
+            }
 
             //Calculate corner points
             Vector2 directionVector = (endpoint - startpoint) * (radius / distance);

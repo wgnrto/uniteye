@@ -54,6 +54,8 @@ namespace Mediapipe.Unity.FaceMesh
         // If gaze is upside-down/mirrored on your webcam, flip these (a hand-test knob).
         [SerializeField] private bool _flipHorizontally = false;
         [SerializeField] private bool _flipVertically = true;
+        [Tooltip("Maximum frame width sent to CPU MediaPipe FaceLandmarker (0 = native webcam resolution). GPU eye/face crops still sample the full-resolution webcam texture.")]
+        [SerializeField] private int _maxDetectionWidth = 640;
 
         // The Task API dropped the old graph's landmark-smoothing calculators, so the raw landmarks jitter
         // frame to frame — which shakes the eye crops, the EyeCorners model input and the iris gaze
@@ -89,7 +91,9 @@ namespace Mediapipe.Unity.FaceMesh
 
         private FaceLandmarker _faceLandmarker;
         private TextureFramePool _textureFramePool;
+        private RenderTexture _detectionRT;
         private int _poolWidth, _poolHeight;
+        private bool _effectiveFlipH, _effectiveFlipV = true;
         private FaceLandmarkerResult _result;
         private readonly System.Diagnostics.Stopwatch _stopwatch = new System.Diagnostics.Stopwatch();
         private bool _warnedRotation;
@@ -274,13 +278,24 @@ namespace Mediapipe.Unity.FaceMesh
             }
         }
 
-        public float[] HeadGeom => new float[4] { HeadYaw, HeadPitch, HeadRoll, HeadArea };
+        private readonly float[] _headGeomBuffer = new float[4];
+        public float[] HeadGeom
+        {
+            get
+            {
+                _headGeomBuffer[0] = HeadYaw;
+                _headGeomBuffer[1] = HeadPitch;
+                _headGeomBuffer[2] = HeadRoll;
+                _headGeomBuffer[3] = HeadArea;
+                return _headGeomBuffer;
+            }
+        }
 
         // Exposed for dataset recording (IGazeRecordingSource): landmark-to-pixel registration depends on
         // the flips applied on the way into MediaPipe, and whether the 6 gaze landmarks were smoothed is a
         // caveat anyone training on the landmark block needs. Read-only — recorded, never corrected.
-        public bool FrameFlippedHorizontally => _flipHorizontally;
-        public bool FrameFlippedVertically => _flipVertically;
+        public bool FrameFlippedHorizontally => _effectiveFlipH;
+        public bool FrameFlippedVertically => _effectiveFlipV;
         public bool GazeLandmarksSmoothed => _smoothGazeLandmarks;
 
         /// <summary>
@@ -437,16 +452,31 @@ namespace Mediapipe.Unity.FaceMesh
             if (texture == null)
                 return;
 
-            // (Re)create the frame pool when the source resolution changes (Next/Previous Camera can
-            // switch to a device with a different resolution). A stale pool size makes ReadTextureOnCPU
-            // pad/crop the live frame inside an old-sized texture, so landmarks come back scaled/offset
-            // relative to the real frame while the crop math uses the real texture size.
-            if (_textureFramePool == null || _poolWidth != texture.width || _poolHeight != texture.height)
+            int detW = texture.width;
+            int detH = texture.height;
+            Texture readSource = texture;
+            if (_maxDetectionWidth > 0 && detW > _maxDetectionWidth)
+            {
+                detH = Mathf.Max(16, Mathf.RoundToInt((float)detH * _maxDetectionWidth / detW));
+                detW = _maxDetectionWidth;
+                if (_detectionRT == null || _detectionRT.width != detW || _detectionRT.height != detH)
+                {
+                    if (_detectionRT != null) { _detectionRT.Release(); Destroy(_detectionRT); }
+                    _detectionRT = new RenderTexture(detW, detH, 0, RenderTextureFormat.ARGB32);
+                    _detectionRT.Create();
+                }
+                Graphics.Blit(texture, _detectionRT);
+                readSource = _detectionRT;
+            }
+
+            // (Re)create the frame pool when the detection resolution changes (Next/Previous Camera can
+            // switch to a device with a different resolution).
+            if (_textureFramePool == null || _poolWidth != detW || _poolHeight != detH)
             {
                 _textureFramePool?.Dispose();
-                _textureFramePool = new TextureFramePool(texture.width, texture.height, TextureFormat.RGBA32, 10);
-                _poolWidth = texture.width;
-                _poolHeight = texture.height;
+                _textureFramePool = new TextureFramePool(detW, detH, TextureFormat.RGBA32, 10);
+                _poolWidth = detW;
+                _poolHeight = detH;
             }
 
             if (!_textureFramePool.TryGetTextureFrame(out var textureFrame))
@@ -472,8 +502,10 @@ namespace Mediapipe.Unity.FaceMesh
                 Debug.LogWarning($"FaceMeshSolution: camera '{_webCamSource.sourceName}' reports videoRotationAngle={rotation}. " +
                                  "The crop pipeline assumes an unrotated frame, so gaze will be wrong on this device.");
             }
+            _effectiveFlipH = flipH;
+            _effectiveFlipV = flipV;
 
-            textureFrame.ReadTextureOnCPU(texture, flipH, flipV);
+            textureFrame.ReadTextureOnCPU(readSource, flipH, flipV);
             var image = textureFrame.BuildCPUImage();
             textureFrame.Release();
 
@@ -698,6 +730,12 @@ namespace Mediapipe.Unity.FaceMesh
             _faceLandmarker = null;
             _textureFramePool?.Dispose();
             _textureFramePool = null;
+            if (_detectionRT != null)
+            {
+                _detectionRT.Release();
+                Destroy(_detectionRT);
+                _detectionRT = null;
+            }
         }
     }
 }

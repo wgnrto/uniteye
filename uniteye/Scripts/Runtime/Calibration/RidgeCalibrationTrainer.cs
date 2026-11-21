@@ -162,7 +162,8 @@ namespace UnitEye
             int folds = 5,
             float[] lambdas = null,
             Random rng = null,
-            CalibrationFeatureAugmentationSettings augmentation = null)
+            CalibrationFeatureAugmentationSettings augmentation = null,
+            bool balanceTraining = false)
         {
             if (features == null || features.Count == 0)
                 throw new ArgumentException("No calibration samples were captured, cannot train.");
@@ -178,7 +179,8 @@ namespace UnitEye
             if (trainCount <= 0)
                 throw new ArgumentException("The test fraction leaves no training samples.");
 
-            //Stratified split: corner/edge/centre targets appear in both train and holdout data.
+            //Stratified split on unique samples BEFORE any oversampling so holdout never shares duplicates
+            //with training folds.
             var permutation = StratifiedRandomPermutation(targetsX, targetsY, rng);
 
             var xTrain = new float[trainCount][];
@@ -203,18 +205,24 @@ namespace UnitEye
                 yYTest[i] = targetsY[index];
             }
 
-            //Select lambda per axis on the training set only
-            var bestLambdaX = SelectLambda(xTrain, yXTrain, lambdas, folds, augmentation);
-            var bestLambdaY = SelectLambda(xTrain, yYTrain, lambdas, folds, augmentation);
+            //Select lambda per axis on the training set only (sharing pre-augmented CV folds across X, Y, and lambdas)
+            SelectLambdas(xTrain, yXTrain, yYTrain, lambdas, folds, augmentation, balanceTraining,
+                out var bestLambdaX, out var bestLambdaY);
 
-            //Refit using training-only feature jitter. The holdout remains the original captured data.
-            var augmentedTrain = CalibrationFeatureAugmentation.Augment(xTrain, augmentation);
-            var augmentedXTargets = CalibrationFeatureAugmentation.DuplicateTargets(yXTrain, augmentation);
-            var augmentedYTargets = CalibrationFeatureAugmentation.DuplicateTargets(yYTrain, augmentation);
+            //Balance strictly within the training partition, then apply training-only feature jitter.
+            var xRefit = xTrain;
+            var yXRefit = yXTrain;
+            var yYRefit = yYTrain;
+            if (balanceTraining)
+                BalancePartition(ref xRefit, ref yXRefit, ref yYRefit, CalibrationSampleBalancer.SpatialBalancingSeed);
+
+            var augmentedTrain = CalibrationFeatureAugmentation.Augment(xRefit, augmentation);
+            var augmentedXTargets = CalibrationFeatureAugmentation.DuplicateTargets(yXRefit, augmentation);
+            var augmentedYTargets = CalibrationFeatureAugmentation.DuplicateTargets(yYRefit, augmentation);
             var xModel = new RidgeRegression(bestLambdaX);
-            xModel.Train(augmentedTrain, augmentedXTargets);
+            xModel.TrainCore(augmentedTrain, augmentedXTargets);
             var yModel = new RidgeRegression(bestLambdaY);
-            yModel.Train(augmentedTrain, augmentedYTargets);
+            yModel.TrainCore(augmentedTrain, augmentedYTargets);
 
             //Report the error on the untouched holdout set, fall back to the training set
             //when there are too few samples for a holdout
@@ -238,23 +246,47 @@ namespace UnitEye
             };
         }
 
+        private static void BalancePartition(ref float[][] x, ref float[] yX, ref float[] yY, int seed)
+        {
+            var selected = SpatiallyBalancedIndices(yX, yY, new Random(seed));
+            var bx = new float[selected.Length][];
+            var byX = new float[selected.Length];
+            var byY = new float[selected.Length];
+            for (int i = 0; i < selected.Length; i++)
+            {
+                int idx = selected[i];
+                bx[i] = x[idx];
+                byX[i] = yX[idx];
+                byY[i] = yY[idx];
+            }
+            x = bx;
+            yX = byX;
+            yY = byY;
+        }
+
         /// <summary>
-        /// Selects the lambda with the lowest k-fold cross validation MSE.
-        /// The samples must already be in random order, folds are contiguous chunks.
+        /// Selects the lambda with the lowest k-fold cross validation MSE per axis.
+        /// Fold splits, optional spatial balancing (inside xFit only), and deterministic Box-Muller feature
+        /// augmentation are precomputed ONCE per fold and shared across both axes and all lambda candidates.
         /// </summary>
-        private static float SelectLambda(float[][] x, float[] y, float[] lambdas, int folds,
-            CalibrationFeatureAugmentationSettings augmentation)
+        private static void SelectLambdas(
+            float[][] x, float[] yX, float[] yY, float[] lambdas, int folds,
+            CalibrationFeatureAugmentationSettings augmentation, bool balanceTraining,
+            out float bestLambdaX, out float bestLambdaY)
         {
             var sampleCount = x.Length;
 
             //Too few samples for meaningful folds, use the middle lambda as a safe default
             if (lambdas.Length == 1 || sampleCount < 4)
-                return lambdas[lambdas.Length / 2];
+            {
+                bestLambdaX = bestLambdaY = lambdas[lambdas.Length / 2];
+                return;
+            }
 
             folds = Math.Max(2, Math.Min(folds, sampleCount));
 
-            //Precompute the fold splits once, they are reused for every lambda
-            var foldSplits = new List<(float[][] xFit, float[] yFit, float[][] xVal, float[] yVal)>();
+            var augmentationRandom = augmentation != null ? new Random(augmentation.seed) : null;
+            var foldSplits = new List<(float[][] xFit, float[] yXFit, float[] yYFit, float[][] xVal, float[] yXVal, float[] yYVal)>(folds);
             for (int f = 0; f < folds; f++)
             {
                 var foldStart = f * sampleCount / folds;
@@ -263,9 +295,11 @@ namespace UnitEye
                 var fitCount = sampleCount - validationCount;
 
                 var xFit = new float[fitCount][];
-                var yFit = new float[fitCount];
+                var yXFit = new float[fitCount];
+                var yYFit = new float[fitCount];
                 var xVal = new float[validationCount][];
-                var yVal = new float[validationCount];
+                var yXVal = new float[validationCount];
+                var yYVal = new float[validationCount];
 
                 int fitIndex = 0;
                 for (int i = 0; i < sampleCount; i++)
@@ -273,53 +307,59 @@ namespace UnitEye
                     if (i >= foldStart && i < foldEnd)
                     {
                         xVal[i - foldStart] = x[i];
-                        yVal[i - foldStart] = y[i];
+                        yXVal[i - foldStart] = yX[i];
+                        yYVal[i - foldStart] = yY[i];
                     }
                     else
                     {
                         xFit[fitIndex] = x[i];
-                        yFit[fitIndex] = y[i];
+                        yXFit[fitIndex] = yX[i];
+                        yYFit[fitIndex] = yY[i];
                         fitIndex++;
                     }
                 }
 
-                foldSplits.Add((xFit, yFit, xVal, yVal));
+                if (balanceTraining && fitCount > 0)
+                    BalancePartition(ref xFit, ref yXFit, ref yYFit, CalibrationSampleBalancer.SpatialBalancingSeed + 1 + f);
+
+                var augXFit = CalibrationFeatureAugmentation.Augment(xFit, augmentation, augmentationRandom);
+                var augYXFit = CalibrationFeatureAugmentation.DuplicateTargets(yXFit, augmentation);
+                var augYYFit = CalibrationFeatureAugmentation.DuplicateTargets(yYFit, augmentation);
+                foldSplits.Add((augXFit, augYXFit, augYYFit, xVal, yXVal, yYVal));
             }
 
-            var bestLambda = lambdas[0];
-            var bestMse = double.MaxValue;
+            bestLambdaX = lambdas[0];
+            bestLambdaY = lambdas[0];
+            var bestMseX = double.MaxValue;
+            var bestMseY = double.MaxValue;
 
             foreach (var lambda in lambdas)
             {
-                double squaredErrorSum = 0.0;
+                double sqErrX = 0.0, sqErrY = 0.0;
                 long errorCount = 0;
-                //Each candidate sees identical deterministic jitter, so lambda selection compares models fairly.
-                var augmentationRandom = augmentation != null ? new Random(augmentation.seed) : null;
 
-                foreach (var (xFit, yFit, xVal, yVal) in foldSplits)
+                foreach (var (xFit, yXFit, yYFit, xVal, yXVal, yYVal) in foldSplits)
                 {
-                    var model = new RidgeRegression(lambda);
-                    var augmentedFit = CalibrationFeatureAugmentation.Augment(xFit, augmentation, augmentationRandom);
-                    var augmentedTargets = CalibrationFeatureAugmentation.DuplicateTargets(yFit, augmentation);
-                    model.Train(augmentedFit, augmentedTargets);
+                    var modelX = new RidgeRegression(lambda);
+                    modelX.TrainCore(xFit, yXFit);
+                    var modelY = new RidgeRegression(lambda);
+                    modelY.TrainCore(xFit, yYFit);
 
                     for (int i = 0; i < xVal.Length; i++)
                     {
-                        var error = (double)model.Predict(xVal[i]) - yVal[i];
-                        squaredErrorSum += error * error;
+                        var ex = (double)modelX.Predict(xVal[i]) - yXVal[i];
+                        var ey = (double)modelY.Predict(xVal[i]) - yYVal[i];
+                        sqErrX += ex * ex;
+                        sqErrY += ey * ey;
                         errorCount++;
                     }
                 }
 
-                var mse = squaredErrorSum / errorCount;
-                if (mse < bestMse)
-                {
-                    bestMse = mse;
-                    bestLambda = lambda;
-                }
+                var mseX = sqErrX / errorCount;
+                if (mseX < bestMseX) { bestMseX = mseX; bestLambdaX = lambda; }
+                var mseY = sqErrY / errorCount;
+                if (mseY < bestMseY) { bestMseY = mseY; bestLambdaY = lambda; }
             }
-
-            return bestLambda;
         }
 
         private static float Rmse(RidgeRegression model, float[][] x, float[] y)

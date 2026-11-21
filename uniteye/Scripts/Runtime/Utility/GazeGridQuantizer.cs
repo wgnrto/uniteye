@@ -76,7 +76,10 @@ namespace UnitEye
         public bool Update(Vector2 normalizedGaze, float time)
         {
             //Ignore invalid samples
-            if (float.IsNaN(normalizedGaze.x) || float.IsNaN(normalizedGaze.y)) return false;
+            if (float.IsNaN(normalizedGaze.x) || float.IsNaN(normalizedGaze.y) ||
+                float.IsInfinity(normalizedGaze.x) || float.IsInfinity(normalizedGaze.y) ||
+                float.IsNaN(time) || float.IsInfinity(time))
+                return false;
 
             var sampleCell = CellAt(normalizedGaze);
 
@@ -127,8 +130,8 @@ namespace UnitEye
         /// </summary>
         public int CellAt(Vector2 normalizedGaze)
         {
-            var column = Mathf.Clamp((int)(normalizedGaze.x * Columns), 0, Columns - 1);
-            var row = Mathf.Clamp((int)(normalizedGaze.y * Rows), 0, Rows - 1);
+            var column = Mathf.Clamp(Mathf.FloorToInt(Mathf.Clamp01(normalizedGaze.x) * Columns), 0, Columns - 1);
+            var row = Mathf.Clamp(Mathf.FloorToInt(Mathf.Clamp01(normalizedGaze.y) * Rows), 0, Rows - 1);
             return row * Columns + column;
         }
 
@@ -137,6 +140,8 @@ namespace UnitEye
         /// </summary>
         public Rect GetCellRect(int cell)
         {
+            if (cell < 0 || cell >= Columns * Rows)
+                return default;
             var column = cell % Columns;
             var row = cell / Columns;
             return new Rect((float)column / Columns, (float)row / Rows, 1f / Columns, 1f / Rows);

@@ -131,8 +131,12 @@ namespace UnitEye
         /// <param name="webCamName">Webcam name from the WebCamTexture device</param>
         void LoadSavedValues(string webCamName)
         {
-            if (PlayerPrefs.GetString("webCamName") != webCamName)
+            string savedCam = PlayerPrefs.GetString("webCamName", "");
+            bool camChanged = !string.IsNullOrEmpty(webCamName) && savedCam != webCamName;
+            if (camChanged && !string.IsNullOrEmpty(savedCam))
                 Debug.Log("Webcam changed, camera values could be wrong. Please calibrate blinking, drowsiness and distance to get accurate values.");
+
+            bool needsInitialSave = !PlayerPrefs.HasKey("camFov") || !PlayerPrefs.HasKey("BlinkThresh");
 
             //Load saved values in PlayerPrefs
             _cameraFOV = PlayerPrefs.GetFloat("camFov", 78f);
@@ -142,10 +146,18 @@ namespace UnitEye
             EFStd = PlayerPrefs.GetFloat("EFStd", -1000f);
             BlinkingThreshold = PlayerPrefs.GetFloat("BlinkThresh", 0.135f);
 
-            PlayerPrefs.SetString("webCamName", webCamName);
-            //Save in case default values were loaded from PlayerPrefs
-            SaveCameraValues();
-            SaveDrowsyBlinkingValues();
+            if (camChanged)
+                PlayerPrefs.SetString("webCamName", webCamName);
+
+            if (needsInitialSave)
+            {
+                SaveCameraValues();
+                SaveDrowsyBlinkingValues();
+            }
+            else if (camChanged)
+            {
+                PlayerPrefs.Save();
+            }
         }
 
         /// <summary>
@@ -282,11 +294,13 @@ namespace UnitEye
         /// <returns>Aspect ratio as float</returns>
         public float EyeAspectRatioLeft()
         {
+            if (_faceMesh == null || _faceMesh.FaceLandmarks == null || _faceMesh.FaceLandmarks.Count <= 387)
+                return float.NaN;
             float d1 = DistanceFloat2Pixels(GetEyeVertex(385).xy, GetEyeVertex(380).xy);
             float d2 = DistanceFloat2Pixels(GetEyeVertex(386).xy, GetEyeVertex(374).xy);
             float d3 = DistanceFloat2Pixels(GetEyeVertex(387).xy, GetEyeVertex(373).xy);
             float D = DistanceFloat2Pixels(GetEyeVertex(362).xy, GetEyeVertex(263).xy);
-            return (d1 + d2 + d3) / (3 * D);
+            return D > 1e-6f ? (d1 + d2 + d3) / (3f * D) : float.NaN;
         }
 
         /// <summary>
@@ -295,11 +309,13 @@ namespace UnitEye
         /// <returns>Aspect ratio as float</returns>
         public float EyeAspectRatioRight()
         {
+            if (_faceMesh == null || _faceMesh.FaceLandmarks == null || _faceMesh.FaceLandmarks.Count <= 160)
+                return float.NaN;
             var d1 = DistanceFloat2Pixels(GetEyeVertex(160).xy, GetEyeVertex(144).xy);
             var d2 = DistanceFloat2Pixels(GetEyeVertex(159).xy, GetEyeVertex(145).xy);
             var d3 = DistanceFloat2Pixels(GetEyeVertex(158).xy, GetEyeVertex(153).xy);
             var D = DistanceFloat2Pixels(GetEyeVertex(33).xy, GetEyeVertex(133).xy);
-            return (d1 + d2 + d3) / (3 * D);
+            return D > 1e-6f ? (d1 + d2 + d3) / (3f * D) : float.NaN;
         }
 
         /// <summary>
@@ -308,6 +324,8 @@ namespace UnitEye
         /// <returns>Average aspect ratio multiplied by cosine of head pitch and yaw</returns>
         public float EyeFeature()
         {
+            if (_faceMesh == null || _faceMesh.FaceLandmarks == null)
+                return float.NaN;
             float yaw = _faceMesh.HeadYaw;
             float pitch = _faceMesh.HeadPitch;
 
@@ -358,7 +376,7 @@ namespace UnitEye
         public bool IsDrowsyFromFeature(float eyeFeature, float threshold = -3f)
         {
             //If not calibrated or EyeFeauture() isNaN return false
-            if (EFMean < 0 || EFStd < 0 || float.IsNaN(eyeFeature) || float.IsInfinity(eyeFeature))
+            if (EFMean < 0 || EFStd <= 1e-6f || float.IsNaN(eyeFeature) || float.IsInfinity(eyeFeature))
                 return false;
 
             if (EFSmooth < -999f)
@@ -389,6 +407,7 @@ namespace UnitEye
         /// <returns>Biggest iris size in pixels float</returns>
         public float GetIrisBigger(float camFOV = -1.0f, bool undistort = false)
         {
+            if (_faceMesh == null) return 0f;
             float lSize = GetIrisSize(_faceMesh.LeftIrisLandmarks, camFOV, undistort);
             float rSize = GetIrisSize(_faceMesh.RightIrisLandmarks, camFOV, undistort);
 
@@ -405,6 +424,11 @@ namespace UnitEye
         /// <returns>Biggest iris size in pixels float and Vector2 centerpoint of iris</returns>
         public float GetIrisBigger(out Vector2 center, float camFOV = -1.0f, bool undistort = false)
         {
+            if (_faceMesh == null)
+            {
+                center = new Vector2(0.5f, 0.5f);
+                return 0f;
+            }
             Vector2 centerLeft;
             Vector2 centerRight;
 
@@ -432,6 +456,9 @@ namespace UnitEye
         /// <returns>Bigger iris size in pixels float</returns>
         public float GetIrisSize(IList<Mediapipe.NormalizedLandmark> irisLandmarks, float camFOV = -1.0f, bool undistort = false)
         {
+            if (irisLandmarks == null || irisLandmarks.Count < 5)
+                return 0f;
+
             float hDistance = (undistort) ? DistanceFloat2Pixels(FOVModelUndistort(new Vector2(irisLandmarks[1].X, irisLandmarks[1].Y), camFOV), FOVModelUndistort(new Vector2(irisLandmarks[3].X, irisLandmarks[3].Y), camFOV))
                 : DistanceFloat2Pixels(new Vector2(irisLandmarks[1].X, irisLandmarks[1].Y), new Vector2(irisLandmarks[3].X, irisLandmarks[3].Y));
             float vDistance = (undistort) ? DistanceFloat2Pixels(FOVModelUndistort(new Vector2(irisLandmarks[2].X, irisLandmarks[2].Y), camFOV), FOVModelUndistort(new Vector2(irisLandmarks[4].X, irisLandmarks[4].Y), camFOV))
@@ -450,6 +477,12 @@ namespace UnitEye
         /// <returns>Bigger iris size in pixels float and Vector2 centerpoint of iris</returns>
         public float GetIrisSize(IList<Mediapipe.NormalizedLandmark> irisLandmarks, out Vector2 center, float camFOV = -1.0f, bool undistort = false)
         {
+            if (irisLandmarks == null || irisLandmarks.Count < 5)
+            {
+                center = new Vector2(0.5f, 0.5f);
+                return 0f;
+            }
+
             float hDistance = (undistort) ? DistanceFloat2Pixels(FOVModelUndistort(new Vector2(irisLandmarks[1].X, irisLandmarks[1].Y), camFOV), FOVModelUndistort(new Vector2(irisLandmarks[3].X, irisLandmarks[3].Y), camFOV))
                 : DistanceFloat2Pixels(new Vector2(irisLandmarks[1].X, irisLandmarks[1].Y), new Vector2(irisLandmarks[3].X, irisLandmarks[3].Y));
             float vDistance = (undistort) ? DistanceFloat2Pixels(FOVModelUndistort(new Vector2(irisLandmarks[2].X, irisLandmarks[2].Y), camFOV), FOVModelUndistort(new Vector2(irisLandmarks[4].X, irisLandmarks[4].Y), camFOV))
@@ -493,7 +526,9 @@ namespace UnitEye
             if (camFOV < 0)
                 camFOV = _cameraFOV;
 
-            float sizeOnScreen = GetIrisBigger(camFOV, undistort) / FrameMax;
+            float frameMax = FrameMax;
+            float sizeOnScreen = frameMax > 0f ? GetIrisBigger(camFOV, undistort) / frameMax : 0f;
+            if (sizeOnScreen <= 1e-6f) return;
             float angleCovered = sizeOnScreen * camFOV * Mathf.Deg2Rad;
 
             _irisInMm = 2 * distanceInMm * Mathf.Tan(angleCovered / 2);
@@ -510,12 +545,14 @@ namespace UnitEye
         /// <param name="distanceInMm">Calibration distance in mm</param>
         public void CalibrateIrisSizeFocal(float camFOV = -1.0f, bool undistort = false, float distanceInMm = 500f)
         {
-            Vector2 center;
+            Vector2 center = Vector2.zero;
+            float frameMax = FrameMax;
+            float sizeOnScreen = frameMax > 0f ? GetIrisBigger(out center, camFOV, undistort) / frameMax : 0f;
+            if (sizeOnScreen <= 1e-6f) return;
 
-            float sizeOnScreen = GetIrisBigger(out center, camFOV, undistort) / FrameMax;
-
-            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / FrameMax;
+            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / frameMax;
             var x = Mathf.Sqrt(_focalLengthToFloat * _focalLengthToFloat + y * y);
+            if (x <= 1e-6f) return;
 
             _irisInMm = distanceInMm * sizeOnScreen / x;
 
@@ -531,12 +568,13 @@ namespace UnitEye
         /// <param name="distanceInMm">Calibration distance in mm</param>
         public void CalibrateFocalLength(float camFOV = -1.0f, bool undistort = false, float distanceInMm = 500f)
         {
-            Vector2 center;
-
-            float sizeOnScreen = GetIrisBigger(out center, camFOV, undistort) / FrameMax;
+            Vector2 center = Vector2.zero;
+            float frameMax = FrameMax;
+            float sizeOnScreen = frameMax > 0f ? GetIrisBigger(out center, camFOV, undistort) / frameMax : 0f;
+            if (sizeOnScreen <= 1e-6f || _irisInMm <= 1e-6f) return;
 
             var x = distanceInMm / _irisInMm * sizeOnScreen;
-            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / FrameMax;
+            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / frameMax;
             _focalLengthToFloat = Mathf.Sqrt(x * x + y * y);
 
             Debug.Log($"Focal Length Value: {_focalLengthToFloat}");
@@ -549,7 +587,9 @@ namespace UnitEye
         /// <param name="distanceInMm">Calibration distance in mm</param>
         public void CalibrateFOV(float distanceInMm = 500f)
         {
-            float sizeOnScreen = GetIrisBigger() / FrameMax;
+            float frameMax = FrameMax;
+            float sizeOnScreen = frameMax > 0f ? GetIrisBigger() / frameMax : 0f;
+            if (sizeOnScreen <= 1e-6f || distanceInMm <= 1e-6f) return;
 
             float angleCovered = 2f * Mathf.Atan(_irisInMm / (2f * distanceInMm));
             float camFOV = angleCovered / (sizeOnScreen * Mathf.Deg2Rad);
@@ -568,8 +608,10 @@ namespace UnitEye
             //Add 10% margin only when the current frame produced a usable feature.
             float eyeFeature = EyeFeature();
             if (!float.IsNaN(eyeFeature) && !float.IsInfinity(eyeFeature))
+            {
                 BlinkingThreshold = eyeFeature * 1.10f;
-            SaveDrowsyBlinkingValues();
+                SaveDrowsyBlinkingValues();
+            }
         }
 
         /// <summary>
@@ -578,6 +620,9 @@ namespace UnitEye
         /// <param name="calibrating">true to start and keep calibrating, false to stop</param>
         public void CalibrateDrowsyStats(bool calibrating)
         {
+            if (!Calibrating && !calibrating)
+                return;
+
             if (calibrating && !Calibrating)
             {
                 //Calibration start, initialize values
@@ -597,14 +642,17 @@ namespace UnitEye
                     CalibrationCount++;
                 }
             }
-            else
+            else if (Calibrating)
             {
                 //Calibration end, calculate stats by calculating mean and standard deviation of calibrations
                 Calibrating = false;
-                EFMean = CalcListMean(_eyeFeatures);
-                EFStd = CalcListStd(_eyeFeatures, EFMean);
+                if (_eyeFeatures != null && _eyeFeatures.Count > 0)
+                {
+                    EFMean = CalcListMean(_eyeFeatures);
+                    EFStd = CalcListStd(_eyeFeatures, EFMean);
+                    SaveDrowsyBlinkingValues();
+                }
             }
-            SaveDrowsyBlinkingValues();
         }
         #endregion
 
@@ -624,12 +672,23 @@ namespace UnitEye
             if (camFOV < 0)
                 camFOV = _cameraFOV;
 
-            float sizeOnScreen = GetIrisBigger(camFOV, undistort) / FrameMax;
+            float frameMax = FrameMax;
+            float sizeOnScreen = frameMax > 0f ? GetIrisBigger(camFOV, undistort) / frameMax : 0f;
             float angleCovered = sizeOnScreen * camFOV * Mathf.Deg2Rad;
+            if (sizeOnScreen <= 1e-6f || angleCovered <= 1e-6f)
+                return -1000f;
 
-            float distanceInMm = (irisInMm / 2) / Mathf.Tan(angleCovered / 2);
+            float tanHalf = Mathf.Tan(angleCovered / 2f);
+            if (Mathf.Abs(tanHalf) <= 1e-6f)
+                return -1000f;
 
-            _distanceInMMSmoothed = _distanceInMMSmoothed < -999f || float.IsPositiveInfinity(_distanceInMMSmoothed) ? distanceInMm : _distanceInMMSmoothed + (distanceInMm - _distanceInMMSmoothed) * _distanceSmoothingWeight;
+            float distanceInMm = (irisInMm / 2f) / tanHalf;
+            if (float.IsNaN(distanceInMm) || float.IsInfinity(distanceInMm) || distanceInMm <= 0f)
+                return -1000f;
+
+            _distanceInMMSmoothed = _distanceInMMSmoothed < -999f || float.IsNaN(_distanceInMMSmoothed) || float.IsInfinity(_distanceInMMSmoothed)
+                ? distanceInMm
+                : _distanceInMMSmoothed + (distanceInMm - _distanceInMMSmoothed) * _distanceSmoothingWeight;
 
             return _distanceInMMSmoothed;
         }
@@ -649,16 +708,22 @@ namespace UnitEye
             if (focalLengthToFloat < 0.0f)
                 focalLengthToFloat = _focalLengthToFloat;
 
-            Vector2 center;
+            Vector2 center = Vector2.zero;
+            float frameMax = FrameMax;
+            float sizeOnScreen = frameMax > 0f ? GetIrisBigger(out center, camFOV, undistort) / frameMax : 0f;
+            if (sizeOnScreen <= 1e-6f)
+                return -1000f;
 
-            float sizeOnScreen = GetIrisBigger(out center, camFOV, undistort) / FrameMax;
-
-            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / FrameMax;
+            var y = DistanceFloat2Pixels(center, new Vector2(0.5f, 0.5f)) / frameMax;
             var x = Mathf.Sqrt(focalLengthToFloat * focalLengthToFloat + y * y);
 
             float distanceInMm = (irisInMm * x) / sizeOnScreen;
+            if (float.IsNaN(distanceInMm) || float.IsInfinity(distanceInMm) || distanceInMm <= 0f)
+                return -1000f;
 
-            _distanceInMMFocalSmoothed = _distanceInMMFocalSmoothed < -999f || float.IsPositiveInfinity(_distanceInMMFocalSmoothed) ? distanceInMm : _distanceInMMFocalSmoothed + (distanceInMm - _distanceInMMFocalSmoothed) * _distanceSmoothingWeight;
+            _distanceInMMFocalSmoothed = _distanceInMMFocalSmoothed < -999f || float.IsNaN(_distanceInMMFocalSmoothed) || float.IsInfinity(_distanceInMMFocalSmoothed)
+                ? distanceInMm
+                : _distanceInMMFocalSmoothed + (distanceInMm - _distanceInMMFocalSmoothed) * _distanceSmoothingWeight;
 
             return _distanceInMMFocalSmoothed;
         }
@@ -666,33 +731,23 @@ namespace UnitEye
         /// <summary>
         /// Calculates visual angle based on distance between two points
         /// </summary>
-        /// <param name="pointA">First point, not in pixels</param>
-        /// <param name="pointB">Second point, not in pixels</param>
+        /// <param name="pointA">First point in normalized screen space [0, 1]</param>
+        /// <param name="pointB">Second point in normalized screen space [0, 1]</param>
         /// <param name="camFOV">Camera fov in degrees, -1f to use saved value</param>
         /// <param name="undistort">true attempts undistortion, false doesnt</param>
         /// <param name="irisInMm">Iris size in mm, -1f to use saved value</param>
         /// <returns>visual angle in degrees</returns>
         public float DistanceToVisualAngle(Vector2 pointA, Vector2 pointB, float camFOV = -1.0f, bool undistort = false, float irisInMm = -1.0f)
         {
-            Vector2 center = new Vector2(0.5f, 0.5f);
-            float dpi = Screen.dpi;
-
-            float distanceAInMm = Functions.PixelsToMm(DistanceFloat2Pixels(pointA, center), dpi);
-            float distanceBInMm = Functions.PixelsToMm(DistanceFloat2Pixels(pointB, center), dpi);
-
             float camDistance = CalculateCamDistance(camFOV, undistort, irisInMm);
-
-            float angleA = Mathf.Atan(distanceAInMm / camDistance);
-            float angleB = Mathf.Atan(distanceBInMm / camDistance);
-
-            return Mathf.Abs(angleA - angleB) * Mathf.Rad2Deg;
+            return ComputeScreenSubtendedAngleDeg(pointA, pointB, camDistance);
         }
 
         /// <summary>
         /// Calculates visual angle based on distance between two points
         /// </summary>
-        /// <param name="pointA">First point, not in pixels</param>
-        /// <param name="pointB">Second point, not in pixels</param>
+        /// <param name="pointA">First point in normalized screen space [0, 1]</param>
+        /// <param name="pointB">Second point in normalized screen space [0, 1]</param>
         /// <param name="focalLengthToPixels">Focal length to pixels, -1f to use saved value</param>
         /// <param name="camFOV">Camera fov in degrees, -1f to use saved value</param>
         /// <param name="undistort">true attempts undistortion, false doesnt</param>
@@ -700,18 +755,21 @@ namespace UnitEye
         /// <returns>visual angle in degrees</returns>
         public float DistanceToVisualAngleFocal(Vector2 pointA, Vector2 pointB, float focalLengthToPixels = -1.0f, float camFOV = -1.0f, bool undistort = false, float irisInMm = -1.0f)
         {
-            Vector2 center = new Vector2(0.5f, 0.5f);
-            float dpi = Screen.dpi;
-
-            float distanceAInMm = Functions.PixelsToMm(DistanceFloat2Pixels(pointA, center), dpi);
-            float distanceBInMm = Functions.PixelsToMm(DistanceFloat2Pixels(pointB, center), dpi);
-
             float camDistance = CalculateCamDistanceFocal(focalLengthToPixels, camFOV, undistort, irisInMm);
+            return ComputeScreenSubtendedAngleDeg(pointA, pointB, camDistance);
+        }
 
-            float angleA = Mathf.Atan(distanceAInMm / camDistance);
-            float angleB = Mathf.Atan(distanceBInMm / camDistance);
+        private static float ComputeScreenSubtendedAngleDeg(Vector2 pointA, Vector2 pointB, float camDistanceMm)
+        {
+            if (camDistanceMm <= 0f || float.IsNaN(camDistanceMm) || float.IsInfinity(camDistanceMm))
+                return 0f;
 
-            return Mathf.Abs(angleA - angleB) * Mathf.Rad2Deg;
+            float dpi = Screen.dpi;
+            float widthMm = Functions.PixelsToMm(Screen.width, dpi);
+            float heightMm = Functions.PixelsToMm(Screen.height, dpi);
+            Vector3 vA = new Vector3((pointA.x - 0.5f) * widthMm, (pointA.y - 0.5f) * heightMm, camDistanceMm);
+            Vector3 vB = new Vector3((pointB.x - 0.5f) * widthMm, (pointB.y - 0.5f) * heightMm, camDistanceMm);
+            return Vector3.Angle(vA, vB);
         }
 
         #endregion
@@ -740,23 +798,9 @@ namespace UnitEye
         /// <returns>Undistorted Vector2 point</returns>
         public Vector2 FOVModelUndistort(Vector2 point, float camFOV = -1.0f, bool barrelDistortion = false)
         {
+            float factor = FOVModelUndistortFactor(point, camFOV, barrelDistortion);
             Vector2 center = new Vector2(0.5f, 0.5f);
-            if (camFOV < 0)
-                camFOV = _cameraFOV;
-
-            var fovRad = camFOV * Mathf.Deg2Rad;
-
-            var dist = DistanceFloat2Pixels(point, center) / FrameMax;
-            if (barrelDistortion)
-            {
-                var barrelizedDist = (1 / fovRad) * Mathf.Atan(2 * dist * Mathf.Tan(fovRad * 0.5f));
-                return center + (point - center) * (barrelizedDist / dist);
-            }
-            else
-            {
-                var pincushionedDist = (Mathf.Tan(dist * fovRad)) / (2 * Mathf.Tan(fovRad * 0.5f));
-                return center + (point - center) * (pincushionedDist / dist);
-            }
+            return center + (point - center) * factor;
         }
 
         /// <summary>
@@ -785,17 +829,27 @@ namespace UnitEye
             if (camFOV < 0)
                 camFOV = _cameraFOV;
 
+            float frameMax = FrameMax;
             var fovRad = camFOV * Mathf.Deg2Rad;
+            if (frameMax <= 0f || Mathf.Abs(fovRad) <= 1e-6f)
+                return 1f;
 
-            var dist = DistanceFloat2Pixels(point, center) / FrameMax;
+            var dist = DistanceFloat2Pixels(point, center) / frameMax;
+            if (dist <= 1e-6f)
+                return 1f;
+
+            float halfTan = Mathf.Tan(fovRad * 0.5f);
+            if (Mathf.Abs(halfTan) <= 1e-6f)
+                return 1f;
+
             if (barrelDistortion)
             {
-                var barrelizedDist = (1 / fovRad) * Mathf.Atan(2 * dist * Mathf.Tan(fovRad * 0.5f));
+                var barrelizedDist = (1f / fovRad) * Mathf.Atan(2f * dist * halfTan);
                 return barrelizedDist / dist;
             }
             else
             {
-                var pincushionedDist = (Mathf.Tan(dist * fovRad)) / (2 * Mathf.Tan(fovRad * 0.5f));
+                var pincushionedDist = Mathf.Tan(dist * fovRad) / (2f * halfTan);
                 return pincushionedDist / dist;
             }
         }
@@ -811,6 +865,8 @@ namespace UnitEye
         /// <returns>Mean of list</returns>
         public static float CalcListMean(List<float> list)
         {
+            if (list == null || list.Count == 0)
+                return -1000f;
             float sum = 0f;
             foreach (float entry in list)
             {
@@ -827,10 +883,13 @@ namespace UnitEye
         /// <returns>Standard deviation of list</returns>
         public static float CalcListStd(List<float> list, float mean)
         {
+            if (list == null || list.Count == 0)
+                return -1000f;
             float sum = 0f;
             foreach (float entry in list)
             {
-                sum += Mathf.Pow((entry - mean), 2);
+                float d = entry - mean;
+                sum += d * d;
             }
             return Mathf.Sqrt(sum / list.Count);
         }
@@ -844,17 +903,19 @@ namespace UnitEye
         /// </summary>
         public void ShowIrisPointsGUI()
         {
-            GUI.Label(new Rect((1 - _faceMesh.LeftIrisLandmarks[0].X) * Screen.width, _faceMesh.LeftIrisLandmarks[0].Y * Screen.height, 50, 50), $"0");
-            GUI.Label(new Rect((1 - _faceMesh.LeftIrisLandmarks[1].X) * Screen.width, _faceMesh.LeftIrisLandmarks[1].Y * Screen.height, 50, 50), $"1");
-            GUI.Label(new Rect((1 - _faceMesh.LeftIrisLandmarks[2].X) * Screen.width, _faceMesh.LeftIrisLandmarks[2].Y * Screen.height, 50, 50), $"2");
-            GUI.Label(new Rect((1 - _faceMesh.LeftIrisLandmarks[3].X) * Screen.width, _faceMesh.LeftIrisLandmarks[3].Y * Screen.height, 50, 50), $"3");
-            GUI.Label(new Rect((1 - _faceMesh.LeftIrisLandmarks[4].X) * Screen.width, _faceMesh.LeftIrisLandmarks[4].Y * Screen.height, 50, 50), $"4");
-
-            GUI.Label(new Rect((1 - _faceMesh.RightIrisLandmarks[0].X) * Screen.width, _faceMesh.RightIrisLandmarks[0].Y * Screen.height, 50, 50), $"0");
-            GUI.Label(new Rect((1 - _faceMesh.RightIrisLandmarks[1].X) * Screen.width, _faceMesh.RightIrisLandmarks[1].Y * Screen.height, 50, 50), $"1");
-            GUI.Label(new Rect((1 - _faceMesh.RightIrisLandmarks[2].X) * Screen.width, _faceMesh.RightIrisLandmarks[2].Y * Screen.height, 50, 50), $"2");
-            GUI.Label(new Rect((1 - _faceMesh.RightIrisLandmarks[3].X) * Screen.width, _faceMesh.RightIrisLandmarks[3].Y * Screen.height, 50, 50), $"3");
-            GUI.Label(new Rect((1 - _faceMesh.RightIrisLandmarks[4].X) * Screen.width, _faceMesh.RightIrisLandmarks[4].Y * Screen.height, 50, 50), $"4");
+            if (_faceMesh == null) return;
+            var left = _faceMesh.LeftIrisLandmarks;
+            if (left != null && left.Count >= 5)
+            {
+                for (int i = 0; i < 5; i++)
+                    GUI.Label(new Rect((1 - left[i].X) * Screen.width, left[i].Y * Screen.height, 50, 50), i.ToString());
+            }
+            var right = _faceMesh.RightIrisLandmarks;
+            if (right != null && right.Count >= 5)
+            {
+                for (int i = 0; i < 5; i++)
+                    GUI.Label(new Rect((1 - right[i].X) * Screen.width, right[i].Y * Screen.height, 50, 50), i.ToString());
+            }
         }
 
         #endregion

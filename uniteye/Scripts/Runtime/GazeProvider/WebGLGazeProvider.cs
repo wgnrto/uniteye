@@ -19,11 +19,12 @@ namespace UnitEye
     public class WebGLGazeProvider : IGazeProvider
     {
         // The JS side writes the latest browser-computed sample here via the .jslib bridge.
+        private static readonly float[] s_emptyFeatures = new float[0];
         private static Vector2 s_rawGaze;
         private static bool s_facePresent;
         private static bool s_blinking;
         private static bool s_newSample;
-        private static float[] s_features = new float[0];
+        private static float[] s_features = s_emptyFeatures;
 
         private static GameObject s_receiverGO;
 
@@ -47,6 +48,8 @@ namespace UnitEye
             s_rawGaze = new Vector2(pixelX, pixelY);
             s_facePresent = facePresent;
             s_blinking = blinking;
+            if (!facePresent)
+                s_features = s_emptyFeatures;
             //ARRIVAL time: browser capture latency upstream of this call is not observable from here.
             s_captureTimestamp = Time.unscaledTimeAsDouble;
             s_newSample = true;
@@ -54,7 +57,7 @@ namespace UnitEye
         private static double s_captureTimestamp;
 
         /// <summary>Optional: the JS side can also supply the EyeMU feature vector so Unity-side calibration matches the native path.</summary>
-        public static void ReportFeatures(float[] features) => s_features = features ?? new float[0];
+        public static void ReportFeatures(float[] features) => s_features = features ?? s_emptyFeatures;
 
         private static bool s_loggedFirstTick;
 
@@ -88,6 +91,11 @@ namespace UnitEye
         public RenderTexture RightEyeTexture => null;
         public bool AnnotateFaceMesh { get => false; set { } }  // browser owns rendering on WebGL
         public void SetRendering(bool rendering) { }            // browser owns rendering on WebGL
+        public void SetActive(bool active)
+        {
+            if (s_receiverGO != null)
+                s_receiverGO.SetActive(active);
+        }
         public void SetBackbone(GazeBackbone backbone) { }      // browser owns the CV on WebGL
 
         public bool IsCalibratingDrowsy => false;

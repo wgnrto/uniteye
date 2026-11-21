@@ -13,7 +13,7 @@ namespace UnitEye
         // Parenthesized so `&&` no longer binds tighter than `?:`: without the parentheses this read as
         // `(focused && enabled && checkAll) ? true : (hitRaycast==this)`, which bypassed the focused/enabled
         // guard entirely whenever checkAllObjectsWithMatchingTag was false (the default). Mirrors AOITagList.
-        public bool HasGazeFocus => _tagList.focused && this.enabled && (checkAllObjectsWithMatchingTag || _tagList.hitRaycast.collider?.gameObject == gameObject);
+        public bool HasGazeFocus => _tagList != null && _tagList.focused && this.enabled && (checkAllObjectsWithMatchingTag || _tagList.hitRaycast.collider?.gameObject == gameObject);
 
         [Tooltip("If enabled, all objects with matching tags will influence HasGazeFocus boolean even if they don't have a Gazeable component.")]
         public bool checkAllObjectsWithMatchingTag = false;
@@ -23,41 +23,52 @@ namespace UnitEye
         private string _oldTag;
         private static int s_current = 0;
 
+        void Awake()
+        {
+            EnsureInitialized();
+        }
+
         void Start() 
         {
-            if (gameObject.tag == "Untagged")
-            {
+            EnsureInitialized();
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_tagList != null) return;
+            if (gameObject.CompareTag("Untagged"))
                 Debug.Log("Gazeable GameObject must have a tag different than \"Untagged\"");
-            }
 
             _oldTag = gameObject.tag;
             _tagList = new AOITagList(gameObject.name + s_current.ToString());
             s_current++;
 
-            _tagList.AddTag(gameObject.tag);
+            _tagList.AddTag(_oldTag);
         }
 
         void Update()
         {
-            //Make AOI aware of tag change
-            if (_oldTag != gameObject.tag)
+            //CompareTag avoids allocating a managed string copy every frame; only read gameObject.tag when it changed.
+            if (!string.IsNullOrEmpty(_oldTag) && !gameObject.CompareTag(_oldTag))
             {
                 _tagList.RemoveTag(_oldTag);
-                _tagList.AddTag(gameObject.tag);
                 _oldTag = gameObject.tag;
+                _tagList.AddTag(_oldTag);
             }
         }
 
         void OnEnable()
         {
+            EnsureInitialized();
             //Add AOI in the next frame to allow Gaze component to initialize
             StartCoroutine(AddAOI());
         }
 
         void OnDisable()
         {
-            //Only run when app is not currently quitting to avoid NullReferenceException
-            if (!_isQuitting) UnitEyeAPI.GetAOIManagerInstance()?.RemoveAOI(_tagList);
+            //Use TryGetAOIManagerInstance so scene unloads where HomulerGaze was destroyed first do not throw.
+            if (!_isQuitting && _tagList != null)
+                UnitEyeAPI.TryGetAOIManagerInstance()?.RemoveAOI(_tagList);
         }
 
         private void OnApplicationQuit()

@@ -134,21 +134,19 @@ namespace UnitEye
 
         //Stored next to the ridge files (same folder + per-backbone suffix), so calibration profiles bundle
         //the warp together with the ridge model it belongs to.
-        private static string PathFor(string filename)
-            => Application.streamingAssetsPath + $"/Calibration Files/RidgeRegression/{filename}";
-
         public void Save(string filename)
         {
-            var directory = Application.streamingAssetsPath + "/Calibration Files/RidgeRegression/";
+            var directory = CalibrationModelStore.GetWritableDirectory("RidgeRegression");
             if (!Directory.Exists(directory))
                 Directory.CreateDirectory(directory);
-            File.WriteAllText(PathFor(filename), JsonConvert.SerializeObject(this));
+            File.WriteAllText(CalibrationModelStore.GetWritablePath("RidgeRegression", filename),
+                JsonConvert.SerializeObject(this));
         }
 
         /// <summary>Loads a warp, or null when none was saved (the expected no-warp case).</summary>
         public static ThinPlateSplineWarp Load(string filename)
         {
-            var path = PathFor(filename);
+            var path = CalibrationModelStore.GetReadablePath("RidgeRegression", filename);
             if (!File.Exists(path))
                 return null;
             return JsonConvert.DeserializeObject<ThinPlateSplineWarp>(File.ReadAllText(path));
@@ -158,9 +156,7 @@ namespace UnitEye
         /// warp can never pair with a newer ridge fit).</summary>
         public static void Delete(string filename)
         {
-            var path = PathFor(filename);
-            if (File.Exists(path))
-                File.Delete(path);
+            CalibrationModelStore.DeleteCalibrationFile("RidgeRegression", filename);
         }
     }
 }

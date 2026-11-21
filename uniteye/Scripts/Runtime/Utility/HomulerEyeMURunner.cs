@@ -158,13 +158,17 @@ namespace UnitEye
         //returns, and in async mode a new inference is only scheduled once the previous readback completed.
         private Tensor<float> _leftTensor;
         private Tensor<float> _rightTensor;
+        private Tensor<float> _cornersTensor;
+        private Tensor<float> _poseTensor;
+        private bool _enabled;
 
         //Async (pipelined) readback state: results of the scheduled inference are published on a LATER call
         //once the GPU->CPU readback completes, instead of stalling the CPU in DownloadToArray every frame.
         private readonly bool _asyncReadback;
         private bool _pendingReadback;
         private Tensor<float> _outEmbedding, _outGaze;           // worker-owned output refs (not disposed)
-        private Tensor<float> _pendingCorners, _pendingPose;     // inputs kept alive until publish
+        private readonly float[] _pendingEmbedding = new float[4];
+        private readonly float[] _pendingGaze = new float[2];
         //The feature-vector TAIL (head pose 4 + iris offsets 4 + context 11) snapshotted when an inference
         //is SCHEDULED and published together with its outputs, so the assembled feature vector is internally
         //consistent (all values from the same camera frame) even when the result arrives a frame later.
@@ -174,14 +178,13 @@ namespace UnitEye
         private readonly float[] _tailPublished = new float[TailLength];
         private double _timestampPending, _timestampPublished;
 
+        public bool HasPendingReadback => _asyncReadback && _pendingReadback;
+
         public HomulerEyeMURunner(FaceMeshSolution faceMesh, bool asyncReadback = false)
         {
             _faceMesh = faceMesh;
             _asyncReadback = asyncReadback;
             _eyeMUResource = Resources.Load<EyeMUResource>("EyeMU");
-
-            _model = ModelLoader.Load(_eyeMUResource.modelAsset);
-            _worker = new Worker(_model, BackendType.GPUCompute);
 
             //Prepare tensor textures for random write
             _leftEyeTextureTensor.enableRandomWrite = true;
@@ -190,8 +193,20 @@ namespace UnitEye
             _rightEyeTextureTensor.enableRandomWrite = true;
             _rightEyeTextureTensor.Create();
 
+            if (_eyeMUResource == null || _eyeMUResource.modelAsset == null || _eyeMUResource.preprocessCompute == null)
+            {
+                UnitEyeLog.Error("EyeMU backbone: missing Resources/EyeMU asset, bound modelAsset, or preprocessCompute shader.");
+                return;
+            }
+
+            _model = ModelLoader.Load(_eyeMUResource.modelAsset);
+            _worker = new Worker(_model, BackendType.GPUCompute);
+
             _leftTensor = new Tensor<float>(new TensorShape(1, IMG_SIZE, IMG_SIZE, 3));
             _rightTensor = new Tensor<float>(new TensorShape(1, IMG_SIZE, IMG_SIZE, 3));
+            _cornersTensor = new Tensor<float>(new TensorShape(1, 8));
+            _poseTensor = new Tensor<float>(new TensorShape(1, 4));
+            _enabled = true;
         }
 
         //Snapshot the non-inference feature tail (head pose + iris offsets + context) from CURRENT landmarks.
@@ -206,50 +221,78 @@ namespace UnitEye
         }
 
         /// <summary>
+        /// Polls in-flight async GPU readback requests. Must be called every engine frame so each tensor's
+        /// native staging buffer is drained on the exact frame its AsyncGPUReadbackRequest completes.
+        /// </summary>
+        public bool PollAsyncReadback()
+        {
+            if (!_asyncReadback || !_pendingReadback)
+                return false;
+
+            try
+            {
+                if (_outEmbedding != null && _outEmbedding.IsReadbackRequestDone())
+                {
+                    var embedding = _outEmbedding.DownloadToArray();
+                    for (int i = 0; i < _pendingEmbedding.Length && i < embedding.Length; i++)
+                        _pendingEmbedding[i] = embedding[i];
+                    _outEmbedding = null;
+                }
+
+                if (_outGaze != null && _outGaze.IsReadbackRequestDone())
+                {
+                    var gaze = _outGaze.DownloadToArray();
+                    for (int i = 0; i < _pendingGaze.Length && i < gaze.Length; i++)
+                        _pendingGaze[i] = gaze[i];
+                    _outGaze = null;
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnitEyeLog.Exception(e);
+                _outEmbedding = null;
+                _outGaze = null;
+                _pendingReadback = false;
+                return false;
+            }
+
+            if (_outEmbedding != null || _outGaze != null)
+                return false;
+
+            PublishPendingOutputs();
+            return true;
+        }
+
+        /// <summary>
         /// Perform gaze location inference based on the homuler webcam source.
         /// </summary>
         /// <param name="webcam">homuler WebCamSource to use</param>
         /// <returns>true if execution completed, false if not</returns>
         public bool PerformInference(WebCamSource webcam)
         {
+            if (!_enabled)
+                return false;
+
+            bool published = PollAsyncReadback();
+            if (_asyncReadback && _pendingReadback)
+                return published;
+
             var webcamTexture = (WebCamTexture)webcam.GetCurrentTexture();
 
             if (!webcam.isPrepared || webcamTexture == null)
-                return false;
-
-            //Async mode: publish the PREVIOUS inference first, if its readback finished. If it hasn't, do
-            //not schedule new work over the in-flight tensors — report "no new sample" and try again next
-            //frame. A fresh result therefore arrives one camera frame later than in sync mode, but the CPU
-            //never blocks waiting for the GPU.
-            bool published = false;
-            if (_asyncReadback && _pendingReadback)
-            {
-                if (!_outEmbedding.IsReadbackRequestDone() || !_outGaze.IsReadbackRequestDone())
-                    return false;
-                PublishPendingOutputs();
-                published = true;
-            }
+                return published;
 
             if (!ComputeEyes(webcamTexture))
                 return published;
 
-            //Eye corners (8) and head pose (4) input tensors. The tensor constructor copies the data, so
-            //the reused _poseBuffer is safe (each frame's tensor is consumed + disposed before the next).
-            var corners = new Tensor<float>(new TensorShape(1, 8), _faceMesh.EyeCorners);
+            //Upload eye corners (8) and head pose (4) into preallocated tensors (zero per-frame allocation).
+            _cornersTensor.Upload(_faceMesh.EyeCorners);
             _poseBuffer[0] = _faceMesh.HeadYaw;
             _poseBuffer[1] = _faceMesh.HeadPitch;
             _poseBuffer[2] = _faceMesh.HeadRoll;
             _poseBuffer[3] = _faceMesh.HeadArea;
-            var pose = new Tensor<float>(new TensorShape(1, 4), _poseBuffer);
+            _poseTensor.Upload(_poseBuffer);
 
-            //The eye crops were already cropped straight from the webcam texture into LeftEyeTexture/
-            //RightEyeTexture on the GPU in ComputeEyes (no CPU GetPixels readback). Preprocess them into
-            //tensor-format RenderTextures, then convert to NHWC input tensors (shape 1x128x128x3) to match
-            //the model's declared image-input layout.
-            //HAND-TEST NOTE: shapes/names are verified to match the model, but pixel normalization and channel
-            //order (RGB vs BGR) ride on the preprocessing shader + TextureConverter and can only be confirmed
-            //by looking at live gaze. The GPU crop geometry (bottom-left UV, left-eye horizontal flip) also
-            //wants a live check — the eye-crop thumbnails (Show Eyecrops) should look identical to before.
             _leftEyeTextureTensor = PreprocessImage(LeftEyeTexture, _leftEyeTextureTensor, _eyeMUResource.preprocessCompute);
             TextureConverter.ToTensor(_leftEyeTextureTensor, _leftTensor, _nhwcTransform);
 
@@ -258,20 +301,23 @@ namespace UnitEye
 
             _worker.SetInput(INPUT_LEFT, _leftTensor);
             _worker.SetInput(INPUT_RIGHT, _rightTensor);
-            _worker.SetInput(INPUT_CORNERS, corners);
-            _worker.SetInput(INPUT_POSE, pose);
+            _worker.SetInput(INPUT_CORNERS, _cornersTensor);
+            _worker.SetInput(INPUT_POSE, _poseTensor);
             _worker.Schedule();
 
             if (_asyncReadback)
             {
-                //Kick off the non-blocking readbacks and remember everything needed to publish later. The
-                //corners/pose tensors must stay alive until the GPU finished consuming them.
+                //Kick off the non-blocking readbacks and remember everything needed to publish later.
                 _outEmbedding = _worker.PeekOutput(OUTPUT_EMBEDDING) as Tensor<float>;
                 _outGaze = _worker.PeekOutput(OUTPUT_GAZE) as Tensor<float>;
+                if (_outEmbedding == null || _outGaze == null)
+                {
+                    _outEmbedding = null;
+                    _outGaze = null;
+                    return published;
+                }
                 _outEmbedding.ReadbackRequest();
                 _outGaze.ReadbackRequest();
-                _pendingCorners = corners;
-                _pendingPose = pose;
                 CaptureFeatureTail(_tailPending);
                 _timestampPending = _faceMesh.LastCaptureTimestamp;
                 _pendingReadback = true;
@@ -279,50 +325,36 @@ namespace UnitEye
             }
 
             //Sync mode: block on the results now (DownloadToArray waits for the GPU).
-            //dense_7 -> embedding (4 values)
             var dense7 = _worker.PeekOutput(OUTPUT_EMBEDDING) as Tensor<float>;
             var dense7Data = dense7.DownloadToArray();
             for (int i = 0; i < Embedding2Output.Length && i < dense7Data.Length; i++)
                 Embedding2Output[i] = dense7Data[i];
 
-            //dense_8 -> final gaze (2 values, normalized 0..1)
             var final = _worker.PeekOutput(OUTPUT_GAZE) as Tensor<float>;
             var finalData = final.DownloadToArray();
             NetworkOutput[0] = finalData[0] * Screen.width;
             NetworkOutput[1] = finalData[1] * Screen.height;
 
-            //Same-frame tail: identical values to the old live reads, just captured once here.
             CaptureFeatureTail(_tailPublished);
             _timestampPublished = _faceMesh.LastCaptureTimestamp;
-
-            //Cleanup the per-frame small input tensors (the eye-image tensors are reused, disposed in Dispose).
-            corners.Dispose();
-            pose.Dispose();
 
             return true;
         }
 
-        //Publishes the completed async inference: non-blocking downloads (the readback already finished),
-        //then the tail snapshot taken when that inference was scheduled.
+        //Publishes the already-drained async inference outputs together with the scheduled tail snapshot.
         private void PublishPendingOutputs()
         {
-            var embedding = _outEmbedding.DownloadToArray();
-            for (int i = 0; i < Embedding2Output.Length && i < embedding.Length; i++)
-                Embedding2Output[i] = embedding[i];
+            for (int i = 0; i < Embedding2Output.Length; i++)
+                Embedding2Output[i] = _pendingEmbedding[i];
 
-            var gaze = _outGaze.DownloadToArray();
-            NetworkOutput[0] = gaze[0] * Screen.width;
-            NetworkOutput[1] = gaze[1] * Screen.height;
+            NetworkOutput[0] = _pendingGaze[0] * Screen.width;
+            NetworkOutput[1] = _pendingGaze[1] * Screen.height;
 
             System.Array.Copy(_tailPending, _tailPublished, _tailPublished.Length);
             _timestampPublished = _timestampPending;
 
             _outEmbedding = null;
             _outGaze = null;
-            _pendingCorners?.Dispose();
-            _pendingCorners = null;
-            _pendingPose?.Dispose();
-            _pendingPose = null;
             _pendingReadback = false;
         }
 
@@ -391,11 +423,6 @@ namespace UnitEye
             _worker?.Dispose();
             _worker = null;
 
-            //In-flight async inputs (the worker-owned output refs are disposed with the worker).
-            _pendingCorners?.Dispose();
-            _pendingCorners = null;
-            _pendingPose?.Dispose();
-            _pendingPose = null;
             _outEmbedding = null;
             _outGaze = null;
             _pendingReadback = false;
@@ -404,6 +431,10 @@ namespace UnitEye
             _leftTensor = null;
             _rightTensor?.Dispose();
             _rightTensor = null;
+            _cornersTensor?.Dispose();
+            _cornersTensor = null;
+            _poseTensor?.Dispose();
+            _poseTensor = null;
 
             ReleaseRT(LeftEyeTexture);
             ReleaseRT(RightEyeTexture);

@@ -56,6 +56,11 @@ namespace UnitEye
         public float[] FeatureStd { get; set; }
         public float[] TargetMean { get; set; }
         public float[] TargetStd { get; set; }
+        /// <summary>
+        /// True when trained on normalized [0, 1] screen targets (resolution-independent); false for legacy
+        /// or direct pixel-space Train(x, y) calls.
+        /// </summary>
+        public bool NormalizedTargets { get; set; }
 
         [JsonIgnore] private readonly System.Random _rng;
 
@@ -77,10 +82,43 @@ namespace UnitEye
             if (x == null || x.Length < 10)
                 throw new ArgumentException("Not enough calibration samples to train the MLP.");
 
+            NormalizedTargets = false;
+            var permutation = RidgeCalibrationTrainer.RandomPermutation(x.Length, _rng);
+            float scaleCmPerUnit = Functions.PixelsToMm(1f) * 0.1f;
+            return TrainInternal(x, y, permutation, scaleCmPerUnit, scaleCmPerUnit, augmentation, balanceTraining: false);
+        }
+
+        /// <summary>
+        /// Trains the network on normalized [0, 1] screen targets so the persisted MLP remains valid across
+        /// window resizes and display changes. Applies stratified holdout splitting on unique samples and
+        /// optional spatial balancing strictly inside the training partition.
+        /// </summary>
+        public string TrainNormalized(float[][] x, Vector2[] normalizedY, float rmseScaleXCm, float rmseScaleYCm,
+            CalibrationFeatureAugmentationSettings augmentation = null, bool balanceTraining = false)
+        {
+            if (x == null || x.Length < 10)
+                throw new ArgumentException("Not enough calibration samples to train the MLP.");
+            if (normalizedY == null || normalizedY.Length != x.Length)
+                throw new ArgumentException("Feature and target counts do not match.");
+
+            NormalizedTargets = true;
+            var yX = new float[normalizedY.Length];
+            var yY = new float[normalizedY.Length];
+            for (int i = 0; i < normalizedY.Length; i++)
+            {
+                yX[i] = normalizedY[i].x;
+                yY[i] = normalizedY[i].y;
+            }
+            var permutation = RidgeCalibrationTrainer.StratifiedRandomPermutation(yX, yY, _rng);
+            return TrainInternal(x, normalizedY, permutation, rmseScaleXCm, rmseScaleYCm, augmentation, balanceTraining);
+        }
+
+        private string TrainInternal(float[][] x, Vector2[] y, int[] permutation,
+            float rmseScaleXCm, float rmseScaleYCm,
+            CalibrationFeatureAugmentationSettings augmentation, bool balanceTraining)
+        {
             InputCount = x[0].Length;
 
-            //Random holdout split (honest evaluation), reusing the shared Fisher-Yates permutation
-            var permutation = RidgeCalibrationTrainer.RandomPermutation(x.Length, _rng);
             var testCount = (int)Math.Floor(x.Length * HOLDOUT_FRACTION);
             var trainCount = x.Length - testCount;
 
@@ -91,25 +129,43 @@ namespace UnitEye
             var yTest = new Vector2[testCount];
             for (int i = 0; i < testCount; i++) { var idx = permutation[i]; xTest[i] = x[idx]; yTest[i] = y[idx]; }
 
+            var xFit = xTrain;
+            var yFit = yTrain;
+            if (balanceTraining && NormalizedTargets && trainCount > 0)
+            {
+                var yXTrain = new float[trainCount];
+                var yYTrain = new float[trainCount];
+                for (int i = 0; i < trainCount; i++) { yXTrain[i] = yTrain[i].x; yYTrain[i] = yTrain[i].y; }
+                var selected = RidgeCalibrationTrainer.SpatiallyBalancedIndices(
+                    yXTrain, yYTrain, new System.Random(CalibrationSampleBalancer.SpatialBalancingSeed));
+                xFit = new float[selected.Length][];
+                yFit = new Vector2[selected.Length];
+                for (int i = 0; i < selected.Length; i++)
+                {
+                    xFit[i] = xTrain[selected[i]];
+                    yFit[i] = yTrain[selected[i]];
+                }
+            }
+
             //Standardization stats from the training portion only
-            ComputeStandardization(xTrain, yTrain);
+            ComputeStandardization(xFit, yFit);
 
             //Augment only the fitting partition after its statistics are established. The untouched
             //original holdout below remains the reported accuracy measure.
-            xTrain = CalibrationFeatureAugmentation.Augment(xTrain, augmentation);
-            yTrain = CalibrationFeatureAugmentation.DuplicateTargets(yTrain, augmentation);
-            trainCount = xTrain.Length;
+            xFit = CalibrationFeatureAugmentation.Augment(xFit, augmentation);
+            yFit = CalibrationFeatureAugmentation.DuplicateTargets(yFit, augmentation);
+            int fitCount = xFit.Length;
 
             //Pre-standardize the training set
-            var xs = new float[trainCount][];
-            var ts = new float[trainCount][];
-            for (int i = 0; i < trainCount; i++)
+            var xs = new float[fitCount][];
+            var ts = new float[fitCount][];
+            for (int i = 0; i < fitCount; i++)
             {
-                xs[i] = StandardizeInput(xTrain[i]);
+                xs[i] = StandardizeInput(xFit[i]);
                 ts[i] = new float[]
                 {
-                    (yTrain[i].x - TargetMean[0]) / TargetStd[0],
-                    (yTrain[i].y - TargetMean[1]) / TargetStd[1],
+                    (yFit[i].x - TargetMean[0]) / TargetStd[0],
+                    (yFit[i].y - TargetMean[1]) / TargetStd[1],
                 };
             }
 
@@ -131,21 +187,21 @@ namespace UnitEye
             var d3 = new float[OUTPUTS]; var d2 = new float[HIDDEN2]; var d1 = new float[HIDDEN1];
             var gW = new[] { new float[W1.Length], new float[W2.Length], new float[W3.Length] };
             var gB = new[] { new float[B1.Length], new float[B2.Length], new float[B3.Length] };
-            var order = new int[trainCount];
-            for (int i = 0; i < trainCount; i++) order[i] = i;
+            var order = new int[fitCount];
+            for (int i = 0; i < fitCount; i++) order[i] = i;
 
             for (int epoch = 0; epoch < EPOCHS; epoch++)
             {
                 //Shuffle sample order each epoch
-                for (int i = trainCount - 1; i > 0; i--)
+                for (int i = fitCount - 1; i > 0; i--)
                 {
                     int j = _rng.Next(i + 1);
                     (order[i], order[j]) = (order[j], order[i]);
                 }
 
-                for (int start = 0; start < trainCount; start += BATCH_SIZE)
+                for (int start = 0; start < fitCount; start += BATCH_SIZE)
                 {
-                    int batch = Math.Min(BATCH_SIZE, trainCount - start);
+                    int batch = Math.Min(BATCH_SIZE, fitCount - start);
                     Array.Clear(gW[0], 0, gW[0].Length); Array.Clear(gW[1], 0, gW[1].Length); Array.Clear(gW[2], 0, gW[2].Length);
                     Array.Clear(gB[0], 0, gB[0].Length); Array.Clear(gB[1], 0, gB[1].Length); Array.Clear(gB[2], 0, gB[2].Length);
 
@@ -203,7 +259,7 @@ namespace UnitEye
                 }
             }
 
-            //Honest holdout RMSE per axis, in pixels (falls back to the training set when the data is tiny)
+            //Honest holdout RMSE per axis (falls back to the training set when the data is tiny)
             var evalX = testCount > 0 ? xTest : xTrain;
             var evalY = testCount > 0 ? yTest : yTrain;
             double sumSqX = 0, sumSqY = 0;
@@ -216,8 +272,8 @@ namespace UnitEye
             var rmseX = (float)Math.Sqrt(sumSqX / evalX.Length);
             var rmseY = (float)Math.Sqrt(sumSqY / evalX.Length);
 
-            var errorXInCm = Functions.PixelsToMm(rmseX) * 0.1f;
-            var errorYInCm = Functions.PixelsToMm(rmseY) * 0.1f;
+            var errorXInCm = rmseX * rmseScaleXCm;
+            var errorYInCm = rmseY * rmseScaleYCm;
             LastHoldoutRmseXCm = errorXInCm;
             LastHoldoutRmseYCm = errorYInCm;
             return $"MLP Training done. RMSE X: {errorXInCm}cm | RMSE Y: {errorYInCm}cm.";
@@ -351,24 +407,24 @@ namespace UnitEye
                 _predYHat[1] * TargetStd[1] + TargetMean[1]);
         }
 
-        /// <summary>Saves to StreamingAssets/Calibration Files/MLP/ (same location as the old implementation).</summary>
+        /// <summary>Saves to persistentDataPath/Calibration Files/MLP/.</summary>
         public void Save(string fileName)
         {
-            string dir = Application.streamingAssetsPath + "/Calibration Files/MLP/";
+            string dir = CalibrationModelStore.GetWritableDirectory("MLP");
             if (!Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
-            File.WriteAllText(dir + fileName, JsonConvert.SerializeObject(this));
+            File.WriteAllText(CalibrationModelStore.GetWritablePath("MLP", fileName), JsonConvert.SerializeObject(this));
         }
 
         private static bool s_warnedMissing;
 
         /// <summary>
         /// Loads a trained model, or returns null when no calibration exists yet (callers fall back to the
-        /// raw gaze). Old BrightWire-format files are not loadable; run an ML calibration to create a new one.
+        /// raw gaze). Legacy pixel-locked or BrightWire-format files are rejected so they never mis-scale.
         /// </summary>
         public static SimpleMLP Load(string fileName)
         {
-            string filepath = Application.streamingAssetsPath + $"/Calibration Files/MLP/{fileName}";
+            string filepath = CalibrationModelStore.GetReadablePath("MLP", fileName);
             if (!File.Exists(filepath))
             {
                 if (!s_warnedMissing)
@@ -380,12 +436,12 @@ namespace UnitEye
             }
 
             var mlp = JsonConvert.DeserializeObject<SimpleMLP>(File.ReadAllText(filepath));
-            if (mlp == null || mlp.W1 == null || mlp.FeatureMean == null)
+            if (mlp == null || mlp.W1 == null || mlp.FeatureMean == null || !mlp.NormalizedTargets)
             {
                 if (!s_warnedMissing)
                 {
                     s_warnedMissing = true;
-                    Debug.LogWarning("ML calibration file is from an older UnitEye version and cannot be loaded. Please run an MLCalibration to retrain it.");
+                    Debug.LogWarning("ML calibration file is from an older UnitEye version (or uses legacy pixel-locked targets) and cannot be loaded. Please run an MLCalibration to retrain it.");
                 }
                 return null;
             }

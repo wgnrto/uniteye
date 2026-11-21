@@ -37,19 +37,26 @@ namespace UnitEye
 
         public override Vector2 Update(Vector2 measurement)
         {
-            // prediction
-            // no state transition, just grow the covariance by the process noise. Scale it by the REAL
-            // elapsed time since the last filter update (normalized to the 30 fps reference, so this
-            // equals the old Q at 30 fps) — not just this frame's delta: HomulerGaze skips Update entirely
-            // while the provider tick fails (face lost, webcam stall), and after such a gap the covariance
-            // must grow by the whole gap or the gain is smallest exactly when the input likely jumped.
+            if (float.IsNaN(measurement.x) || float.IsNaN(measurement.y) ||
+                float.IsInfinity(measurement.x) || float.IsInfinity(measurement.y))
+                return _x;
+
             float now = Time.unscaledTime;
-            float dt = _lastUpdateTime < 0f ? Time.unscaledDeltaTime : now - _lastUpdateTime;
+            if (_lastUpdateTime < 0f)
+            {
+                _x = measurement;
+                _p = Mathf.Max(R, 1e-6f);
+                _lastUpdateTime = now;
+                return _x;
+            }
+
+            float dt = Mathf.Max(0f, now - _lastUpdateTime);
             _lastUpdateTime = now;
-            _p = _p + Q * (dt * ReferenceRate);
+            _p = _p + Mathf.Max(0f, Q) * (dt * ReferenceRate);
 
             // measurement update
-            _k = _p / (_p + R);
+            float denom = _p + Mathf.Max(0f, R);
+            _k = denom > 1e-12f ? _p / denom : 1f;
             _x = _x + _k * (measurement - _x);
             _p = (1.0f - _k) * _p;
 

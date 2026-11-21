@@ -125,6 +125,10 @@ namespace UnitEye
 
         //Latest camera-frame capture time + derived pipeline latency (see IGazeProvider.CaptureTimestamp).
         private double _captureTimestamp;
+        private double _filterTimeOrigin = -1.0;
+        private Calibrations _lastValidatedCalibrations = Calibrations.RidgeRegression;
+        private readonly List<float> _medianScratchX = new List<float>(16);
+        private readonly List<float> _medianScratchY = new List<float>(16);
         #endregion
 
         #region Public accessors
@@ -179,6 +183,8 @@ namespace UnitEye
         [Tooltip("EXPERIMENTAL: async GPU readback — higher throughput, gaze arrives one camera frame later. Verify with a webcam before shipping.")]
         [SerializeField] private bool _asyncGpuReadback = false;
         public GazeBackbone GazeBackbone => _gazeBackbone;
+        public bool FlipAugmentation => _flipAugmentation;
+        public bool RollNormalizeCrops => _rollNormalizeCrops;
         //The direction-based backbones feed the model a FACE crop (shown as one thumbnail), not eye crops.
         //Only the PURE direction backbones show a single face-crop thumbnail; EyeMU and the ensemble
         //(whose debug textures are EyeMU's) show the two eye crops.
@@ -222,6 +228,10 @@ namespace UnitEye
             _driftOffset = Vector2.zero;
             _recenterArmedUntil = -1f;
             _hasRecentGaze = false;
+            _gazeConfidence.Reset();
+            _fixationAggregator.Reset();
+            _gazeTrail.Clear();
+            _aoiProbabilities.Clear();
             _driftCorrector.Reset();
             _driftCorrector.LoadFromJson(PlayerPrefs.GetString(DriftStateKey, ""));
         }
@@ -238,10 +248,12 @@ namespace UnitEye
             {
                 //Append a note to csv entry if calibration changed
                 if (Application.isPlaying && _csvLogger != null && _csvLogger.isActiveAndEnabled && value != _calibrations)
-                    _csvLogger.AppendNote($"Changed calibration type to {_calibrations}");
+                    _csvLogger.AppendNote($"Changed calibration type to {value}");
 
                 _calibrations = value;
-                _modelStore.Load(_calibrations, _gazeBackbone);
+                _lastValidatedCalibrations = value;
+                if (Application.isPlaying)
+                    _modelStore.Load(_calibrations, _gazeBackbone);
             }
         }
 
@@ -298,13 +310,21 @@ namespace UnitEye
         {
             if (!clickAnchors) return;
             var mouse = Mouse.current;                       // null when no mouse device exists
-            if (mouse == null || !mouse.leftButton.wasPressedThisFrame) return;
+            bool clicked = mouse != null && mouse.leftButton.wasPressedThisFrame;
+            Vector2 mp = mouse != null ? mouse.position.ReadValue() : default;
+#if ENABLE_LEGACY_INPUT_MANAGER
+            if (!clicked && Input.GetMouseButtonDown(0))
+            {
+                clicked = true;
+                mp = Input.mousePosition;
+            }
+#endif
+            if (!clicked) return;
 
-            var mp = mouse.position.ReadValue();
             //Input system positions are bottom-left; gaze space is top-left.
             var clickNorm = new Vector2(
-                Mathf.Clamp01(mp.x / Screen.width),
-                Mathf.Clamp01(1f - mp.y / Screen.height));
+                Mathf.Clamp01(mp.x / Mathf.Max(1, Screen.width)),
+                Mathf.Clamp01(1f - mp.y / Mathf.Max(1, Screen.height)));
 
             if (TryMedianTrailGaze(ClickWindowStart, ClickWindowEnd, out var gazeNorm))
                 _driftCorrector.AddAnchor(gazeNorm, clickNorm, AnchorWeight(1f));
@@ -353,21 +373,24 @@ namespace UnitEye
         {
             median = default;
             double now = Time.unscaledTimeAsDouble;
-            var xs = new List<float>(8);
-            var ys = new List<float>(8);
+            _medianScratchX.Clear();
+            _medianScratchY.Clear();
             foreach (var (t, g) in _gazeTrail)
             {
                 double age = now - t;
                 if (age <= windowStart && age >= windowEnd)
                 {
-                    xs.Add(g.x);
-                    ys.Add(g.y);
+                    _medianScratchX.Add(g.x);
+                    _medianScratchY.Add(g.y);
                 }
             }
-            if (xs.Count < 3) return false;
-            xs.Sort();
-            ys.Sort();
-            median = new Vector2(xs[xs.Count / 2], ys[ys.Count / 2]);
+            int n = _medianScratchX.Count;
+            if (n < 3) return false;
+            _medianScratchX.Sort();
+            _medianScratchY.Sort();
+            float mx = (n & 1) == 1 ? _medianScratchX[n / 2] : 0.5f * (_medianScratchX[n / 2 - 1] + _medianScratchX[n / 2]);
+            float my = (n & 1) == 1 ? _medianScratchY[n / 2] : 0.5f * (_medianScratchY[n / 2 - 1] + _medianScratchY[n / 2]);
+            median = new Vector2(mx, my);
             return true;
         }
 
@@ -419,7 +442,7 @@ namespace UnitEye
             {
                 //Append a note to csv entry if filtering changed
                 if (Application.isPlaying && _csvLogger != null && _csvLogger.isActiveAndEnabled && value != _filtering)
-                    _csvLogger.AppendNote($"Changed filtering type to {_filtering}");
+                    _csvLogger.AppendNote($"Changed filtering type to {value}");
 
                 _filtering = value;
             }
@@ -555,6 +578,16 @@ namespace UnitEye
             }
         }
 
+        protected virtual void OnEnable()
+        {
+            _provider?.SetActive(true);
+        }
+
+        protected virtual void OnDisable()
+        {
+            _provider?.SetActive(false);
+        }
+
         public virtual void OnValidate()
         {
             //Update filter values
@@ -571,9 +604,12 @@ namespace UnitEye
             {
                 oneEuroFilter.UpdateParams(60f, mincutoff, beta, dcutoff);
             }
-            //Update calibration and filtering type
-            Calibrations = _calibrations;
-            Filtering = _filtering;
+            //Reload calibration models only in Play Mode when the serialized selection actually changed.
+            if (Application.isPlaying && _calibrations != _lastValidatedCalibrations)
+            {
+                _lastValidatedCalibrations = _calibrations;
+                _modelStore.Load(_calibrations, _gazeBackbone);
+            }
             if (Application.isPlaying && _aoiManager != null)
             {
                 //If this throws a warning, ignore it, is a Unity bug with attaching GameObjects to Main camera in OnValidate()
@@ -752,26 +788,28 @@ namespace UnitEye
 
             _aoiManager.CheckAOIList(aoiNorm, aoiNameList);
 
-            //Probabilistic AOI logging: P(AOI | fixation) under the region's error ellipse, throttled
-            //(32-sample MC per AOI) and only while fixating (a saccade sample has no meaningful ellipse).
-            if (useErrorModel && _errorModel != null &&
-                (!fixationAOILogging || _fixationAggregator.InFixation) &&
-                Time.unscaledTimeAsDouble - _lastProbabilityTime >= ProbabilityInterval)
+            //Probabilistic AOI logging: P(AOI | fixation) under the region's error ellipse. Recomputed at
+            //ProbabilityInterval (32-sample MC per AOI) and appended on EVERY fixation tick so the overlay
+            //never flickers and CSV rows never drop probability tags between refresh intervals.
+            if (useErrorModel && _errorModel != null && (!fixationAOILogging || _fixationAggregator.InFixation))
             {
-                _lastProbabilityTime = Time.unscaledTimeAsDouble;
-                _aoiManager.CheckAOIProbabilities(aoiNorm, covXX, covXY, covYY, _aoiProbabilities);
-                //Fold the calibrated probabilities into the logged AOI strings: "uID p=0.87". A top-2 gap
-                //under 0.2 is flagged AMBIGUOUS — those fixations are coin flips and analysts must know.
+                if (Time.unscaledTimeAsDouble - _lastProbabilityTime >= ProbabilityInterval || _aoiProbabilities.Count == 0)
+                {
+                    _lastProbabilityTime = Time.unscaledTimeAsDouble;
+                    _aoiManager.CheckAOIProbabilities(aoiNorm, covXX, covXY, covYY, _aoiProbabilities);
+                }
                 if (_aoiProbabilities.Count > 0)
                 {
                     for (int i = 0; i < _aoiProbabilities.Count && i < 3; i++)
                         aoiNameList.Add($"{_aoiProbabilities[i].uID} p={_aoiProbabilities[i].probability:F2}");
-                    //Only meaningful when the leader is a real candidate — two near-zero probabilities are
-                    //"looking at neither", not an ambiguous hit.
                     if (_aoiProbabilities.Count >= 2 && _aoiProbabilities[0].probability >= 0.2f &&
                         _aoiProbabilities[0].probability - _aoiProbabilities[1].probability < 0.2f)
                         aoiNameList.Add("AMBIGUOUS");
                 }
+            }
+            else
+            {
+                _aoiProbabilities.Clear();
             }
 
             //CSV Logging. ShouldLog is checked BEFORE building the row: with logsPerSecond below the frame
@@ -937,8 +975,11 @@ namespace UnitEye
                     //mincutoff/dcutoff are frequencies and are already resolution-independent.
                     float sx = OneEuroReferenceWidth / Mathf.Max(1, Screen.width);
                     float sy = OneEuroReferenceHeight / Mathf.Max(1, Screen.height);
+                    if (_filterTimeOrigin < 0.0)
+                        _filterTimeOrigin = Time.unscaledTimeAsDouble;
+                    float filterTimestamp = (float)(Time.unscaledTimeAsDouble - _filterTimeOrigin);
                     var scaledIn = new Vector2(unfilteredGaze.x * sx, unfilteredGaze.y * sy);
-                    var scaledOut = oneEuroFilter.FilterVector2(scaledIn, Time.realtimeSinceStartup);
+                    var scaledOut = oneEuroFilter.FilterVector2(scaledIn, filterTimestamp);
                     smoothedGaze = new Vector2(scaledOut.x / sx, scaledOut.y / sy);
                     break;
                 default:
@@ -989,7 +1030,7 @@ namespace UnitEye
             gazeUIActivated = false;
 
             //Append a note to csv entry
-            if (_csvLogger != null && _csvLogger.isActiveAndEnabled && _calibrationScript == null)
+            if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
                 _csvLogger.AppendNote("Started calibration");
 
             //Unpause CSVLogging
@@ -1077,16 +1118,17 @@ namespace UnitEye
             gazeUIActivated = false;
 
             //Append a note to csv entry
-            if (_csvLogger != null && _csvLogger.isActiveAndEnabled && _calibrationScript == null)
+            if (_csvLogger != null && _csvLogger.isActiveAndEnabled)
                 _csvLogger.AppendNote("Started evaluation");
 
-            _evaluationScript.enabled = true;
+            PauseCSVLogging = true;
 
-            //Evaluation settings
+            //Evaluation settings (assign before enabling so OnEnable sees current returnAfter/rows/columns)
             _evaluationScript.quitAfterEvaluation = false;
             _evaluationScript.returnAfter = true;
             _evaluationScript.rows = rows;
             _evaluationScript.columns = columns;
+            _evaluationScript.enabled = true;
         }
 
         /// <summary>
@@ -1096,6 +1138,7 @@ namespace UnitEye
         {
             //Restore settings
             RestoreSettings();
+            PauseCSVLogging = false;
 
             //RestoreSettings rewinds _calibrations to the pre-evaluation backup, which would silently undo
             //the model the evaluation just reported as "Applied." on its results screen. Re-assign through
@@ -1113,8 +1156,10 @@ namespace UnitEye
             //Consume the return so LateUpdate does not call UnloadEvaluation again next frame
             _evaluationScript.ClearReturned();
 
-            //The evaluation just measured + saved a fresh per-region error model — pick it up live.
+            //The evaluation just measured + saved a fresh per-region error model — pick it up live and reset
+            //pre-existing drift anchors so regional bias is not subtracted twice.
             _errorModel = GazeErrorModel.Load(_gazeBackbone);
+            ClearDrift();
 
             IsRendering = true;
         }
@@ -1470,6 +1515,15 @@ namespace UnitEye
                 _profileIndex = (_profileIndex + 1) % _profileList.Count;
             if (GUI.Button(new Rect(width * 0.30f, height * 0.08f, width * 0.09f, height * 0.04f), "Load", gazeUIStyleButton) && hasProfiles)
             {
+                if (CalibrationProfileStore.TryInspectProfile(current, out var profBackbone, out var hasRidge, out var hasMlp))
+                {
+                    if (profBackbone != _gazeBackbone)
+                        SetBackbone(profBackbone);
+                    if (_calibrations == Calibrations.RidgeRegression && !hasRidge && hasMlp)
+                        _calibrations = Calibrations.MLCalibration;
+                    else if (_calibrations == Calibrations.MLCalibration && !hasMlp && hasRidge)
+                        _calibrations = Calibrations.RidgeRegression;
+                }
                 _profileStatus = CalibrationProfileStore.Load(current, userWearsGlasses);
                 ReloadCalibration();
                 _profileName = current;

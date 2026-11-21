@@ -94,8 +94,12 @@ namespace UnitEye
             }
             else
             {
-                _baselineYaw += BaselineAlpha * (sy - _baselineYaw);
-                _baselinePitch += BaselineAlpha * (sp - _baselinePitch);
+                //Clamp extreme transient outliers (e.g. hand-across-face) when adapting the baseline so a
+                //few garbage frames cannot inflate the session baseline and mask subsequent poor frames.
+                float clampedYaw = _baselineYaw > 1e-6f ? Mathf.Min(sy, _baselineYaw * 3f) : sy;
+                float clampedPitch = _baselinePitch > 1e-6f ? Mathf.Min(sp, _baselinePitch * 3f) : sp;
+                _baselineYaw += BaselineAlpha * (clampedYaw - _baselineYaw);
+                _baselinePitch += BaselineAlpha * (clampedPitch - _baselinePitch);
             }
             _count++;
 

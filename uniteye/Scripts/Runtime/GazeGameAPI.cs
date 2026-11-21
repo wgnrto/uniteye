@@ -22,34 +22,44 @@ namespace UnitEye
 
         void Update()
         {
+            var focused = UnitEyeAPI.GetFocusedGameObject();
             if (focusedCount > 29)
                 focusedCount = 30;
-            else if (UnitEyeAPI.GetFocusedGameObject() != null)
+            else if (focused != null)
                 focusedCount++;
             else if (!moving)
                 focusedCount = 0;
 
-            if (!moving && focusedCount > 29)
+            if (!moving && focusedCount > 29 && focused != null)
             {
-                hitObject = UnitEyeAPI.GetFocusedGameObject();
-                hitObject.GetComponent<Renderer>().material.color = Color.green;
+                hitObject = focused;
+                var rend = hitObject.GetComponent<Renderer>();
+                if (rend != null) rend.material.color = Color.green;
                 moving = true;
             }
             else if (UnitEyeAPI.IsBlinking())
             {
                 focusedCount = 0;
-                if (hitObject != null) hitObject.GetComponent<Renderer>().material.color = Color.grey;
+                if (hitObject != null)
+                {
+                    var rend = hitObject.GetComponent<Renderer>();
+                    if (rend != null) rend.material.color = Color.grey;
+                }
                 hitObject = null;
                 moving = false;
             }
 
             if (hitObject != null)
             {
-                var vector = hitObject.transform.localPosition;
-                var gazeVector = UnitEyeAPI.GetGazeLocationInWorld();
-                vector.x = gazeVector.x;
-                vector.y = gazeVector.y;
-                hitObject.transform.localPosition = vector;
+                var cam = Camera.main;
+                float depth = cam != null
+                    ? Mathf.Max(cam.nearClipPlane + 0.01f, Vector3.Dot(hitObject.transform.position - cam.transform.position, cam.transform.forward))
+                    : -1f;
+                var gazeVector = UnitEyeAPI.GetGazeLocationInWorld(depth);
+                var pos = hitObject.transform.position;
+                pos.x = gazeVector.x;
+                pos.y = gazeVector.y;
+                hitObject.transform.position = pos;
             }
         }
         void OnGUI()

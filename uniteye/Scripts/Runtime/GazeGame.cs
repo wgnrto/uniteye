@@ -20,20 +20,19 @@ namespace UnitEye
 
         RaycastHit hitObject = new RaycastHit();
 
-        //When inheriting
-        /*public override */void Start()
+        void Start()
         {
-            //When inheriting, call base.Start() before own Start()
-            /*base.Start()*/
+            if (gaze == null) gaze = FindAnyObjectByType<HomulerGaze>();
             tagList = new AOITagList("gazeGameRay");
             tagList.AddTag("gazeGame");
-            //When inheriting, use base instead of gaze
-            //base.AOIManager.AddAOI(tagList);
-            gaze.AOIManager.AddAOI(tagList);
+            if (gaze != null)
+                gaze.AOIManager.AddAOI(tagList);
         }
 
         void Update()
         {
+            if (gaze == null || tagList == null) return;
+
             if (focusedCount > 29)
                 focusedCount = 30;
             else if (tagList.focused)
@@ -41,41 +40,46 @@ namespace UnitEye
             else if (!moving)
                 focusedCount = 0;
 
-            if (!moving && focusedCount > 29)
+            if (!moving && focusedCount > 29 && tagList.hitRaycast.collider != null)
             {
                 hitObject = tagList.hitRaycast;
-                hitObject.collider.gameObject.GetComponent<Renderer>().material.color = Color.green;
+                var rend = hitObject.collider.gameObject.GetComponent<Renderer>();
+                if (rend != null) rend.material.color = Color.green;
                 moving = true;
             }
-            //When inheriting, "gaze." is no longer necessary
-            else if (/*Blinking*/gaze.Blinking)
+            else if (gaze.Blinking)
             {
                 focusedCount = 0;
-                if (hitObject.collider != null) hitObject.collider.gameObject.GetComponent<Renderer>().material.color = Color.grey;
+                if (hitObject.collider != null)
+                {
+                    var rend = hitObject.collider.gameObject.GetComponent<Renderer>();
+                    if (rend != null) rend.material.color = Color.grey;
+                }
                 hitObject = new RaycastHit();
                 moving = false;
             }
 
             if (hitObject.collider != null)
             {
-                var vector = hitObject.transform.localPosition;
-                //When inheriting, "gaze." is no longer necessary
-                //var gazeVector = new Vector2(gazeLocation.x, Screen.height - gazeLocation.y);
-                var gazeVector = new Vector2(gaze.gazeLocation.x, Screen.height - gaze.gazeLocation.y);
-                var vectorGaze = Camera.main.ScreenToWorldPoint(gazeVector);
-                vector.x = vectorGaze.x;
-                vector.y = vectorGaze.y;
-                hitObject.transform.localPosition = vector;
+                var cam = Camera.main;
+                if (cam != null)
+                {
+                    float depth = Vector3.Dot(hitObject.transform.position - cam.transform.position, cam.transform.forward);
+                    if (depth <= cam.nearClipPlane) depth = cam.nearClipPlane + 1f;
+                    var gazeVector = new Vector3(gaze.gazeLocation.x, Screen.height - gaze.gazeLocation.y, depth);
+                    var vectorGaze = cam.ScreenToWorldPoint(gazeVector);
+                    var pos = hitObject.transform.position;
+                    pos.x = vectorGaze.x;
+                    pos.y = vectorGaze.y;
+                    hitObject.transform.position = pos;
+                }
             }
         }
 
-        //When inheriting
-        /*public override */void OnGUI()
+        void OnGUI()
         {
-            //When inheriting, call base.OnGUI()
-            /*base.OnGUI()*/
             GUI.Label(new Rect(100, 300, 100, 100), $"{focusedCount}");
-            GUI.Label(new Rect(100, 320, 100, 100), $"{(tagList.hitRaycast.collider != null ? tagList.hitRaycast.collider.gameObject.name : "None")}");
+            GUI.Label(new Rect(100, 320, 200, 100), $"{(tagList != null && tagList.hitRaycast.collider != null ? tagList.hitRaycast.collider.gameObject.name : "None")}");
         }
     }
 }

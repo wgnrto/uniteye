@@ -55,9 +55,10 @@ namespace UnitEye
 
     	void setFrequency(float _f)
     	{
-    		if (_f <= 0.0f)
+    		if (_f <= 0.0f || float.IsNaN(_f) || float.IsInfinity(_f))
     		{
     			Debug.LogError("freq should be > 0");
+    			if (freq <= 0.0f) freq = 60.0f;
     			return;
     		}
     		freq = _f;
@@ -65,9 +66,10 @@ namespace UnitEye
 
     	void setMinCutoff(float _mc)
     	{
-    		if (_mc <= 0.0f)
+    		if (_mc <= 0.0f || float.IsNaN(_mc) || float.IsInfinity(_mc))
     		{
     			Debug.LogError("mincutoff should be > 0");
+    			if (mincutoff <= 0.0f) mincutoff = 1.0f;
     			return;
     		}
     		mincutoff = _mc;
@@ -80,9 +82,10 @@ namespace UnitEye
 
     	void setDerivateCutoff(float _dc)
     	{
-    		if (_dc <= 0.0f)
+    		if (_dc <= 0.0f || float.IsNaN(_dc) || float.IsInfinity(_dc))
     		{
     			Debug.LogError("dcutoff should be > 0");
+    			if (dcutoff <= 0.0f) dcutoff = 1.0f;
     			return;
     		}
     		dcutoff = _dc;
@@ -122,7 +125,8 @@ namespace UnitEye
     		// Keep the previous frequency in that case.
     		if (lasttime != -1.0f && timestamp != -1.0f && timestamp > lasttime)
     			freq = 1.0f / (timestamp - lasttime);
-    		lasttime = timestamp;
+    		if (timestamp == -1.0f || lasttime == -1.0f || timestamp > lasttime)
+    			lasttime = timestamp;
     		// estimate the current variation per second 
     		float dvalue = x.hasLastRawValue() ? (value - x.lastRawValue()) * freq : 0.0f; // FIXME: 0.0 or value? 
     		float edvalue = dx.filterWithAlpha(dvalue, alpha(dcutoff));
@@ -215,7 +219,7 @@ namespace UnitEye
     		if (type == typeof(Vector2))
     		{
     			prevValue = currValue;
-    			currValue = (T)(object)result;
+    			currValue = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<Vector2, T>(ref result);
     		}
 
     		return result;
@@ -231,47 +235,42 @@ namespace UnitEye
     		{
     			Debug.LogError("WARNING! " + typeof(U) + " when " + type + " is expected!\nReturning previous filtered value");
     			currValue = prevValue;
-
-    			return (T)Convert.ChangeType(currValue, typeof(T));
+    			return currValue;
     		}
 
     		if (type == typeof(Vector2))
     		{
-    			Vector2 output = Vector2.zero;
-    			Vector2 input = (Vector2)Convert.ChangeType(_value, typeof(Vector2));
-
-    			for (int i = 0; i < oneEuroFilters.Length; i++)
-    				output[i] = oneEuroFilters[i].Filter(input[i], timestamp);
-
-    			currValue = (T)Convert.ChangeType(output, typeof(T));
+    			Vector2 input = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<U, Vector2>(ref _value);
+    			Vector2 output = new Vector2(
+    				oneEuroFilters[0].Filter(input.x, timestamp),
+    				oneEuroFilters[1].Filter(input.y, timestamp));
+    			currValue = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<Vector2, T>(ref output);
     		}
 
     		else if (type == typeof(Vector3))
     		{
-    			Vector3 output = Vector3.zero;
-    			Vector3 input = (Vector3)Convert.ChangeType(_value, typeof(Vector3));
-
-    			for (int i = 0; i < oneEuroFilters.Length; i++)
-    				output[i] = oneEuroFilters[i].Filter(input[i], timestamp);
-
-    			currValue = (T)Convert.ChangeType(output, typeof(T));
+    			Vector3 input = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<U, Vector3>(ref _value);
+    			Vector3 output = new Vector3(
+    				oneEuroFilters[0].Filter(input.x, timestamp),
+    				oneEuroFilters[1].Filter(input.y, timestamp),
+    				oneEuroFilters[2].Filter(input.z, timestamp));
+    			currValue = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<Vector3, T>(ref output);
     		}
 
     		else if (type == typeof(Vector4))
     		{
-    			Vector4 output = Vector4.zero;
-    			Vector4 input = (Vector4)Convert.ChangeType(_value, typeof(Vector4));
-
-    			for (int i = 0; i < oneEuroFilters.Length; i++)
-    				output[i] = oneEuroFilters[i].Filter(input[i], timestamp);
-
-    			currValue = (T)Convert.ChangeType(output, typeof(T));
+    			Vector4 input = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<U, Vector4>(ref _value);
+    			Vector4 output = new Vector4(
+    				oneEuroFilters[0].Filter(input.x, timestamp),
+    				oneEuroFilters[1].Filter(input.y, timestamp),
+    				oneEuroFilters[2].Filter(input.z, timestamp),
+    				oneEuroFilters[3].Filter(input.w, timestamp));
+    			currValue = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<Vector4, T>(ref output);
     		}
 
     		else
     		{
-    			Quaternion output = Quaternion.identity;
-    			Quaternion input = (Quaternion)Convert.ChangeType(_value, typeof(Quaternion));
+    			Quaternion input = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<U, Quaternion>(ref _value);
 
     			// Workaround that take into account that some input device sends
     			// quaternion that represent only a half of all possible values.
@@ -283,13 +282,17 @@ namespace UnitEye
     				input = new Quaternion(-input.x, -input.y, -input.z, -input.w);
     			}
 
-    			for (int i = 0; i < oneEuroFilters.Length; i++)
-    				output[i] = oneEuroFilters[i].Filter(input[i], timestamp);
+    			Quaternion output = new Quaternion(
+    				oneEuroFilters[0].Filter(input.x, timestamp),
+    				oneEuroFilters[1].Filter(input.y, timestamp),
+    				oneEuroFilters[2].Filter(input.z, timestamp),
+    				oneEuroFilters[3].Filter(input.w, timestamp));
+    			output = Quaternion.Normalize(output);
 
-    			currValue = (T)Convert.ChangeType(output, typeof(T));
+    			currValue = Unity.Collections.LowLevel.Unsafe.UnsafeUtility.As<Quaternion, T>(ref output);
     		}
 
-    		return (T)Convert.ChangeType(currValue, typeof(T));
+    		return currValue;
     	}
     }
 }

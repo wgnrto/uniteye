@@ -49,10 +49,12 @@ namespace UnitEye
             //inverted (outside) region — i.e. SHRINK the underlying shape (the Offscreen AOI would eat a
             //border strip of the actual screen). Inverted AOIs use their exact geometry.
             if (margin <= 0f || inverted) return false;
+            float halfMargin = margin * 0.5f;
             for (int i = 0; i < 8; i++)
             {
                 float a = i * Mathf.PI * 0.25f;
-                if (CheckAOI(point + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * margin))
+                var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                if (CheckAOI(point + dir * halfMargin) || CheckAOI(point + dir * margin))
                     return true;
             }
             return false;
@@ -135,8 +137,10 @@ namespace UnitEye
         /// <returns>True if point is in the Circle, false if not.</returns>
         public bool CheckCircle(Vector2 center, float radius, Vector2 point)
         {
-            var distancePoint = Mathf.Sqrt((point.x - center.x) * (point.x - center.x) + (point.y - center.y) * (point.y - center.y));
-            return distancePoint <= radius;
+            if (radius < 0f) return false;
+            float dx = point.x - center.x;
+            float dy = point.y - center.y;
+            return dx * dx + dy * dy <= radius * radius;
         }
 
         /// <summary>
@@ -152,17 +156,14 @@ namespace UnitEye
         public bool CheckCapsule(Vector2 startpoint, Vector2 endpoint, float radius, Vector2 point)
         {
             Vector2 vector = endpoint - startpoint;
+            float lenSq = vector.x * vector.x + vector.y * vector.y;
+            if (lenSq <= 1e-12f)
+                return CheckCircle(startpoint, radius, point);
+
             Vector2 pointstart = point - startpoint;
+            float dot = (pointstart.x * vector.x + pointstart.y * vector.y) / lenSq;
+            Vector2 orthopoint = startpoint + Mathf.Clamp01(dot) * vector;
 
-            //Calculate distance from startpoint to orthopoint on line created by startpoint and endpoint
-            float dot = (pointstart.x * vector.x + pointstart.y * vector.y) / (vector.x * vector.x + vector.y * vector.y);
-
-            //Calculate orthopoint on line between startpoint and endpoint
-            Vector2 orthopoint = startpoint + Mathf.Min(Mathf.Max(dot, 0), 1) * vector;
-
-            //Debug.Log($"startpoint: {startpoint} | endpoint: {endpoint} | radius: {radius} | point: {point} | vector: {vector} | pointstart: {pointstart} | dot: {dot} | orthopoint: {orthopoint}");
-
-            //Return if point is in the circle around orthopoint with radius
             return CheckCircle(orthopoint, radius, point);
         }
 
@@ -181,24 +182,19 @@ namespace UnitEye
         public bool CheckCapsuleBox(Vector2 startpoint, Vector2 endpoint, float radius, Vector2 point)
         {
             Vector2 vector = endpoint - startpoint;
+            float lenSq = vector.x * vector.x + vector.y * vector.y;
+            if (lenSq <= 1e-12f)
+                return false;
+
             Vector2 pointstart = point - startpoint;
-            //If pointstart is more than +-90 degrees turned from vector the dot product is negative
-            //and point is outside of the CapsuleBox
-            if ((pointstart.x * vector.x + pointstart.y * vector.y) < 0) return false;
+            if ((pointstart.x * vector.x + pointstart.y * vector.y) < 0f) return false;
 
             Vector2 pointend = point - endpoint;
-            //If pointend is less than +-90 degrees turned from vector the dot product is positive
-            //and point is outside of the CapsuleBox
-            if ((pointend.x * vector.x + pointend.y * vector.y) > 0) return false;
+            if ((pointend.x * vector.x + pointend.y * vector.y) > 0f) return false;
 
-            //Calculate distance from startpoint to orthopoint on line created by startpoint and endpoint
-            float dot = (pointstart.x * vector.x + pointstart.y * vector.y) / (vector.x * vector.x + vector.y * vector.y);
-            //Calculate orthopoint on line between startpoint and endpoint
-            Vector2 orthopoint = startpoint + Mathf.Min(Mathf.Max(dot, 0), 1) * vector;
+            float dot = (pointstart.x * vector.x + pointstart.y * vector.y) / lenSq;
+            Vector2 orthopoint = startpoint + Mathf.Clamp01(dot) * vector;
 
-            //Debug.Log($"startpoint: {startpoint} | endpoint: {endpoint} | radius: {radius} | point: {point} | vector: {vector} | pointstart: {pointstart} | dot: {dot} | orthopoint: {orthopoint}");
-            
-            //Return if point is in the circle around orthopoint with radius
             return CheckCircle(orthopoint, radius, point);
         }
 
@@ -211,6 +207,8 @@ namespace UnitEye
         /// <returns>True if point is within Polygon</returns>
         public bool CheckPolygon(List<Vector2> points, Vector2 point)
         {
+            if (points == null || points.Count < 3)
+                return false;
             bool result = false;
             int j = points.Count - 1;
             Vector2 pointI, pointJ;
@@ -257,8 +255,9 @@ namespace UnitEye
         /// <param name="radius"></param>
         public static void DrawGLCircle(Vector2 center, float radius)
         {
-            //Calculate steps based on radius
-            int steps = (int)(radius * 300f);
+            if (radius <= 0f) return;
+            //Calculate steps based on radius (minimum 12 so tiny circles stay round instead of degenerating)
+            int steps = Mathf.Max(12, (int)(radius * 300f));
             
             //For each step add a vertex on a circle with radius around center
             for (int currentStep = 0; currentStep < steps; currentStep++)
@@ -288,10 +287,15 @@ namespace UnitEye
             float y = startpoint.y - endpoint.y;
             
             //Radius equals half the distance between the points
-            float radius = Mathf.Sqrt(x * x + y * y) / 2;
+            float radius = Mathf.Sqrt(x * x + y * y) / 2f;
+            if (radius <= 1e-6f)
+            {
+                GL.Vertex(new Vector3(endpoint.x, endpoint.y, 0));
+                return;
+            }
 
             //Calculate steps based on radius
-            int steps = (int)(radius * 150f);
+            int steps = Mathf.Max(6, (int)(radius * 150f));
 
             //Center is startpoint + half the vector between startpoint and endpoint
             Vector2 center = startpoint + 0.5f * (endpoint - startpoint);

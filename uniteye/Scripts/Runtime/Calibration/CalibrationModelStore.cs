@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using UnityEngine;
 
 namespace UnitEye
@@ -15,6 +17,71 @@ namespace UnitEye
         //Optional local residual correction fitted on top of THIS ridge pair (saved/deleted together with
         //it by the calibration). Applied only when the ridge actually predicted — never to the raw fallback.
         private ThinPlateSplineWarp _ridgeWarp;
+
+        /// <summary>Writable root for user-trained calibration models and profiles across all platforms.</summary>
+        public static string PersistentCalibrationRoot =>
+            Path.Combine(Application.persistentDataPath, "Calibration Files");
+
+        /// <summary>Read-only fallback root for pre-bundled calibrations in StreamingAssets.</summary>
+        public static string StreamingCalibrationRoot =>
+            Path.Combine(Application.streamingAssetsPath, "Calibration Files");
+
+        public static string GetWritableDirectory(string subfolder) =>
+            Path.Combine(PersistentCalibrationRoot, subfolder);
+
+        public static string GetWritablePath(string subfolder, string fileName) =>
+            Path.Combine(PersistentCalibrationRoot, subfolder, fileName);
+
+        /// <summary>
+        /// Resolves a calibration file path for reading: prefers user-saved files in persistentDataPath and
+        /// falls back to StreamingAssets when present.
+        /// </summary>
+        public static string GetReadablePath(string subfolder, string fileName)
+        {
+            string userPath = GetWritablePath(subfolder, fileName);
+            if (File.Exists(userPath))
+                return userPath;
+            try
+            {
+                string streamingPath = Path.Combine(StreamingCalibrationRoot, subfolder, fileName);
+                if (File.Exists(streamingPath))
+                    return streamingPath;
+            }
+            catch
+            {
+                // Platforms where streamingAssetsPath is a URL (WebGL / Android) cannot query File.Exists.
+            }
+            return userPath;
+        }
+
+        /// <summary>
+        /// Deletes a calibration file from persistentDataPath (and from StreamingAssets when writable, e.g. Editor)
+        /// so stale companion files cannot shadow or resurface through fallback reads.
+        /// </summary>
+        public static void DeleteCalibrationFile(string subfolder, string fileName)
+        {
+            try
+            {
+                string userPath = GetWritablePath(subfolder, fileName);
+                if (File.Exists(userPath))
+                    File.Delete(userPath);
+            }
+            catch (Exception e)
+            {
+                UnitEyeLog.Exception(e);
+            }
+
+            try
+            {
+                string streamingPath = Path.Combine(StreamingCalibrationRoot, subfolder, fileName);
+                if (File.Exists(streamingPath))
+                    File.Delete(streamingPath);
+            }
+            catch
+            {
+                // Deployed builds with read-only StreamingAssets safely ignore deletion there.
+            }
+        }
 
         /// <summary>
         /// Per-backbone calibration filename, e.g. ("Reg_X.json", EyeMU) -> "Reg_X_EyeMU.json". Each gaze
@@ -112,7 +179,12 @@ namespace UnitEye
                     //Fall back to the raw gaze location if no calibration model is loaded
                     if (_mlp == null)
                         return rawGaze;
-                    refinedGaze = _mlp.Predict(features);
+                    var mlpPred = _mlp.Predict(features);
+                    if (float.IsNaN(mlpPred.x) || float.IsNaN(mlpPred.y))
+                        return rawGaze;
+                    refinedGaze = _mlp.NormalizedTargets
+                        ? new Vector2(mlpPred.x * screenWidth, mlpPred.y * screenHeight)
+                        : mlpPred;
                     break;
             }
 

@@ -131,18 +131,23 @@ namespace UnitEye.Benchmark
             foreach (var config in configs)
             {
                 var results = new List<SessionResult>();
-                for (var i = 0; i < usable.Count; i++)
+                try
                 {
-                    var s = usable[i];
-                    if (interactive && EditorUtility.DisplayCancelableProgressBar("Gaze benchmark",
-                            $"{config.Name}: {s.Token} ({i + 1}/{usable.Count})", (float)i / usable.Count))
+                    for (var i = 0; i < usable.Count; i++)
                     {
-                        EditorUtility.ClearProgressBar();
-                        return false;
+                        var s = usable[i];
+                        if (interactive && EditorUtility.DisplayCancelableProgressBar("Gaze benchmark",
+                                $"{config.Name}: {s.Token} ({i + 1}/{usable.Count})", (float)i / usable.Count))
+                        {
+                            return false;
+                        }
+                        results.Add(BenchmarkSession(s, config));
                     }
-                    results.Add(BenchmarkSession(s, config));
                 }
-                if (interactive) EditorUtility.ClearProgressBar();
+                finally
+                {
+                    if (interactive) EditorUtility.ClearProgressBar();
+                }
 
                 foreach (var r in results.OrderBy(r => r.Token, StringComparer.Ordinal))
                     report.AppendLine(string.Join("\t", config.Name, r.Token, r.Backbone,
@@ -159,7 +164,7 @@ namespace UnitEye.Benchmark
                 {
                     var vals = group.Select(r => r.RmsePctDiag).Where(v => !double.IsNaN(v)).OrderBy(v => v).ToList();
                     if (vals.Count == 0) continue;
-                    var median = vals[vals.Count / 2];
+                    var median = SortedMedian(vals);
                     //Median and IQR, not mean and SD: with a handful of sessions one bad capture would drag
                     //a mean around and hide the change under test.
                     var q1 = vals[vals.Count / 4];
@@ -225,7 +230,7 @@ namespace UnitEye.Benchmark
                                         .OrderBy(g => g.Select(r => r.SkillScore).Average()))
             {
                 var vals = group.Select(r => r.SkillScore).OrderBy(v => v).ToList();
-                var median = vals[vals.Count / 2];
+                var median = SortedMedian(vals);
                 var best = vals[0];
                 var worst = vals[vals.Count - 1];
                 report.AppendLine($"# ranking\t{configName}\t{group.Key}\tn={vals.Count}\tmedian_skill={Fmt(median)}" +
@@ -304,7 +309,7 @@ namespace UnitEye.Benchmark
                 float[][] features; float[] tX, tY; Vector2[] targets;
                 try
                 {
-                    CalibrationSampleBalancer.Build(
+                    CalibrationSampleBalancer.FilterAccepted(
                         train.Select(x => x.Features).ToList(),
                         train.Select(x => x.LabelPx.x / w).ToList(),
                         train.Select(x => x.LabelPx.y / h).ToList(),
@@ -312,7 +317,7 @@ namespace UnitEye.Benchmark
                         train.Select(x => x.TargetPx).ToList(),
                         train.Select(x => x.Dwell).ToList(),
                         train.Select(x => x.HeadRotation).ToList(),
-                        w, h, 15, 3f, out features, out tX, out tY, out targets, out _);
+                        w, h, 15, 3f, out features, out tX, out tY, out targets, out _, out _);
                 }
                 catch (Exception) { continue; }   // degenerate fold; other folds still count
 
@@ -321,25 +326,26 @@ namespace UnitEye.Benchmark
                       { headPoseJitterDegrees = config.HeadPoseJitterDegrees, headPoseFeatureIndices = headPoseIndices }
                     : null;
 
-                //Both heads are reduced to one PIXEL-space predictor here, because they natively disagree:
-                //the ridge pair predicts in normalized units (CalibrationModelStore scales them afterwards)
-                //while SimpleMLP is trained on pixel targets and predicts pixels directly. Scoring each in
-                //its own space and converting later is how a benchmark ends up silently comparing a
-                //normalized error against a pixel one.
                 Func<float[], Vector2> predictPx;
                 try
                 {
                     if (config.Model == Head.Mlp)
                     {
-                        //Seeded so a re-run reproduces the number; the app leaves it unseeded.
+                        var normTargets = new Vector2[features.Length];
+                        for (int k = 0; k < features.Length; k++)
+                            normTargets[k] = new Vector2(tX[k], tY[k]);
                         var mlp = new SimpleMLP(config.Seed);
-                        mlp.Train(features, targets, augmentation);
-                        predictPx = f => mlp.Predict(f);
+                        mlp.TrainNormalized(features, normTargets, 1f, 1f, augmentation, balanceTraining: true);
+                        predictPx = f =>
+                        {
+                            var np = mlp.Predict(f);
+                            return new Vector2(np.x * w, np.y * h);
+                        };
                     }
                     else
                     {
                         var fit = RidgeCalibrationTrainer.Train(features, tX, tY,
-                            rmseScaleX: 1f, rmseScaleY: 1f, augmentation: augmentation);
+                            rmseScaleX: 1f, rmseScaleY: 1f, augmentation: augmentation, balanceTraining: true);
                         predictPx = f =>
                         {
                             var nx = fit.XModel.Predict(f);
@@ -393,6 +399,12 @@ namespace UnitEye.Benchmark
             if (r.CentreBaselinePctDiag > 1e-9) r.SkillScore = r.RmsePctDiag / r.CentreBaselinePctDiag;
             if (nDeg > 0) r.RmseDegrees = Math.Sqrt(sumSqDeg / nDeg);
             return r;
+        }
+
+        private static double SortedMedian(List<double> sorted)
+        {
+            int n = sorted.Count;
+            return (n & 1) == 1 ? sorted[n / 2] : 0.5 * (sorted[n / 2 - 1] + sorted[n / 2]);
         }
 
         private static GazeBackbone ParseBackbone(string name)

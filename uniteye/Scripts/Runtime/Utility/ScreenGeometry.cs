@@ -41,12 +41,30 @@ namespace UnitEye
         /// </summary>
         public static string PhysicalScaleWarning()
         {
+            if (Screen.dpi <= 1f || float.IsNaN(Screen.dpi) || float.IsInfinity(Screen.dpi))
+            {
+                return $"UnitEye: Screen.dpi is unavailable ({Screen.dpi:F0}), so physical conversions fall back " +
+                       "to 96 DPI. Calibration and gaze stay correct in render pixels, yet anything in " +
+                       "CENTIMETRES (reported RMSE, accuracy verdict, and recorded physical screen size) " +
+                       "will be approximate unless the display reports a valid physical DPI.";
+            }
+
             if (RenderMatchesDisplay && !Application.isEditor)
                 return "";
 
+            if (RenderMatchesDisplay && Application.isEditor)
+            {
+                return $"UnitEye: running inside the Editor Game view ({Screen.width}x{Screen.height}). " +
+                       "Calibration and gaze stay correct in Game view units, yet anything in CENTIMETRES " +
+                       "(the reported RMSE, the accuracy verdict, and a recording's screen size and " +
+                       "degrees-of-visual-angle) assumes the Game view is unscaled at 1:1 physical pixels. " +
+                       "For measurements you intend to compare or donate, run a fullscreen build, or a " +
+                       "Game view at scale 1x with Maximize On Play.";
+            }
+
             var where = Application.isEditor ? "the Game view" : "the window";
-            return $"UnitEye: {where} is {Screen.width}x{Screen.height} but the display reports " +
-                   $"{DisplayWidth}x{DisplayHeight}. Calibration and gaze stay correct in these units, but " +
+            return $"UnitEye: {where} is {Screen.width}x{Screen.height} while the display reports " +
+                   $"{DisplayWidth}x{DisplayHeight}. Calibration and gaze stay correct in these units, yet " +
                    "anything in CENTIMETRES (the reported RMSE, the accuracy verdict, and a recording's " +
                    "screen size and degrees-of-visual-angle) assumes one render pixel is one physical pixel " +
                    "and will be wrong by that ratio. For measurements you intend to compare or donate, run a " +

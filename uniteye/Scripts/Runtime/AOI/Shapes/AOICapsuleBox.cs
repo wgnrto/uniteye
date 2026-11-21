@@ -41,6 +41,8 @@ namespace UnitEye
             float X = endpoint.x - startpoint.x;
             float Y = endpoint.y - startpoint.y;
             float distance = Mathf.Sqrt(X * X + Y * Y);
+            if (distance <= 1e-6f)
+                return;
 
             //Calculate corner points
             Vector2 directionVector = (endpoint - startpoint) * (radius/distance);

@@ -20,6 +20,12 @@ namespace UnitEye
         /// <summary>Run one frame of inference. Returns true if a fresh gaze estimate is available.</summary>
         bool PerformInference(WebCamSource webcam);
 
+        /// <summary>Polls and drains any completed async GPU readback on the exact engine frame it finishes.</summary>
+        bool PollAsyncReadback();
+
+        /// <summary>True while an async GPU readback is still in flight on the GPU.</summary>
+        bool HasPendingReadback { get; }
+
         /// <summary>Raw (pre-calibration) gaze in pixels, (0,0) at the top-left.</summary>
         Vector2 RawGaze { get; }
 

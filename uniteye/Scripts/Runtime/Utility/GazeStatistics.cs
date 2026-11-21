@@ -86,7 +86,7 @@ namespace UnitEye
             accuracy = 0f; precision = 0f; whiteness = 0f; accuracyBias = Vector2.zero;
             if (perTarget == null || perTarget.Count == 0) return;
 
-            int used = 0;
+            int used = 0, usedMulti = 0;
             float sdSq = 0f, sdMagSum = 0f, s2sSum = 0f;
             for (int i = 0; i < perTarget.Count; i++)
             {
@@ -95,16 +95,23 @@ namespace UnitEye
                 used++;
                 accuracy += t.bias.magnitude;
                 accuracyBias += t.bias;
-                sdSq += t.sd.sqrMagnitude;
-                sdMagSum += t.sd.magnitude;
-                s2sSum += t.rmsS2S;
+                if (t.count > 1)
+                {
+                    usedMulti++;
+                    sdSq += t.sd.sqrMagnitude;
+                    sdMagSum += t.sd.magnitude;
+                    s2sSum += t.rmsS2S;
+                }
             }
             if (used == 0) return;
             accuracy /= used;
             accuracyBias /= used;
-            precision = Mathf.Sqrt(sdSq / used);
-            float meanSd = sdMagSum / used;
-            whiteness = meanSd > 1e-9f ? (s2sSum / used) / meanSd : 0f;
+            if (usedMulti > 0)
+            {
+                precision = Mathf.Sqrt(sdSq / usedMulti);
+                float meanSd = sdMagSum / usedMulti;
+                whiteness = meanSd > 1e-9f ? (s2sSum / usedMulti) / meanSd : 0f;
+            }
         }
     }
 }

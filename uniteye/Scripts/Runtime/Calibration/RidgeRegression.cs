@@ -24,9 +24,7 @@ namespace UnitEye
             if (reader.TokenType == JsonToken.Null) return null;
 
             JArray jArray = JArray.Load(reader);
-            var target = Vector<float>.Build.Dense(jArray.ToObject<float[]>(serializer));
-            serializer.Populate(jArray.CreateReader(), target);
-            return target;
+            return Vector<float>.Build.Dense(jArray.ToObject<float[]>(serializer));
         }
 
         public override bool CanWrite
@@ -84,7 +82,7 @@ namespace UnitEye
         /// <returns>RidgeRegression instance</returns>
         private static RidgeRegression Load(string filename, string defaultFilename)
         {
-            string filepath = Application.streamingAssetsPath + $"/Calibration Files/RidgeRegression/{filename}";
+            string filepath = CalibrationModelStore.GetReadablePath("RidgeRegression", filename);
             string jsonString;
 
             try
@@ -149,13 +147,12 @@ namespace UnitEye
         /// <param name="filename">Filename without a path</param>
         public void Save(string filename)
         {
-            string filepath = Application.streamingAssetsPath + $"/Calibration Files/RidgeRegression/";
-            if (!Directory.Exists(filepath))
-                Directory.CreateDirectory(filepath);
-            filepath += filename;
+            string dir = CalibrationModelStore.GetWritableDirectory("RidgeRegression");
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
 
             var json = JsonConvert.SerializeObject(this);
-            File.WriteAllText(filepath, json);
+            File.WriteAllText(CalibrationModelStore.GetWritablePath("RidgeRegression", filename), json);
         }
 
         /// <summary>
@@ -170,6 +167,12 @@ namespace UnitEye
         private const float HuberTuning = 1.345f;    // 95% efficiency vs least squares under normal residuals
 
         public float Train(float[][] x, float[] y)
+        {
+            TrainCore(x, y);
+            return Test(x, y);
+        }
+
+        internal void TrainCore(float[][] x, float[] y)
         {
             var input = Matrix<float>.Build.DenseOfRowArrays(x);
 
@@ -202,8 +205,6 @@ namespace UnitEye
                     weights = HuberWeights(input, output, W);
             }
             B = W[0];
-
-            return Test(x, y);
         }
 
         /// <summary>
@@ -225,16 +226,28 @@ namespace UnitEye
             }
 
             var A = weightedInput.TransposeThisAndMultiply(weightedInput);
-            Matrix<float> I = Matrix<float>.Build.DenseIdentity(A.RowCount, A.RowCount);
-            I *= Lambda;
-            //Standard ridge does NOT penalize the intercept (see the note that used to live in Train): with
-            //standardized zero-mean features the bias column is orthogonal to the rest, so penalizing it just
-            //shrinks every prediction toward screen coordinate 0.
-            if (Affine)
-                I[0, 0] = 0f;
-            A += I;
+            int startCol = Affine ? 1 : 0;
+            for (int d = startCol; d < A.RowCount; d++)
+                A[d, d] += Lambda;
 
-            return A.QR().Solve(weightedInput.TransposeThisAndMultiply(weightedOutput));
+            var rhs = weightedInput.TransposeThisAndMultiply(weightedOutput);
+            if (Lambda > 0f && (!Affine || A[0, 0] > 1e-6f))
+            {
+                try
+                {
+                    var chol = A.Cholesky().Solve(rhs);
+                    bool finite = true;
+                    for (int i = 0; i < chol.Count; i++)
+                        if (float.IsNaN(chol[i]) || float.IsInfinity(chol[i])) { finite = false; break; }
+                    if (finite) return chol;
+                }
+                catch
+                {
+                    // Fall back to QR if numerically indefinite in single precision.
+                }
+            }
+
+            return A.QR().Solve(rhs);
         }
 
         /// <summary>
@@ -291,22 +304,25 @@ namespace UnitEye
         /// <param name="input">Training data matrix, one sample per row</param>
         private void ComputeStandardization(Matrix<float> input)
         {
-            var mean = Vector<float>.Build.Dense(input.ColumnCount);
-            var std = Vector<float>.Build.Dense(input.ColumnCount);
+            int rows = input.RowCount;
+            int cols = input.ColumnCount;
+            var mean = Vector<float>.Build.Dense(cols);
+            var std = Vector<float>.Build.Dense(cols);
 
-            for (int c = 0; c < input.ColumnCount; c++)
+            for (int c = 0; c < cols; c++)
             {
-                var column = input.Column(c);
-
                 double sum = 0.0;
-                for (int r = 0; r < column.Count; r++)
-                    sum += column[r];
-                var columnMean = (float)(sum / column.Count);
+                for (int r = 0; r < rows; r++)
+                    sum += input[r, c];
+                var columnMean = (float)(sum / rows);
 
                 double squaredSum = 0.0;
-                for (int r = 0; r < column.Count; r++)
-                    squaredSum += (column[r] - columnMean) * (column[r] - columnMean);
-                var columnStd = (float)Math.Sqrt(squaredSum / column.Count);
+                for (int r = 0; r < rows; r++)
+                {
+                    double diff = input[r, c] - columnMean;
+                    squaredSum += diff * diff;
+                }
+                var columnStd = (float)Math.Sqrt(squaredSum / rows);
 
                 mean[c] = columnMean;
                 std[c] = columnStd < 1e-6f ? 1.0f : columnStd;
