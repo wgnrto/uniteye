@@ -18,7 +18,7 @@ namespace UnitEye
 
         public AOICombined(string uID, List<AOI> aoiList, bool inverted = false, bool enabled = true, bool visualized = true) : base(uID, inverted, enabled, visualized)
         {
-            this._aoiList = aoiList;
+            this._aoiList = aoiList ?? new List<AOI>();
         }
 
         /// <summary>
@@ -27,8 +27,7 @@ namespace UnitEye
         /// <param name="aoi"></param>
         public void AddAOI(AOI aoi)
         {
-            //Debug.Log($"Adding AOI to {this.uID}: {aoi.uID} | {aoi.inverted}");
-            _aoiList.Add(aoi);
+            if (aoi != null) _aoiList.Add(aoi);
         }
 
         /// <summary>
@@ -47,7 +46,7 @@ namespace UnitEye
         public void RemoveAOI(string uID)
         {
             //RemoveAll instead of foreach+Remove, which throws InvalidOperationException on a match.
-            _aoiList.RemoveAll(aoi => aoi.uID == uID);
+            _aoiList.RemoveAll(aoi => aoi != null && aoi.uID == uID);
         }
 
         /// <summary>
@@ -61,9 +60,10 @@ namespace UnitEye
 
             foreach (AOI aoi in _aoiList)
             {
-                if (aoi.CheckAOI(point))
+                if (aoi != null && aoi.enabled && aoi.CheckAOIWithMargin(point))
                 {
                     aoiFound = true;
+                    break;
                 }
             }
 
@@ -78,7 +78,8 @@ namespace UnitEye
         {
             foreach (AOI aoi in _aoiList)
             {
-                aoi.Visualize(color);
+                if (aoi != null && aoi.enabled && aoi.visualized)
+                    aoi.Visualize(color);
             }
         }
     }

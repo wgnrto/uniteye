@@ -51,20 +51,19 @@ namespace UnitEye
         }
 
         /// <summary>
-        /// Rejects unstable/undersampled boundary-dwell samples, then spatially balances what remains so a
-        /// dense sweep cannot outweigh the screen extremes. All list inputs are parallel and index-aligned.
-        /// Throws InvalidOperationException when nothing survives — a degenerate capture must not train.
+        /// Rejects unstable/undersampled boundary-dwell samples and returns the UNIQUE accepted samples prior
+        /// to spatial oversampling. Splitting into train/holdout and CV folds BEFORE spatial balancing prevents
+        /// duplicate oversampled copies from appearing in both train and holdout partitions.
         /// </summary>
-        /// <param name="report">Human-readable kept/rejected summary; the caller decides whether to log it.</param>
-        public static void Build(
+        public static void FilterAccepted(
             IReadOnlyList<float[]> xData,
             IReadOnlyList<float> yXData, IReadOnlyList<float> yYData, IReadOnlyList<Vector2> yData,
             IReadOnlyList<Vector2> sampleTargets,
             IReadOnlyList<bool> capturedAtDwell, IReadOnlyList<bool> fromHeadRotation,
             float screenWidth, float screenHeight,
             int minimumCornerSamples, float cornerOutlierZScore,
-            out float[][] features, out float[] targetsX, out float[] targetsY, out Vector2[] targets,
-            out string report)
+            out float[][] acceptedFeatures, out float[] acceptedX, out float[] acceptedY, out Vector2[] acceptedTargets,
+            out int rejectedCount, out string report)
         {
             var keep = new bool[xData.Count];
             for (var i = 0; i < keep.Length; i++)
@@ -130,21 +129,52 @@ namespace UnitEye
                 }
             }
 
-            var acceptedFeatures = new List<float[]>();
-            var acceptedX = new List<float>();
-            var acceptedY = new List<float>();
-            var acceptedTargets = new List<Vector2>();
+            var featList = new List<float[]>(xData.Count);
+            var xList = new List<float>(xData.Count);
+            var yList = new List<float>(xData.Count);
+            var targetList = new List<Vector2>(xData.Count);
             for (var i = 0; i < xData.Count; i++)
             {
                 if (!keep[i]) continue;
-                acceptedFeatures.Add(xData[i]);
-                acceptedX.Add(yXData[i]);
-                acceptedY.Add(yYData[i]);
-                acceptedTargets.Add(yData[i]);
+                featList.Add(xData[i]);
+                xList.Add(yXData[i]);
+                yList.Add(yYData[i]);
+                targetList.Add(yData[i]);
             }
-            if (acceptedFeatures.Count == 0)
+            if (featList.Count == 0)
                 throw new InvalidOperationException("No valid calibration samples remain after corner quality checks. " +
                     "Increase Corner Dwell Seconds, lower Minimum Corner Samples, or relax Corner Outlier Z Score.");
+
+            acceptedFeatures = featList.ToArray();
+            acceptedX = xList.ToArray();
+            acceptedY = yList.ToArray();
+            acceptedTargets = targetList.ToArray();
+            rejectedCount = rejected;
+            report = $"Calibration kept {acceptedFeatures.Length}/{xData.Count} unique samples " +
+                     $"({rejected} unstable/undersampled boundary samples rejected).";
+        }
+
+        /// <summary>
+        /// Rejects unstable/undersampled boundary-dwell samples, then spatially balances what remains so a
+        /// dense sweep cannot outweigh the screen extremes. All list inputs are parallel and index-aligned.
+        /// Throws InvalidOperationException when nothing survives — a degenerate capture must not train.
+        /// </summary>
+        /// <param name="report">Human-readable kept/rejected summary; the caller decides whether to log it.</param>
+        public static void Build(
+            IReadOnlyList<float[]> xData,
+            IReadOnlyList<float> yXData, IReadOnlyList<float> yYData, IReadOnlyList<Vector2> yData,
+            IReadOnlyList<Vector2> sampleTargets,
+            IReadOnlyList<bool> capturedAtDwell, IReadOnlyList<bool> fromHeadRotation,
+            float screenWidth, float screenHeight,
+            int minimumCornerSamples, float cornerOutlierZScore,
+            out float[][] features, out float[] targetsX, out float[] targetsY, out Vector2[] targets,
+            out string report)
+        {
+            FilterAccepted(
+                xData, yXData, yYData, yData, sampleTargets, capturedAtDwell, fromHeadRotation,
+                screenWidth, screenHeight, minimumCornerSamples, cornerOutlierZScore,
+                out var acceptedFeatures, out var acceptedX, out var acceptedY, out var acceptedTargets,
+                out var rejected, out _);
 
             var selected = RidgeCalibrationTrainer.SpatiallyBalancedIndices(
                 acceptedX, acceptedY, new System.Random(SpatialBalancingSeed));
@@ -160,7 +190,7 @@ namespace UnitEye
                 targetsY[i] = acceptedY[index];
                 targets[i] = acceptedTargets[index];
             }
-            report = $"Calibration kept {acceptedFeatures.Count}/{xData.Count} raw samples " +
+            report = $"Calibration kept {acceptedFeatures.Length}/{xData.Count} raw samples " +
                      $"({rejected} unstable/undersampled boundary samples rejected), spatially balanced to {features.Length}.";
         }
     }

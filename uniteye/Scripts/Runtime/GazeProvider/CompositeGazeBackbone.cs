@@ -25,6 +25,7 @@ namespace UnitEye
         private readonly HomulerEyeMURunner _eyeMU;
         private readonly GazeEstimationRunner _direction;
         private readonly float[] _features = new float[FeatureCount];
+        private bool _eyeMUReady, _directionReady, _discardPartial;
 
         public CompositeGazeBackbone(HomulerEyeMURunner eyeMU, GazeEstimationRunner direction)
         {
@@ -32,11 +33,45 @@ namespace UnitEye
             _direction = direction;
         }
 
+        public bool HasPendingReadback => _eyeMU.HasPendingReadback || _direction.HasPendingReadback;
+
+        public bool PollAsyncReadback()
+        {
+            if (_eyeMU.PollAsyncReadback()) _eyeMUReady = true;
+            if (_direction.PollAsyncReadback()) _directionReady = true;
+
+            if (!HasPendingReadback && (_eyeMUReady || _directionReady))
+            {
+                bool both = _eyeMUReady && _directionReady && !_discardPartial;
+                _eyeMUReady = false;
+                _directionReady = false;
+                _discardPartial = false;
+                return both;
+            }
+            return false;
+        }
+
         public bool PerformInference(WebCamSource webcam)
         {
-            //Both must succeed; short-circuit order runs EyeMU first (it is the cheaper reject on a bad
-            //frame: its eye-crop bounds check fails before any GPU work).
-            return _eyeMU.PerformInference(webcam) && _direction.PerformInference(webcam);
+            bool published = PollAsyncReadback();
+            if (HasPendingReadback)
+                return published;
+
+            //Evaluate both sub-backbones without short-circuiting in async mode so both schedule on the
+            //exact same camera frame and never drift a frame apart.
+            bool eyeSync = _eyeMU.PerformInference(webcam);
+            if (!eyeSync && !_eyeMU.HasPendingReadback)
+                return published;
+
+            bool dirSync = _direction.PerformInference(webcam);
+            if (_eyeMU.HasPendingReadback || _direction.HasPendingReadback)
+            {
+                if (_eyeMU.HasPendingReadback != _direction.HasPendingReadback)
+                    _discardPartial = true;
+                return published;
+            }
+
+            return (eyeSync && dirSync) || published;
         }
 
         public Vector2 RawGaze => _eyeMU.RawGaze;

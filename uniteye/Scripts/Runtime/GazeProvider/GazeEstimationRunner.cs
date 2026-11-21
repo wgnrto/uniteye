@@ -85,6 +85,8 @@ namespace UnitEye
         private readonly bool _asyncReadback;
         private bool _pendingReadback;
         private Tensor<float> _outYaw, _outPitch, _outEmbedding;   // worker-owned output refs (not disposed)
+        private float _pendingYaw, _pendingPitch, _pendingSigmaYaw, _pendingSigmaPitch;
+        private float _rollPending;
         private float[] _embeddingPublished;    // latest embedding readback (worker-owned buffer copy)
         //Tail layout: [head4, iris4, context11] (see TailLength / HomulerFunctions.FillTailContext).
         private const int TailLength = 8 + HomulerFunctions.ContextTailCount;
@@ -96,6 +98,8 @@ namespace UnitEye
         //DecodeAngleRadians(float[], out float)). NaN until the first inference publishes, which is what
         //"this backbone has no uncertainty to report" means to every consumer.
         private Vector2 _sigmaPublished = new Vector2(float.NaN, float.NaN);
+
+        public bool HasPendingReadback => _asyncReadback && _pendingReadback;
 
         //Horizontal-flip test-time augmentation: run the crop AND its mirror, negate the mirrored yaw,
         //average — a standard 3-8% angular-error reduction for appearance models at 2x inference cost.
@@ -282,41 +286,101 @@ namespace UnitEye
         public RenderTexture LeftEyeTexture => _faceCrop;   // the face crop doubles as the debug thumbnail
         public RenderTexture RightEyeTexture => _faceCrop;
 
+        /// <summary>
+        /// Polls in-flight async GPU readbacks and drains each tensor on the exact engine frame its
+        /// AsyncGPUReadbackRequest finishes, preventing Unity's single-frame staging buffer expiration.
+        /// </summary>
+        public bool PollAsyncReadback()
+        {
+            if (!_asyncReadback || !_pendingReadback)
+                return false;
+
+            try
+            {
+                if (_outYaw != null && _outYaw.IsReadbackRequestDone())
+                {
+                    _pendingYaw = DecodeAngleRadians(_outYaw.DownloadToArray(), out _pendingSigmaYaw);
+                    _outYaw = null;
+                }
+                if (_outPitch != null && _outPitch.IsReadbackRequestDone())
+                {
+                    _pendingPitch = DecodeAngleRadians(_outPitch.DownloadToArray(), out _pendingSigmaPitch);
+                    _outPitch = null;
+                }
+                if (_outEmbedding != null && _outEmbedding.IsReadbackRequestDone())
+                {
+                    _embeddingPublished = _outEmbedding.DownloadToArray();
+                    EnsureEmbeddingSized(_embeddingPublished);
+                    _outEmbedding = null;
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnitEyeLog.Exception(e);
+                _outYaw = null;
+                _outPitch = null;
+                _outEmbedding = null;
+                _pendingReadback = false;
+                return false;
+            }
+
+            if (_outYaw != null || _outPitch != null || _outEmbedding != null)
+                return false;
+
+            System.Array.Copy(_tailPending, _tailPublished, _tailPublished.Length);
+            _timestampPublished = _timestampPending;
+            UnrotateGazeAngles(_pendingYaw, _pendingPitch, _pendingSigmaYaw, _pendingSigmaPitch, _rollPending,
+                out float camYaw, out float camPitch, out float camSigmaYaw, out float camSigmaPitch);
+            PublishResult(camYaw, camPitch, camSigmaYaw, camSigmaPitch, _tailPublished);
+            _pendingReadback = false;
+            return true;
+        }
+
+        /// <summary>
+        /// Maps gaze angles and per-axis uncertainty decoded from a roll-normalized (upright) face crop back
+        /// into the unrotated camera coordinate frame.
+        /// </summary>
+        public static void UnrotateGazeAngles(float yaw, float pitch, float sigmaYaw, float sigmaPitch,
+            float rollRadians, out float camYaw, out float camPitch, out float camSigmaYaw, out float camSigmaPitch)
+        {
+            if (Mathf.Abs(rollRadians) < 1e-6f)
+            {
+                camYaw = yaw;
+                camPitch = pitch;
+                camSigmaYaw = sigmaYaw;
+                camSigmaPitch = sigmaPitch;
+                return;
+            }
+            float c = Mathf.Cos(rollRadians);
+            float s = Mathf.Sin(rollRadians);
+            camYaw = c * yaw - s * pitch;
+            camPitch = s * yaw + c * pitch;
+            if (float.IsNaN(sigmaYaw) || float.IsNaN(sigmaPitch))
+            {
+                camSigmaYaw = sigmaYaw;
+                camSigmaPitch = sigmaPitch;
+            }
+            else
+            {
+                float vx = sigmaYaw * sigmaYaw;
+                float vy = sigmaPitch * sigmaPitch;
+                camSigmaYaw = Mathf.Sqrt(c * c * vx + s * s * vy);
+                camSigmaPitch = Mathf.Sqrt(s * s * vx + c * c * vy);
+            }
+        }
+
         public bool PerformInference(WebCamSource webcam)
         {
             if (!_enabled)
                 return false;
 
+            bool published = PollAsyncReadback();
+            if (_asyncReadback && _pendingReadback)
+                return published;
+
             var tex = (WebCamTexture)webcam.GetCurrentTexture();
             if (!webcam.isPrepared || tex == null)
-                return false;
-
-            //Async mode: publish the previous inference first once its readback is done; never schedule
-            //over in-flight tensors (see HomulerEyeMURunner.PerformInference for the full rationale).
-            bool published = false;
-            if (_asyncReadback && _pendingReadback)
-            {
-                if (!_outYaw.IsReadbackRequestDone() || !_outPitch.IsReadbackRequestDone() ||
-                    (_outEmbedding != null && !_outEmbedding.IsReadbackRequestDone()))
-                    return false;
-                float pendingYaw = DecodeAngleRadians(_outYaw.DownloadToArray(), out float pendingSigmaYaw);
-                float pendingPitch = DecodeAngleRadians(_outPitch.DownloadToArray(), out float pendingSigmaPitch);
-                if (_outEmbedding != null)
-                {
-                    _embeddingPublished = _outEmbedding.DownloadToArray();
-                    EnsureEmbeddingSized(_embeddingPublished);
-                }
-                System.Array.Copy(_tailPending, _tailPublished, _tailPublished.Length);
-                _timestampPublished = _timestampPending;
-                //The sigma comes out of THIS readback, so unlike the head/iris tail it needs no
-                //snapshot-at-schedule-time: it is already consistent with the angles it was decoded from.
-                PublishResult(pendingYaw, pendingPitch, pendingSigmaYaw, pendingSigmaPitch, _tailPublished);
-                _outYaw = null;
-                _outPitch = null;
-                _outEmbedding = null;
-                _pendingReadback = false;
-                published = true;
-            }
+                return published;
 
             // Crop from the FaceMesh LANDMARK bounding box, NOT FaceRects: in the (NonBlocking)Sync
             // running mode this project uses, FaceMeshSolution only populates FaceLandmarks (via
@@ -336,35 +400,30 @@ namespace UnitEye
             float minX = bbox.xMin, minY = bbox.yMin, maxX = bbox.xMax, maxY = bbox.yMax;
 
             // Square crop in PIXELS (so the 448x448 input isn't stretched), centred on the face with
-            // FACE_CROP_SCALE padding for context, expressed as a bottom-left-UV Graphics.Blit.
+            // FACE_CROP_SCALE padding for context, expressed as bottom-left-UV scale/offset.
             float cxPx = (minX + maxX) * 0.5f * srcW;
             float cyPx = (minY + maxY) * 0.5f * srcH;                   // y-down
             float sidePx = Mathf.Max((maxX - minX) * srcW, (maxY - minY) * srcH) * FACE_CROP_SCALE;
             if (sidePx <= 1f)
                 return published;
-            // Keep the crop inside the frame: with the 1.4x padding the square leaves the source whenever
-            // the face nears an edge, and out-of-range UVs sample wrap-around/clamp-smeared pixels — the
-            // model then sees the opposite frame edge inside the "face". Shrink to fit if the frame is
-            // smaller than the padded square, then shift the square fully inside (mirrors the bounds
-            // check BlitEyeCrop does for the eye crops).
             sidePx = Mathf.Min(sidePx, Mathf.Min(srcW, srcH));
             float cyUpPx = srcH - cyPx;                                 // to y-up
             float x0 = Mathf.Clamp(cxPx - sidePx * 0.5f, 0f, srcW - sidePx);
             float y0 = Mathf.Clamp(cyUpPx - sidePx * 0.5f, 0f, srcH - sidePx);
             var scale = new Vector2(sidePx / srcW, sidePx / srcH);
             var offset = new Vector2(x0 / srcW, y0 / srcH);
+
+            // Populate debug/recording thumbnail once per frame; inference samples `tex` directly in the
+            // compute shader with bilinear interpolation and fused roll-normalization.
             Graphics.Blit(tex, _faceCrop, scale, offset);
 
-            // ImageNet-normalize into the tensor texture, then convert to the (1,3,448,448) NCHW tensor.
-            // Roll-normalization (2D data normalization): the preprocess samples rotated coordinates so
-            // the model sees an UPRIGHT face regardless of head roll — laptop users tilt constantly, and
-            // a rolled face inside an axis-aligned crop is off-distribution for the model while the
-            // calibration only has a linear roll feature to chase the resulting error.
             float roll = _rollNormalize ? _faceMesh.HeadRoll : 0f;
             _preprocess.SetFloat("_RotCos", Mathf.Cos(roll));
             _preprocess.SetFloat("_RotSin", Mathf.Sin(roll));
+            _preprocess.SetVector("_CropScale", new Vector4(scale.x, scale.y, 0f, 0f));
+            _preprocess.SetVector("_CropOffset", new Vector4(offset.x, offset.y, 0f, 0f));
             _preprocess.SetInt("_Size", _inputSize);
-            _preprocess.SetTexture(0, "_Texture", _faceCrop);
+            _preprocess.SetTexture(0, "_Texture", tex);
             _preprocess.SetTexture(0, "_Tensor", _tensorTex);
             _preprocess.Dispatch(0, _dispatchGroups, _dispatchGroups, 1);
             TextureConverter.ToTensor(_tensorTex, _inputTensor, _nchw);
@@ -381,13 +440,14 @@ namespace UnitEye
 
             if (_asyncReadback)
             {
-                //Kick off the non-blocking readbacks; results publish on a later call.
+                //Kick off the non-blocking readbacks; results publish once PollAsyncReadback drains them.
                 yawT.ReadbackRequest();
                 pitchT.ReadbackRequest();
                 embeddingT?.ReadbackRequest();
                 _outYaw = yawT;
                 _outPitch = pitchT;
                 _outEmbedding = embeddingT;
+                _rollPending = roll;
                 CaptureFeatureTail(_tailPending);
                 _timestampPending = _faceMesh.LastCaptureTimestamp;
                 _pendingReadback = true;
@@ -408,10 +468,11 @@ namespace UnitEye
             //(a mirrored face looks the opposite horizontal way; pitch is mirror-invariant).
             if (_flipAugmentation)
             {
-                Graphics.Blit(tex, _faceCrop, new Vector2(-scale.x, scale.y), new Vector2(offset.x + scale.x, offset.y));
                 //A mirrored face carries NEGATED roll, so the roll-normalization rotates the other way.
-                _preprocess.SetFloat("_RotSin", Mathf.Sin(_rollNormalize ? -_faceMesh.HeadRoll : 0f));
-                _preprocess.SetTexture(0, "_Texture", _faceCrop);
+                _preprocess.SetFloat("_RotSin", Mathf.Sin(-roll));
+                _preprocess.SetVector("_CropScale", new Vector4(-scale.x, scale.y, 0f, 0f));
+                _preprocess.SetVector("_CropOffset", new Vector4(offset.x + scale.x, offset.y, 0f, 0f));
+                _preprocess.SetTexture(0, "_Texture", tex);
                 _preprocess.SetTexture(0, "_Tensor", _tensorTex);
                 _preprocess.Dispatch(0, _dispatchGroups, _dispatchGroups, 1);
                 TextureConverter.ToTensor(_tensorTex, _inputTensor, _nchw);
@@ -423,19 +484,16 @@ namespace UnitEye
                 {
                     yaw = (yaw - DecodeAngleRadians(yawM.DownloadToArray(), out float mirrorSigmaYaw)) * 0.5f;
                     pitch = (pitch + DecodeAngleRadians(pitchM.DownloadToArray(), out float mirrorSigmaPitch)) * 0.5f;
-                    //Both passes measure the same underlying breadth, so the averaged estimate carries the
-                    //averaged spread. (Averaging two estimates would strictly shrink the error of the MEAN,
-                    //but only if their errors were independent — two views of one frame are not.)
                     sigmaYaw = (sigmaYaw + mirrorSigmaYaw) * 0.5f;
                     sigmaPitch = (sigmaPitch + mirrorSigmaPitch) * 0.5f;
                 }
-                //Restore the unmirrored crop so the debug thumbnail matches what the primary pass saw.
-                Graphics.Blit(tex, _faceCrop, scale, offset);
             }
 
+            UnrotateGazeAngles(yaw, pitch, sigmaYaw, sigmaPitch, roll,
+                out float camYaw, out float camPitch, out float camSigmaYaw, out float camSigmaPitch);
             CaptureFeatureTail(_tailPublished);
             _timestampPublished = _faceMesh.LastCaptureTimestamp;
-            PublishResult(yaw, pitch, sigmaYaw, sigmaPitch, _tailPublished);
+            PublishResult(camYaw, camPitch, camSigmaYaw, camSigmaPitch, _tailPublished);
             return true;
         }
 

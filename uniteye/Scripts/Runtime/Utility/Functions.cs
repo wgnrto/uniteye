@@ -30,6 +30,8 @@ namespace UnitEye
         /// <returns>mm in float</returns>
         public static float PixelsToMm(float pixels, float dpi)
         {
+            if (dpi <= 0f || float.IsNaN(dpi) || float.IsInfinity(dpi))
+                dpi = 96f;
             return pixels * 25.4f / dpi;
         }
 

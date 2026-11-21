@@ -27,6 +27,17 @@ namespace UnitEye
         //EyeFeature() is 8 distance calcs + trig; compute it once per Tick and reuse for blink, drowsy
         //and the CSV EyeFeature accessor instead of recomputing it 3x per frame.
         private float _eyeFeature = float.NaN;
+        private string _lastCameraName = "";
+
+        private struct AuxSample
+        {
+            public float eyeFeature;
+            public bool isDrowsy;
+            public bool isBlinking;
+            public float distanceMm;
+        }
+        private AuxSample _pendingAux;
+        private bool _hasPendingAux;
 
         //Whether the backbones pipeline their GPU readbacks (see HomulerGaze._asyncGpuReadback).
         private readonly bool _asyncReadback;
@@ -76,7 +87,8 @@ namespace UnitEye
                     "Add the component(s) to it, or replace it with the UnitEyeUsingHomulerMediapipe prefab.");
             }
 
-            _eyeHelper = new HomulerEyeHelper(_faceMesh, _webcam.name);
+            _lastCameraName = !string.IsNullOrEmpty(_webcam.sourceName) ? _webcam.sourceName : "";
+            _eyeHelper = new HomulerEyeHelper(_faceMesh, _lastCameraName);
             _asyncReadback = asyncGpuReadback;
             _flipAugmentation = flipAugmentation;
             _rollNormalize = rollNormalize;
@@ -111,6 +123,7 @@ namespace UnitEye
         public void SetBackbone(GazeBackbone backbone)
         {
             _backbone?.Dispose();
+            _hasPendingAux = false;
             _backbone = CreateBackbone(backbone);
         }
 
@@ -162,40 +175,90 @@ namespace UnitEye
 
         public bool Tick()
         {
+            //Always drain completed async GPU readbacks on the exact engine frame they finish, even when the
+            //webcam delivered no new frame this render tick (Unity invalidates AsyncGPUReadbackRequest native
+            //buffers on the following engine frame).
+            bool publishedAsync = _backbone.PollAsyncReadback();
+            if (publishedAsync)
+            {
+                _rawGaze = _backbone.RawGaze;
+                BinocularIrisDisagreement = ReadIrisDisagreementFromFeatures();
+                if (_hasPendingAux)
+                {
+                    _eyeFeature = _pendingAux.eyeFeature;
+                    _isDrowsy = _pendingAux.isDrowsy;
+                    _isBlinking = _pendingAux.isBlinking;
+                    _distanceMm = _pendingAux.distanceMm;
+                    _hasPendingAux = false;
+                }
+            }
+
             // FaceMeshSolution only updates landmarks when the webcam provides a new image. Running the
             // gaze model again between camera frames would turn one observation into several identical
             // calibration/evaluation samples and make the filter appear more responsive than the camera.
             if (_webcam == null || !_webcam.didUpdateThisFrame)
-                return false;
+                return publishedAsync;
+
+            if (!string.IsNullOrEmpty(_webcam.sourceName) && _webcam.sourceName != _lastCameraName)
+            {
+                _lastCameraName = _webcam.sourceName;
+                _eyeHelper.CameraChanged(_lastCameraName);
+            }
 
             TrackCameraFrameRate();
 
-            if (!_backbone.PerformInference(_webcam))
-                return false;
+            if (_backbone.HasPendingReadback)
+                return publishedAsync;
 
-            _rawGaze = _backbone.RawGaze;
-            //Compute EyeFeature once, then derive blink/drowsy from it (was recomputed inside each call).
-            _eyeFeature = _eyeHelper.EyeFeature();
-            _isDrowsy = _eyeHelper.IsDrowsyFromFeature(_eyeFeature);
-            //Blink gate: prefer the eyeBlink blendshapes (dedicated lid-closure signal; no downward-gaze
-            //false positives, no per-user threshold calibration) and fall back to the EAR heuristic when
-            //blendshapes are unavailable. Drowsiness stays on the EAR feature (its calibrated statistics
-            //describe the smoothed EAR, not the blendshape).
-            _isBlinking = _faceMesh != null && _faceMesh.HasBlendshapes
-                ? Mathf.Max(_faceMesh.EyeBlinkLeft, _faceMesh.EyeBlinkRight) > BlinkBlendshapeThreshold
-                : _eyeHelper.IsBlinkingFromFeature(_eyeFeature);
-            _distanceMm = _eyeHelper.CalculateCamDistanceFocal();
+            //Snapshot auxiliary signals from the current camera frame BEFORE inference schedules so async
+            //mode pairs frame N's blink/drowsy/distance with frame N's gaze.
+            AuxSample currentAux = default;
+            bool canComputeAux = _faceMesh != null && _faceMesh.FaceLandmarks != null;
+            if (canComputeAux)
+            {
+                currentAux.eyeFeature = _eyeHelper.EyeFeature();
+                currentAux.isDrowsy = _eyeHelper.IsDrowsyFromFeature(currentAux.eyeFeature);
+                currentAux.isBlinking = _faceMesh.HasBlendshapes
+                    ? Mathf.Max(_faceMesh.EyeBlinkLeft, _faceMesh.EyeBlinkRight) > BlinkBlendshapeThreshold
+                    : _eyeHelper.IsBlinkingFromFeature(currentAux.eyeFeature);
+                currentAux.distanceMm = _eyeHelper.CalculateCamDistanceFocal();
+            }
+            else
+            {
+                currentAux.eyeFeature = float.NaN;
+                currentAux.distanceMm = -1000f;
+            }
 
-            //Binocular consistency: the two eyes move conjugately, so their normalized iris offsets should
-            //(nearly) agree. Disagreement is a free per-frame quality signal — it spikes on half-blinks,
-            //partial occlusion and landmark failures that the blink gate misses. Exposed for capture
-            //gates / logging / host-game confidence displays.
-            HomulerFunctions.FillIrisFeatures(_faceMesh.FaceLandmarks, _irisScratch, 0);
-            BinocularIrisDisagreement = new Vector2(_irisScratch[0] - _irisScratch[2],
-                                                    _irisScratch[1] - _irisScratch[3]).magnitude;
-            return true;
+            bool syncPublished = _backbone.PerformInference(_webcam);
+            if (_backbone.HasPendingReadback && canComputeAux)
+            {
+                _pendingAux = currentAux;
+                _hasPendingAux = true;
+            }
+
+            if (syncPublished)
+            {
+                _rawGaze = _backbone.RawGaze;
+                _eyeFeature = currentAux.eyeFeature;
+                _isDrowsy = currentAux.isDrowsy;
+                _isBlinking = currentAux.isBlinking;
+                _distanceMm = currentAux.distanceMm;
+                BinocularIrisDisagreement = ReadIrisDisagreementFromFeatures();
+                return true;
+            }
+
+            return publishedAsync;
         }
-        private readonly float[] _irisScratch = new float[4];
+
+        private float ReadIrisDisagreementFromFeatures()
+        {
+            var f = _backbone.Features;
+            int irisStart = _backbone is GazeEstimationRunner ? 11 : 15;
+            if (f == null || f.Length < irisStart + 4) return 0f;
+            float dx = f[irisStart] - f[irisStart + 2];
+            float dy = f[irisStart + 1] - f[irisStart + 3];
+            return Mathf.Sqrt(dx * dx + dy * dy);
+        }
 
         public Vector2 RawGaze => _rawGaze;
         //Returns the backbone's reused feature buffer (no per-frame copy). Valid only until the next
@@ -225,6 +288,12 @@ namespace UnitEye
         public void SetRendering(bool rendering)
         {
             if (_faceMesh != null) _faceMesh.IsRendering = rendering;
+        }
+
+        public void SetActive(bool active)
+        {
+            if (_faceMesh != null) _faceMesh.enabled = active;
+            if (_webcam != null) _webcam.enabled = active;
         }
 
         public bool IsCalibratingDrowsy => _eyeHelper.Calibrating;

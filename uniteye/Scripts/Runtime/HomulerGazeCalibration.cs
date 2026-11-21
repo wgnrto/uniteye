@@ -93,6 +93,7 @@ namespace UnitEye
 
         private bool _started = false;
         private bool _finished = false;
+        private bool _trainingComplete = false;
         private bool _finishedRound = false;
         private bool _earlyStop = false;
         private bool _showMessage = true;
@@ -197,6 +198,7 @@ namespace UnitEye
             //performs the initial point setup.
             _started = false;
             _finished = false;
+            _trainingComplete = false;
             _finishedRound = false;
             _earlyStop = false;
             _showMessage = true;
@@ -343,6 +345,7 @@ namespace UnitEye
             bool leftClick = mouse != null && mouse.leftButton.wasPressedThisFrame;
             bool rightClick = mouse != null && mouse.rightButton.wasPressedThisFrame;
             bool escapePressed = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+            bool earlyStopPressed = keyboard != null && keyboard[Key.S].wasPressedThisFrame;
 
 #if ENABLE_LEGACY_INPUT_MANAGER
             //Belt and braces: in at least one host player (VIP-Sim, a transparent topmost
@@ -354,28 +357,26 @@ namespace UnitEye
             leftClick |= Input.GetMouseButtonDown(0);
             rightClick |= Input.GetMouseButtonDown(1);
             escapePressed |= Input.GetKeyDown(KeyCode.Escape);
+            earlyStopPressed |= Input.GetKeyDown(KeyCode.S);
 #endif
 
-            //If finished and leftclick, signal Returned
-            if (leftClick && returnAfter && _finished)
+            bool modalOpen = _consentGate != null && _consentGate.IsShowingModal;
+
+            //If finished (and training + completion modal are done) and leftclick, signal Returned
+            if (leftClick && returnAfter && _finished && _trainingComplete && !modalOpen)
                 Returned = true;
             //If rightclick, signal Returned
-            if (rightClick && returnAfter)
+            if (rightClick && returnAfter && !modalOpen)
                 Returned = true;
-            //Escape aborts too. Right-click already did this, but calibration takes over the whole
-            //screen and nothing on it says so, so a user who wants out has no discoverable way back —
-            //in an overlay app that is click-through outside its own panel, "just right-click" is not
-            //something anyone guesses. Escape is the near-universal convention for "get me out of this
-            //modal thing". Same clean path: Returned makes HomulerGaze run UnloadCalibration, which
-            //restores the settings BackupSettings captured.
-            if (escapePressed && returnAfter)
+            //Escape aborts too.
+            if (escapePressed && returnAfter && !modalOpen)
                 Returned = true;
             //Log the cancel; a modal fullscreen overlay ending must be attributable in the player log.
             if (Returned && (rightClick || escapePressed))
                 UnitEyeLog.Info("Calibration cancelled by the user.");
             //Start on leftclick. Blocked while the consent screens are up: recording has to be answered
             //BEFORE any sample exists, or the first samples would be captured without an answer.
-            if (leftClick && !_finished && !(_consentGate != null && _consentGate.Blocking))
+            if (leftClick && !_finished && !modalOpen)
             {
                 if (!_started)
                 {
@@ -393,7 +394,7 @@ namespace UnitEye
                 _finishedRound = false;
             }
             //Stop calibration early when clicking S
-            if (keyboard != null && keyboard[Key.S].wasPressedThisFrame && _started && !_finished)
+            if (earlyStopPressed && _started && !_finished && !modalOpen)
             {
                 _earlyStop = true;
             }
@@ -509,44 +510,112 @@ namespace UnitEye
 
         System.Collections.IEnumerator Training()
         {
-            //Yield until next frame
-            yield return 0;
+            //Yield until next frame so the "Starting training..." message renders cleanly before heavy compute.
+            yield return null;
 
-            //Prepare GUI message
-            var message = $"Calibration done!\nScreen size: {Functions.PixelsToMm(Screen.width) * 0.1f}x{Functions.PixelsToMm(Screen.height) * 0.1f}cm. Unity's built in DPI value might be wrong!\n";
+            int screenW = Screen.width;
+            int screenH = Screen.height;
+            float scaleXCm = Functions.PixelsToMm(screenW) * 0.1f;
+            float scaleYCm = Functions.PixelsToMm(screenH) * 0.1f;
+            var backbone = _gaze != null ? _gaze.GazeBackbone : GazeBackbone.EyeMU;
+
+            var message = $"Calibration done!\nScreen size: {scaleXCm}x{scaleYCm}cm. Unity's built in DPI value might be wrong!\n";
 
             //Tell the feature augmentation which feature slots are head yaw/pitch/roll for the active
             //backbone, so its extra head-pose jitter targets them (the layout differs per backbone).
             featureAugmentation.headPoseFeatureIndices =
-                _gaze != null ? HeadPoseFeatureIndices(_gaze.GazeBackbone) : null;
+                _gaze != null ? HeadPoseFeatureIndices(backbone) : null;
 
-            //Process data by calibration type. Training legitimately throws on a degenerate capture — no
-            //samples at all (face never tracked, or an early stop seconds in), or every boundary dwell group
-            //below minimumCornerSamples. An exception escaping here kills the coroutine, and since _finished
-            //was latched BEFORE StartCoroutine, LateUpdate is already inert: the overlay would sit on
-            //"Starting training…" forever, with no result, no return hint and the Gaze UI still hidden.
-            //Report the failure instead and let the rest of this method restore the UI.
-            try
+            LastHoldoutRmseCm = -1f;
+            RidgeCalibrationTrainer.Result ridgeResult = null;
+            ThinPlateSplineWarp ridgeWarp = null;
+            SimpleMLP trainedMlp = null;
+            string trainMessage = "";
+            string filterReport = "";
+            Exception trainError = null;
+
+            Action computeAction = () =>
             {
-                switch (calibrationType)
+                try
                 {
-                    case Calibrations.RidgeRegression:
-                        ReturnMessage = $"{ProcessData()} ";
-                        message += $"{ReturnMessage}\n";
-                        break;
-                    case Calibrations.MLCalibration:
-                        ReturnMessage = $"{ProcessDataNeural()} ";
-                        message += $"{ReturnMessage}\n";
-                        break;
-                    default:
-                        break;
+                    switch (calibrationType)
+                    {
+                        case Calibrations.RidgeRegression:
+                            trainMessage = ComputeRidgeModel(screenW, screenH, scaleXCm, scaleYCm,
+                                out ridgeResult, out ridgeWarp, out filterReport);
+                            break;
+                        case Calibrations.MLCalibration:
+                            trainMessage = ComputeNeuralModel(screenW, screenH, scaleXCm, scaleYCm,
+                                out trainedMlp, out filterReport);
+                            break;
+                    }
                 }
-            }
-            catch (Exception e)
+                catch (Exception ex)
+                {
+                    trainError = ex;
+                }
+            };
+
+#if !UNITY_WEBGL
+            var task = System.Threading.Tasks.Task.Run(computeAction);
+            while (!task.IsCompleted)
+                yield return null;
+#else
+            computeAction();
+#endif
+
+            if (!this || !enabled || Returned)
+                yield break;
+
+            if (!string.IsNullOrEmpty(filterReport))
+                Debug.Log(filterReport);
+
+            if (trainError != null)
             {
-                UnitEyeLog.Exception(e);
-                ReturnMessage = $"Calibration training failed: {e.Message} ";
+                UnitEyeLog.Exception(trainError);
+                ReturnMessage = $"Calibration training failed: {trainError.Message} ";
                 message += $"{ReturnMessage}\n";
+            }
+            else
+            {
+                try
+                {
+                    if (calibrationType == Calibrations.RidgeRegression && ridgeResult != null)
+                    {
+                        Debug.Log($"Total Count: {_xData.Count}, Train Count: {ridgeResult.TrainCount}, Test Count: {ridgeResult.TestCount}, " +
+                                  $"Lambda X: {ridgeResult.BestLambdaX}, Lambda Y: {ridgeResult.BestLambdaY}");
+                        if (save)
+                        {
+                            Debug.Log("Saving best models");
+                            ridgeResult.XModel.Save(CalibrationModelStore.FileName("Reg_X.json", backbone));
+                            ridgeResult.YModel.Save(CalibrationModelStore.FileName("Reg_Y.json", backbone));
+                            var warpFile = CalibrationModelStore.FileName("Warp.json", backbone);
+                            if (ridgeWarp != null)
+                                ridgeWarp.Save(warpFile);
+                            else
+                                ThinPlateSplineWarp.Delete(warpFile);
+                            GazeErrorModel.Delete(backbone);
+                        }
+                        ReturnMessage = $"{trainMessage} ";
+                        message += $"{ReturnMessage}\n";
+                    }
+                    else if (calibrationType == Calibrations.MLCalibration && trainedMlp != null)
+                    {
+                        if (save)
+                        {
+                            trainedMlp.Save(CalibrationModelStore.FileName("MLP.json", backbone));
+                            GazeErrorModel.Delete(backbone);
+                        }
+                        ReturnMessage = $"{trainMessage} ";
+                        message += $"{ReturnMessage}\n";
+                    }
+                }
+                catch (Exception saveEx)
+                {
+                    UnitEyeLog.Exception(saveEx);
+                    ReturnMessage = $"Calibration save failed: {saveEx.Message} ";
+                    message += $"{ReturnMessage}\n";
+                }
             }
 
             //Validation-gate advice (empty when the holdout accuracy is fine).
@@ -572,6 +641,8 @@ namespace UnitEye
             if (returnAfter)
                 message += $"Click to return.";
 
+            _trainingComplete = true;
+
             //Write message to debug
             _guiMessage = message;
             Debug.Log(_guiMessage);
@@ -579,7 +650,7 @@ namespace UnitEye
             //Quit if wanted
             if (quitAfterCalibration) Functions.Quit();
 
-            GetComponent<HomulerGaze>().showGazeUI = true;
+            if (_gaze != null) _gaze.showGazeUI = true;
         }
 
         //A calibration abandoned by closing play mode or destroying the object must still flush and close its
@@ -635,7 +706,10 @@ namespace UnitEye
             //above already discards the saccade, so the current position is used directly.
             Vector2 label = _crossHairPos;
             if (!_isYielding && pursuitLagSeconds > 0f)
-                label = DelayedDotPosition(_dotTrail, Time.unscaledTime, pursuitLagSeconds, _crossHairPos);
+            {
+                float sampleClock = _gaze.CaptureTimestamp > 0.0 ? (float)_gaze.CaptureTimestamp : Time.unscaledTime;
+                label = DelayedDotPosition(_dotTrail, sampleClock, pursuitLagSeconds, _crossHairPos);
+            }
 
             //Dwell fixation gate: commercial calibrations only accept samples once the eye has actually
             //settled ON the target. Gate on the raw-gaze dispersion over a short window; if the raw signal
@@ -743,6 +817,7 @@ namespace UnitEye
                                 "features they would be labelled with, so imagery is disabled for this session. " +
                                 "Turn off HomulerGaze._asyncGpuReadback to record imagery.");
             }
+            _consentGate.ApplyTierDowngrade(tier);
 
             try
             {
@@ -761,10 +836,9 @@ namespace UnitEye
                     flipV: source != null && source.FrameFlippedVertically,
                     landmarksSmoothed: source != null && source.LandmarksSmoothed,
                     landmarkCount: source != null ? source.LandmarkCount : 0,
-                    rollNormalizeCrops: true, flipAugmentation: false,
-                    //Nothing in this flow asks the participant about glasses, so recording HomulerGaze's
-                    //default would claim an answer that was never given.
-                    glassesState: "not_asked");
+                    rollNormalizeCrops: _gaze != null ? _gaze.RollNormalizeCrops : true,
+                    flipAugmentation: _gaze != null && _gaze.FlipAugmentation,
+                    glassesState: _gaze != null ? (_gaze.userWearsGlasses ? "wearing_glasses" : "no_glasses") : "not_asked");
             }
             catch (Exception e)
             {
@@ -792,82 +866,52 @@ namespace UnitEye
                 provider.IsBlinking, provider as IGazeRecordingSource, provider);
         }
 
-        private string ProcessDataNeural()
+        private string ComputeNeuralModel(int screenW, int screenH, float scaleXCm, float scaleYCm,
+            out SimpleMLP mlp, out string filterReport)
         {
-            Debug.Log("Starting MLP training");
-            Debug.Log($"Total Count: {_xData.Count}");
-
-            //LastHoldoutRmseCm is static and shared with the ridge path: clear it FIRST so a throw below
-            //can never leave a previous RidgeRegression run's number standing in for this session.
             LastHoldoutRmseCm = -1f;
+            CalibrationSampleBalancer.FilterAccepted(
+                _xData, _yXData, _yYData, _yData, _sampleTargets, _sampleCapturedAtDwell, _sampleFromHeadRotation,
+                screenW, screenH, minimumCornerSamples, cornerOutlierZScore,
+                out var features, out var acceptedX, out var acceptedY, out _,
+                out _, out filterReport);
 
-            BuildBalancedTrainingData(out var features, out _, out _, out var targets);
-            var mlp = new SimpleMLP();
-            string MLPstring = mlp.Train(features, targets, featureAugmentation);
+            var normalizedTargets = new Vector2[features.Length];
+            for (int i = 0; i < features.Length; i++)
+                normalizedTargets[i] = new Vector2(acceptedX[i], acceptedY[i]);
 
-            //Session confidence from the MLP's OWN untouched holdout, same Euclidean convention as the
-            //ridge path — otherwise the validation gate (ConfidenceAdvice, the CSV tag and any host-game
-            //gating) described whichever calibration happened to be trained last, or never fired at all
-            //when MLCalibration was the first calibration of a fresh install.
+            mlp = new SimpleMLP();
+            string mlpString = mlp.TrainNormalized(features, normalizedTargets, scaleXCm, scaleYCm,
+                featureAugmentation, balanceTraining: true);
+
             LastHoldoutRmseCm = Mathf.Sqrt(mlp.LastHoldoutRmseXCm * mlp.LastHoldoutRmseXCm +
                                            mlp.LastHoldoutRmseYCm * mlp.LastHoldoutRmseYCm);
-
-            if (save)
-            {
-                //Save under the active backbone's name so each gaze model keeps its own calibration.
-                mlp.Save(CalibrationModelStore.FileName("MLP.json", _gaze.GazeBackbone));
-                //A persisted error model measured the OLD fit's residuals — stale after retraining.
-                GazeErrorModel.Delete(_gaze.GazeBackbone);
-            }
-
-            return MLPstring;
+            return mlpString;
         }
 
-        private string ProcessData()
+        private string ComputeRidgeModel(int screenW, int screenH, float scaleXCm, float scaleYCm,
+            out RidgeCalibrationTrainer.Result result, out ThinPlateSplineWarp warp, out string filterReport)
         {
-            Debug.Log("Starting RidgeRegression training");
+            LastHoldoutRmseCm = -1f;
+            CalibrationSampleBalancer.FilterAccepted(
+                _xData, _yXData, _yYData, _yData, _sampleTargets, _sampleCapturedAtDwell, _sampleFromHeadRotation,
+                screenW, screenH, minimumCornerSamples, cornerOutlierZScore,
+                out var features, out var targetsX, out var targetsY, out _,
+                out _, out filterReport);
 
-            BuildBalancedTrainingData(out var features, out var targetsX, out var targetsY, out _);
-            var result = RidgeCalibrationTrainer.Train(
+            result = RidgeCalibrationTrainer.Train(
                 features, targetsX, targetsY,
-                rmseScaleX: Functions.PixelsToMm(Screen.width) * 0.1f,
-                rmseScaleY: Functions.PixelsToMm(Screen.height) * 0.1f,
-                augmentation: featureAugmentation);
+                rmseScaleX: scaleXCm,
+                rmseScaleY: scaleYCm,
+                augmentation: featureAugmentation,
+                balanceTraining: true);
 
-            Debug.Log($"Total Count: {_xData.Count}, Train Count: {result.TrainCount}, Test Count: {result.TestCount}, " +
-                      $"Lambda X: {result.BestLambdaX}, Lambda Y: {result.BestLambdaY}");
-
-            //Optional thin-plate-spline local correction, validated on the holdout (kept only if better).
-            //The reported ridge RMSE stays warp-free; the warp's own holdout numbers go in the note.
-            ThinPlateSplineWarp warp = null;
+            warp = null;
             var warpNote = "";
             if (enableRidgeWarp)
-                warp = TryBuildValidatedWarp(result, out warpNote);
+                warp = TryBuildValidatedWarp(result, screenW, screenH, out warpNote);
 
-            if (save)
-            {
-                Debug.Log("Saving best models");
-                //Save under the active backbone's name so each gaze model keeps its own calibration.
-                result.XModel.Save(CalibrationModelStore.FileName("Reg_X.json", _gaze.GazeBackbone));
-                result.YModel.Save(CalibrationModelStore.FileName("Reg_Y.json", _gaze.GazeBackbone));
-                //A warp is only valid for the ridge pair it was fitted on: save the kept one, and DELETE
-                //any previous warp otherwise, so a stale warp never pairs with this fresh ridge.
-                var warpFile = CalibrationModelStore.FileName("Warp.json", _gaze.GazeBackbone);
-                if (warp != null)
-                    warp.Save(warpFile);
-                else
-                    ThinPlateSplineWarp.Delete(warpFile);
-                //The persisted per-region error model measured the OLD fit's residuals — applying it to
-                //this fresh calibration would corrupt the AOI stream. Delete; the next evaluation rebuilds it.
-                GazeErrorModel.Delete(_gaze.GazeBackbone);
-            }
-
-            //Session confidence from the holdout RMSE — the calibration VALIDATION gate. Sessions in the
-            //"poor" band produce AOI logs that are largely noise; telling the user (and tagging the CSV)
-            //converts unknown-quality data into known-quality data, which is how commercial webcam
-            //trackers earn their reported numbers (session gating), applied here honestly.
             LastHoldoutRmseCm = Mathf.Sqrt(result.XRmse * result.XRmse + result.YRmse * result.YRmse);
-
             return $"RidgeRegression Training done. Best RMSE X: {result.XRmse}cm | Best RMSE Y: {result.YRmse}cm.{warpNote}";
         }
 
@@ -910,7 +954,8 @@ namespace UnitEye
         /// fitted WITHOUT the anchor at its own target. Fewer warps survive this than the old gate — the
         /// ones that stop surviving were never earning their keep.
         /// </remarks>
-        private ThinPlateSplineWarp TryBuildValidatedWarp(RidgeCalibrationTrainer.Result result, out string note)
+        private ThinPlateSplineWarp TryBuildValidatedWarp(RidgeCalibrationTrainer.Result result,
+            int screenW, int screenH, out string note)
         {
             if (result.HoldoutFeatures == null || result.HoldoutFeatures.Length < 10)
             {
@@ -936,7 +981,7 @@ namespace UnitEye
                 var prediction = new Vector2(result.XModel.Predict(_xData[i]), result.YModel.Predict(_xData[i]));
                 if (float.IsNaN(prediction.x) || float.IsNaN(prediction.y))
                     continue;
-                var key = new Vector2(_sampleTargets[i].x / Screen.width, _sampleTargets[i].y / Screen.height);
+                var key = new Vector2(_sampleTargets[i].x / screenW, _sampleTargets[i].y / screenH);
                 sums.TryGetValue(key, out var s);
                 sums[key] = s + prediction;
                 counts.TryGetValue(key, out var c);
@@ -1104,6 +1149,10 @@ namespace UnitEye
 
         private void OnGUI()
         {
+            //Yield the screen entirely while any consent or completion/withdrawal modal screen is visible.
+            //Must come BEFORE drawing backgroundColor so this component's opaque backdrop never covers consent.
+            if (_consentGate != null && _consentGate.IsShowingModal) return;
+
             //Backdrop first, so everything else in this OnGUI draws on top of it.
             if (backgroundColor.a > 0f)
             {
@@ -1113,18 +1162,14 @@ namespace UnitEye
                 GUI.color = prevBg;
             }
 
-            //Yield the screen entirely while the consent screens are up. Draw order between two components'
-            //OnGUI is not defined, so without this the calibration dot and the "click to start" message paint
-            //over (or under) a decision the participant is in the middle of making.
-            if (_consentGate != null && _consentGate.Blocking) return;
-
             //Show message on screen. Scale the font with resolution so the message (and the final RMSE)
             //stays legible on high-DPI displays; == baseline at 1080p, larger above it.
             if (_showMessage)
             {
                 float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
-                _guiStyle.fontSize = Mathf.RoundToInt((_finished ? 16 : 36) * uiScale);
-                GUI.Label(new Rect(Screen.width / 2 - Screen.width * (_finished ? 0.15f : 0.1f), Screen.height / 2 - 20, 100, 60), $"{_guiMessage}", _guiStyle);
+                _guiStyle.fontSize = Mathf.RoundToInt((_finished ? 18 : 34) * uiScale);
+                _guiStyle.wordWrap = true;
+                GUI.Label(new Rect(Screen.width * 0.1f, Screen.height * (_finished ? 0.30f : 0.40f), Screen.width * 0.8f, Screen.height * 0.50f), $"{_guiMessage}", _guiStyle);
             }
 
             //During the head-movement stage, prompt the user to rotate their head so the head-pose features

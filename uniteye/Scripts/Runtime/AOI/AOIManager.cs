@@ -158,12 +158,12 @@ namespace UnitEye
 
                 if (inside)
                 {
-                    //Debug.Log($"User looking at AOI: {aoi.uID}");
-                    //If aoi is AOITagList add hitTagList to string
-                    if (aoi is AOITagList)
+                    if (aoi is AOITagList aoit)
                     {
-                        AOITagList aoit = (AOITagList)aoi;
-                        list.Add($"{aoi.uID} hit: {string.Join(", ", aoit.hitNameList)}");
+                        string hitsText = aoit.hitNameList.Count == 1
+                            ? aoit.hitNameList[0]
+                            : string.Join(", ", aoit.hitNameList);
+                        list.Add($"{aoi.uID} hit: {hitsText}");
                     }
                     else
                     {
@@ -212,7 +212,11 @@ namespace UnitEye
         /// </summary>
         public void EnableVisualize()
         {
-            if (_visualized) return;
+            if (_aoiVisualizer != null)
+            {
+                _visualized = true;
+                return;
+            }
             if (!AttachVisualizer()) return;
             _visualized = true;
         }
@@ -222,10 +226,13 @@ namespace UnitEye
         /// </summary>
         public void DisableVisualize()
         {
-            _aoiVisualizer = Camera.main?.gameObject?.GetComponent<AOIVisualizer>();
-            if (_aoiVisualizer == null) return;
-
-            Object.Destroy(_aoiVisualizer);
+            if (_aoiVisualizer == null)
+                _aoiVisualizer = Camera.main != null ? Camera.main.GetComponent<AOIVisualizer>() : null;
+            if (_aoiVisualizer != null)
+            {
+                Object.Destroy(_aoiVisualizer);
+                _aoiVisualizer = null;
+            }
             _visualized = false;
         }
 
@@ -272,7 +279,12 @@ namespace UnitEye
         /// <returns>True if successfully attached.</returns>
         private bool AttachVisualizer()
         {
-            _aoiVisualizer = Camera.main.gameObject.AddComponent<AOIVisualizer>();
+            var mainCam = Camera.main;
+            if (mainCam == null) return false;
+
+            _aoiVisualizer = mainCam.GetComponent<AOIVisualizer>();
+            if (_aoiVisualizer == null)
+                _aoiVisualizer = mainCam.gameObject.AddComponent<AOIVisualizer>();
             if (_aoiVisualizer == null) return false;
 
             _aoiVisualizer.aoiManager = this;

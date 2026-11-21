@@ -39,6 +39,9 @@ namespace UnitEye
         private float _residualScale = 0.06f;
         private const float ResidualScaleAlpha = 0.05f;
 
+        //Raw (pre-warmup) solved affine matrix, kept separate from _a11.._a22 so degenerate updates
+        //(det <= 1e-8) preserve the last solve instead of multiplying _a11.._a22 by warmup repeatedly.
+        private float _rawA11 = 1f, _rawA12, _rawA21, _rawA22 = 1f;
         //The published correction: corrected = A * predicted + b (normalized space).
         private float _a11 = 1f, _a12, _a21, _a22 = 1f;
         private float _bx, _by;
@@ -55,6 +58,7 @@ namespace UnitEye
         {
             _rw = _rpx = _rpy = _rtx = _rty = 0f;
             _rpxpx = _rpypy = _rpxpy = _rtxpx = _rtxpy = _rtypx = _rtypy = 0f;
+            _rawA11 = 1f; _rawA12 = 0f; _rawA21 = 0f; _rawA22 = 1f;
             _a11 = 1f; _a12 = 0f; _a21 = 0f; _a22 = 1f; _bx = _by = 0f;
             _residualScale = 0.06f;
             AcceptedAnchors = RejectedAnchors = 0;
@@ -160,30 +164,31 @@ namespace UnitEye
                 {
                     float invDet = 1f / det;
                     //Row-wise least squares: [a11 a12] = [ctxx ctxy] * inv([[cxx cxy][cxy cyy]])
-                    _a11 = (ctxx * cyy - ctxy * cxy) * invDet;
-                    _a12 = (ctxy * cxx - ctxx * cxy) * invDet;
-                    _a21 = (ctyx * cyy - ctyy * cxy) * invDet;
-                    _a22 = (ctyy * cxx - ctyx * cxy) * invDet;
+                    _rawA11 = Mathf.Clamp((ctxx * cyy - ctxy * cxy) * invDet, 1f - GainCap, 1f + GainCap);
+                    _rawA12 = Mathf.Clamp((ctxy * cxx - ctxx * cxy) * invDet, -GainCap, GainCap);
+                    _rawA21 = Mathf.Clamp((ctyx * cyy - ctyy * cxy) * invDet, -GainCap, GainCap);
+                    _rawA22 = Mathf.Clamp((ctyy * cxx - ctyx * cxy) * invDet, 1f - GainCap, 1f + GainCap);
                 }
             }
-
-            //Clamp gains/shears so a pathological anchor set stays survivable.
-            _a11 = Mathf.Clamp(_a11, 1f - GainCap, 1f + GainCap);
-            _a22 = Mathf.Clamp(_a22, 1f - GainCap, 1f + GainCap);
-            _a12 = Mathf.Clamp(_a12, -GainCap, GainCap);
-            _a21 = Mathf.Clamp(_a21, -GainCap, GainCap);
+            else
+            {
+                _rawA11 = 1f; _rawA12 = 0f; _rawA21 = 0f; _rawA22 = 1f;
+            }
 
             //Warmup ramp: blend the whole correction toward identity while the decayed anchor weight is
             //small, so the first few anchors move the gaze gradually instead of jumping to their solve.
             float warmup = Mathf.Clamp01(_rw / WarmupWeight);
-            _a11 = 1f + (_a11 - 1f) * warmup;
-            _a22 = 1f + (_a22 - 1f) * warmup;
-            _a12 *= warmup;
-            _a21 *= warmup;
+            _a11 = 1f + (_rawA11 - 1f) * warmup;
+            _a22 = 1f + (_rawA22 - 1f) * warmup;
+            _a12 = _rawA12 * warmup;
+            _a21 = _rawA21 * warmup;
 
-            //Translation makes the (clamped) map pass through the anchor means, then is itself ramped + capped.
-            _bx = Mathf.Clamp((mtx - (_a11 * mpx + _a12 * mpy)) * warmup, -TranslationCap, TranslationCap);
-            _by = Mathf.Clamp((mty - (_a21 * mpx + _a22 * mpy)) * warmup, -TranslationCap, TranslationCap);
+            //Translation makes Apply(mp) = mp + warmup*(mt - mp), so warmup=0 is identity, warmup=1 passes
+            //through mt, and intermediate warmup preserves the anchor centroid without double-scaling.
+            float rawBx = warmup * (mtx - mpx) - ((_a11 - 1f) * mpx + _a12 * mpy);
+            float rawBy = warmup * (mty - mpy) - (_a21 * mpx + (_a22 - 1f) * mpy);
+            _bx = Mathf.Clamp(rawBx, -TranslationCap, TranslationCap);
+            _by = Mathf.Clamp(rawBy, -TranslationCap, TranslationCap);
         }
 
         // ---- Persistence (session warm start). The state is small and normalized, so it transfers across
@@ -192,6 +197,8 @@ namespace UnitEye
         private class State
         {
             public float a11 = 1f, a12, a21, a22 = 1f, bx, by;
+            public float rawA11 = 1f, rawA12, rawA21, rawA22 = 1f;
+            public float residualScale = 0.06f;
             public float rw, rpx, rpy, rtx, rty, rpxpx, rpypy, rpxpy, rtxpx, rtxpy, rtypx, rtypy;
             public int accepted;
             public bool affine;
@@ -202,6 +209,8 @@ namespace UnitEye
             var s = new State
             {
                 a11 = _a11, a12 = _a12, a21 = _a21, a22 = _a22, bx = _bx, by = _by,
+                rawA11 = _rawA11, rawA12 = _rawA12, rawA21 = _rawA21, rawA22 = _rawA22,
+                residualScale = _residualScale,
                 rw = _rw, rpx = _rpx, rpy = _rpy, rtx = _rtx, rty = _rty,
                 rpxpx = _rpxpx, rpypy = _rpypy, rpxpy = _rpxpy,
                 rtxpx = _rtxpx, rtxpy = _rtxpy, rtypx = _rtypx, rtypy = _rtypy,
@@ -219,6 +228,8 @@ namespace UnitEye
                 var s = JsonUtility.FromJson<State>(json);
                 if (s == null) return;
                 _a11 = s.a11; _a12 = s.a12; _a21 = s.a21; _a22 = s.a22; _bx = s.bx; _by = s.by;
+                _rawA11 = s.rawA11; _rawA12 = s.rawA12; _rawA21 = s.rawA21; _rawA22 = s.rawA22;
+                _residualScale = s.residualScale > 0f ? s.residualScale : 0.06f;
                 _rw = s.rw; _rpx = s.rpx; _rpy = s.rpy; _rtx = s.rtx; _rty = s.rty;
                 _rpxpx = s.rpxpx; _rpypy = s.rpypy; _rpxpy = s.rpxpy;
                 _rtxpx = s.rtxpx; _rtxpy = s.rtxpy; _rtypx = s.rtypx; _rtypy = s.rtypy;

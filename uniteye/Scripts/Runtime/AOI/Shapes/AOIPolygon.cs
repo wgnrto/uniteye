@@ -9,15 +9,16 @@ namespace UnitEye
     /// </summary>
     public class AOIPolygon : AOI
     {
-        public List<Vector2> points;
+        public List<Vector2> points = new List<Vector2>();
 
         public AOIPolygon(string uID, bool inverted = false, bool enabled = true, bool visualized = true) : base(uID, inverted, enabled, visualized)
         {
+            this.points = new List<Vector2>();
         }
 
         public AOIPolygon(string uID, List<Vector2> points, bool inverted = false, bool enabled = true, bool visualized = true) : base(uID, inverted, enabled, visualized)
         {
-            this.points = points;
+            this.points = points ?? new List<Vector2>();
         }
 
         /// <summary>
@@ -76,6 +77,7 @@ namespace UnitEye
         /// <param name="color"></param>
         public override void Visualize(Color color)
         {
+            if (points == null || points.Count < 2) return;
             GL.Begin(GL.LINE_STRIP);
             GL.Color(color);
             //Start from first point

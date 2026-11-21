@@ -39,8 +39,8 @@ namespace UnitEye
 
         void Start()
         {
-            //Limit Application.targetFrameRate to avoid a webcam freezing bug in Unity
-            Application.targetFrameRate = targetFramerate;
+            if (targetFramerate > 0 && targetFramerate < 999)
+                Application.targetFrameRate = targetFramerate;
 
             if (rawImage != null)
             {
@@ -83,8 +83,8 @@ namespace UnitEye
         void Update()
         {
             //Return if staticInput or no webcam update in this frame
-            if (staticInput != null) return;
-            if (!webCamTexture.didUpdateThisFrame) return;
+            if (staticInput != null || webCamTexture == null) return;
+            if (!webCamTexture.didUpdateThisFrame || webCamTexture.height <= 0 || webCamTexture.width <= 0) return;
 
             //Lazily (re)create inputRT once the camera's REAL resolution is known. The LoadCamera paths
             //defer sizing to here: right after Play() a WebCamTexture still reports the 16x16 placeholder
@@ -167,9 +167,7 @@ namespace UnitEye
 
         void OnDestroy()
         {
-            Stop();
-            if (webCamTexture != null) Destroy(webCamTexture);
-            if (inputRT != null) Destroy(inputRT);
+            ReleaseCurrentCamera();
         }
 
 
@@ -245,7 +243,7 @@ namespace UnitEye
                         ? new RenderTexture(requestedWidth, requestedHeight, 0)
                         : null;
 
-                    if (rawImage != null) rawImage.texture = webCamTexture;
+                    if (rawImage != null && !_backupped) rawImage.texture = webCamTexture;
                     webCamName = webCamDevices[i].name;
                     _webcamIndex = i;
                     found = true;
@@ -288,7 +286,7 @@ namespace UnitEye
                     : null;
 
                 webCamName = webCamDevices[index].name;
-                if (rawImage != null) rawImage.texture = webCamTexture;
+                if (rawImage != null && !_backupped) rawImage.texture = webCamTexture;
                 _webcamIndex = index;
                 found = true;
             }

@@ -24,45 +24,54 @@ namespace UnitEye
         private string _oldTag;
         private static int s_current = 0;
 
+        void Awake()
+        {
+            EnsureInitialized();
+        }
+
         void Start()
         {
-            if (gameObject.tag == "Untagged")
-            {
+            EnsureInitialized();
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_tagList != null) return;
+            if (gameObject.CompareTag("Untagged"))
                 Debug.Log("Gazeable GameObject must have a tag different than \"Untagged\"");
-            }
 
             _oldTag = gameObject.tag;
             _tagList = new AOITagList(gameObject.name + "Xray" + s_current.ToString(), xray);
             s_current++;
 
-            _tagList.AddTag(gameObject.tag);
+            _tagList.AddTag(_oldTag);
         }
 
         void Update()
         {
-            //Make AOI aware of tag change
-            if (_oldTag != gameObject.tag)
+            if (!string.IsNullOrEmpty(_oldTag) && !gameObject.CompareTag(_oldTag))
             {
                 _tagList.RemoveTag(_oldTag);
-                _tagList.AddTag(gameObject.tag);
                 _oldTag = gameObject.tag;
+                _tagList.AddTag(_oldTag);
             }
 
             //Make AOI aware of xray change
-            if (xray != _tagList.xray)
+            if (_tagList != null && xray != _tagList.xray)
                 _tagList.xray = xray;
         }
 
         void OnEnable()
         {
+            EnsureInitialized();
             //Add AOI in the next frame to allow Gaze component to initialize
             StartCoroutine(AddAOI());
         }
 
         void OnDisable()
         {
-            //Only run when app is not currently quitting to avoid NullReferenceException
-            if (!_isQuitting) UnitEyeAPI.GetAOIManagerInstance()?.RemoveAOI(_tagList);
+            if (!_isQuitting && _tagList != null)
+                UnitEyeAPI.TryGetAOIManagerInstance()?.RemoveAOI(_tagList);
         }
 
         private void OnApplicationQuit()
@@ -80,8 +89,7 @@ namespace UnitEye
         {
             _hasGazeFocus = false;
 
-            //Return false if the tag is not being focused on any gameObject or the script is not enabled
-            if (!_tagList.focused || !this.enabled)
+            if (_tagList == null || !_tagList.focused || !this.enabled)
             {
                 return false;
             }

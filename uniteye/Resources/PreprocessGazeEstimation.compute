@@ -11,10 +11,13 @@
 #pragma kernel Preprocess
 
 RWTexture2D<half4> _Tensor;
-Texture2D<half4> _Texture;
-// cos/sin of the rotation applied to sampling coords (identity: cos=1, sin=0), and the crop size.
+Texture2D<float4> _Texture;
+SamplerState sampler_LinearClamp;
+// cos/sin of the rotation applied to sampling coords (identity: cos=1, sin=0), crop UV transform, and crop size.
 float _RotCos;
 float _RotSin;
+float2 _CropScale;
+float2 _CropOffset;
 int _Size;
 
 [numthreads(8, 8, 1)]
@@ -25,15 +28,16 @@ void Preprocess(uint3 id : SV_DispatchThreadID)
     if (id.x >= (uint)_Size || id.y >= (uint)_Size)
         return;
 
-    // Rotate the sampling position around the crop centre.
+    // Rotate the sampling position around the crop centre with bilinear filtering in UV space.
     float half_size = _Size * 0.5;
     float2 centered = float2(id.xy) + 0.5 - half_size;
     float2 rotated = float2(
         _RotCos * centered.x - _RotSin * centered.y,
         _RotSin * centered.x + _RotCos * centered.y);
-    int2 src = clamp(int2(rotated + half_size), int2(0, 0), int2(_Size - 1, _Size - 1));
+    float2 cropUV = saturate((rotated + half_size) / (float)_Size);
+    float2 srcUV = cropUV * _CropScale + _CropOffset;
 
-    half3 rgb = _Texture[src].xyz;                   // webcam crop, [0,1] RGB
+    half3 rgb = (half3)_Texture.SampleLevel(sampler_LinearClamp, srcUV, 0).xyz; // webcam crop, [0,1] RGB
     half3 mean = half3(0.485h, 0.456h, 0.406h);
     half3 stdv = half3(0.229h, 0.224h, 0.225h);
     half3 n = (rgb - mean) / stdv;                   // ImageNet normalization (can be negative)

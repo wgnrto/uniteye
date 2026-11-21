@@ -78,6 +78,9 @@ namespace UnitEye
         /// does not distract. WebGL no-ops — the browser owns rendering.</summary>
         void SetRendering(bool rendering);
 
+        /// <summary>Pauses or resumes the underlying capture and landmark pipeline (e.g. via UnitEyeAPI.DisableGaze).</summary>
+        void SetActive(bool active);
+
         /// <summary>Swap the gaze model at runtime (native only; WebGL no-ops — the browser owns the CV).
         /// The calibration is per-backbone, so the pipeline falls back to raw gaze until recalibrated.</summary>
         void SetBackbone(GazeBackbone backbone);

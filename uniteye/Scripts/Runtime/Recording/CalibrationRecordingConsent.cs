@@ -49,12 +49,26 @@ namespace UnitEye
         private GUIStyle _body, _heading;
         private bool _showDoneScreen;
         private bool _deleted;
+        private bool _deleteFailed;
 
         /// <summary>True while the participant still owes an answer — the calibration must not start.</summary>
         public bool Blocking => askBeforeCalibration && Status == State.Asking;
 
+        /// <summary>True whenever any consent or completion/withdrawal modal screen is visible.</summary>
+        public bool IsShowingModal => Blocking || _showDoneScreen;
+
         /// <summary>Whether a recording should be created for the run about to start.</summary>
         public bool ShouldRecord => Status == State.Granted && Tier != GazeRecordingTier.Off;
+
+        /// <summary>Updates the recorded tier if runtime constraints (e.g. async readback) downgraded imagery.</summary>
+        public void ApplyTierDowngrade(GazeRecordingTier actualTier)
+        {
+            if (actualTier < Tier)
+            {
+                Tier = actualTier;
+                if (Record != null) Record.tier = actualTier;
+            }
+        }
 
         /// <summary>
         /// Begins the flow. Called by the calibration on enable. Recording is unavailable on WebGL — the
@@ -67,7 +81,7 @@ namespace UnitEye
 #if UNITY_WEBGL && !UNITY_EDITOR
             askBeforeCalibration = false;
 #endif
-            if (!askBeforeCalibration) { Status = State.NotAsked; return; }
+            if (!askBeforeCalibration || maxTierOffered == GazeRecordingTier.Off) { Status = State.NotAsked; return; }
             Status = State.Asking;
             _screen = 0;
         }
@@ -80,9 +94,10 @@ namespace UnitEye
             ActiveRecorder = null;
             _screen = 0;
             _publishChoice = -1;
-            _pendingTier = (GazeRecordingTier)Mathf.Min((int)GazeRecordingTier.Landmarks, (int)maxTierOffered);
+            _pendingTier = (GazeRecordingTier)Mathf.Clamp((int)GazeRecordingTier.Landmarks, (int)GazeRecordingTier.Features, Mathf.Max((int)GazeRecordingTier.Features, (int)maxTierOffered));
             _showDoneScreen = false;
             _deleted = false;
+            _deleteFailed = false;
         }
 
         /// <summary>Shows the closing screen with the withdrawal code once the session has been written.</summary>
@@ -91,8 +106,8 @@ namespace UnitEye
         private void EnsureStyles()
         {
             if (_body != null) return;
-            _body = new GUIStyle(GUI.skin.label) { wordWrap = false, richText = false, alignment = TextAnchor.UpperLeft };
-            _heading = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperLeft };
+            _body = new GUIStyle(GUI.skin.label) { wordWrap = true, richText = false, alignment = TextAnchor.UpperLeft };
+            _heading = new GUIStyle(GUI.skin.label) { wordWrap = true, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperLeft };
             float scale = Mathf.Max(1f, Screen.height / 1080f);
             _body.fontSize = Mathf.RoundToInt(15 * scale);
             _heading.fontSize = Mathf.RoundToInt(20 * scale);
@@ -101,6 +116,7 @@ namespace UnitEye
         private void OnGUI()
         {
             if (Status != State.Asking && !_showDoneScreen) return;
+            GUI.depth = -10;
             EnsureStyles();
 
             //Opaque backdrop: the calibration overlay must not show through a consent decision.
@@ -214,11 +230,18 @@ namespace UnitEye
                 GUILayout.Label($"Not before:  {Record.publicationHoldUntilUtcDate}", _body);
             GUILayout.Label($"To withdraw: {Record?.withdrawalContact}", _body);
             GUILayout.Space(20);
+            if (_deleteFailed)
+            {
+                GUILayout.Label("Could not delete every file automatically (a file may still be open). " +
+                                $"Folder: {ActiveRecorder?.SessionFolder}", _body);
+                GUILayout.Space(10);
+            }
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Delete my recording now", GUILayout.Height(40)))
             {
-                ActiveRecorder?.DeleteEverything();
-                _deleted = true;
+                bool ok = ActiveRecorder == null || ActiveRecorder.DeleteEverything();
+                _deleted = ok;
+                _deleteFailed = !ok;
             }
             GUILayout.Space(20);
             if (GUILayout.Button("Done", GUILayout.Height(40))) _showDoneScreen = false;

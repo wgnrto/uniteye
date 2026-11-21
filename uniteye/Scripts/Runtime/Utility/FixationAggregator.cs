@@ -27,7 +27,9 @@ namespace UnitEye
 
         private readonly List<Vector2> _points = new List<Vector2>(64);
         private readonly List<double> _times = new List<double>(64);
-        private Vector2 _sum;
+        private double _fixationSumX;
+        private double _fixationSumY;
+        private int _fixationCount;
         private Vector2 _fixationCentroid;
         private bool _inFixation;
         private double _fixationStartTime;
@@ -36,8 +38,8 @@ namespace UnitEye
         public bool InFixation => _inFixation;
         /// <summary>Duration of the current fixation in seconds (0 when not fixating).</summary>
         public double FixationDuration { get; private set; }
-        /// <summary>Number of samples in the current fixation window.</summary>
-        public int SampleCount => _points.Count;
+        /// <summary>Number of samples in the current fixation (or candidate window when not fixating).</summary>
+        public int SampleCount => _inFixation ? _fixationCount : _points.Count;
 
         /// <summary>
         /// Adds a gaze sample (pixels) at <paramref name="time"/> and returns the point AOI consumers
@@ -47,61 +49,123 @@ namespace UnitEye
         /// </summary>
         public Vector2 Add(Vector2 gazePixels, double time)
         {
-            //Drop samples older than the window (the window slides; a stable fixation keeps ALL its
-            //samples via the fixation branch below, so long fixations still average over their full span).
-            if (!_inFixation)
+            if (float.IsNaN(gazePixels.x) || float.IsNaN(gazePixels.y) ||
+                float.IsInfinity(gazePixels.x) || float.IsInfinity(gazePixels.y) ||
+                double.IsNaN(time) || double.IsInfinity(time))
             {
-                while (_times.Count > 0 && time - _times[0] > windowSeconds)
-                {
-                    _sum -= _points[0];
-                    _points.RemoveAt(0);
-                    _times.RemoveAt(0);
-                }
+                Reset();
+                return gazePixels;
+            }
+
+            //A face-loss gap longer than windowSeconds (or clock reset) cannot belong to the same fixation.
+            if (_times.Count > 0)
+            {
+                double dt = time - _times[_times.Count - 1];
+                if (dt > windowSeconds || dt < 0.0)
+                    Reset();
+            }
+
+            //Keep _points bounded to the sliding windowSeconds tail so dispersion checks stay O(W) and
+            //Gaussian extreme-value range growth never self-breaks a long steady stare.
+            while (_times.Count > 0 && time - _times[0] > windowSeconds)
+            {
+                _points.RemoveAt(0);
+                _times.RemoveAt(0);
             }
 
             _points.Add(gazePixels);
             _times.Add(time);
-            _sum += gazePixels;
 
-            //Dispersion of the current window against the screen-diagonal fraction.
             float diagonal = Mathf.Sqrt((float)Screen.width * Screen.width + (float)Screen.height * Screen.height);
-            float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
-            for (int i = 0; i < _points.Count; i++)
-            {
-                var p = _points[i];
-                if (p.x < minX) minX = p.x;
-                if (p.x > maxX) maxX = p.x;
-                if (p.y < minY) minY = p.y;
-                if (p.y > maxY) maxY = p.y;
-            }
-            float dispersion = new Vector2(maxX - minX, maxY - minY).magnitude;
-            bool stable = _points.Count >= minimumSamples && dispersion <= dispersionFraction * diagonal;
-
-            if (stable)
-            {
-                if (!_inFixation)
-                {
-                    _inFixation = true;
-                    _fixationStartTime = _times[0];
-                }
-                _fixationCentroid = _sum / _points.Count;
-                FixationDuration = time - _fixationStartTime;
-                return _fixationCentroid;
-            }
+            if (diagonal <= 0f) diagonal = 1000f;
+            float threshold = dispersionFraction * diagonal;
+            float thresholdSq = threshold * threshold;
+            int minSamples = Mathf.Max(1, minimumSamples);
 
             if (_inFixation)
             {
-                //Dispersion broke: the fixation ended. Restart the window from the samples that broke it
-                //(the saccade tail), so the next fixation doesn't inherit the old cluster.
-                _inFixation = false;
-                FixationDuration = 0;
-                var last = _points[_points.Count - 1];
-                var lastT = _times[_times.Count - 1];
+                float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+                Vector2 winSum = Vector2.zero;
+                for (int i = 0; i < _points.Count; i++)
+                {
+                    var p = _points[i];
+                    if (p.x < minX) minX = p.x;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                    winSum += p;
+                }
+                float dx = maxX - minX, dy = maxY - minY;
+                Vector2 winMean = winSum / _points.Count;
+                bool stillStable = (dx * dx + dy * dy <= thresholdSq)
+                    && (gazePixels - _fixationCentroid).sqrMagnitude <= thresholdSq
+                    && (winMean - _fixationCentroid).sqrMagnitude <= thresholdSq * 0.5625f;
+
+                if (stillStable)
+                {
+                    _fixationSumX += gazePixels.x;
+                    _fixationSumY += gazePixels.y;
+                    _fixationCount++;
+                    _fixationCentroid = new Vector2(
+                        (float)(_fixationSumX / _fixationCount),
+                        (float)(_fixationSumY / _fixationCount));
+                    FixationDuration = time - _fixationStartTime;
+                    return _fixationCentroid;
+                }
+
+                //Dispersion broke: end the fixation and keep only the latest sample so the next landing
+                //cluster can form immediately without inheriting pre-landing points.
                 Reset();
-                _points.Add(last);
-                _times.Add(lastT);
-                _sum = last;
+                _points.Add(gazePixels);
+                _times.Add(time);
+                return gazePixels;
             }
+
+            //Not yet in a fixation: find the longest trailing cluster within threshold so a single prior
+            //saccade sample in the buffer cannot blind fixation onset for a full windowSeconds.
+            if (_points.Count >= minSamples)
+            {
+                float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+                int bestStart = _points.Count;
+                for (int i = _points.Count - 1; i >= 0; i--)
+                {
+                    var p = _points[i];
+                    if (p.x < minX) minX = p.x;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                    float dx = maxX - minX, dy = maxY - minY;
+                    if (dx * dx + dy * dy > thresholdSq)
+                        break;
+                    bestStart = i;
+                }
+
+                int clusterCount = _points.Count - bestStart;
+                if (clusterCount >= minSamples)
+                {
+                    if (bestStart > 0)
+                    {
+                        _points.RemoveRange(0, bestStart);
+                        _times.RemoveRange(0, bestStart);
+                    }
+                    _inFixation = true;
+                    _fixationStartTime = _times[0];
+                    _fixationSumX = 0.0;
+                    _fixationSumY = 0.0;
+                    for (int i = 0; i < _points.Count; i++)
+                    {
+                        _fixationSumX += _points[i].x;
+                        _fixationSumY += _points[i].y;
+                    }
+                    _fixationCount = _points.Count;
+                    _fixationCentroid = new Vector2(
+                        (float)(_fixationSumX / _fixationCount),
+                        (float)(_fixationSumY / _fixationCount));
+                    FixationDuration = time - _fixationStartTime;
+                    return _fixationCentroid;
+                }
+            }
+
             return gazePixels;
         }
 
@@ -109,7 +173,9 @@ namespace UnitEye
         {
             _points.Clear();
             _times.Clear();
-            _sum = Vector2.zero;
+            _fixationSumX = 0.0;
+            _fixationSumY = 0.0;
+            _fixationCount = 0;
             _inFixation = false;
             FixationDuration = 0;
         }

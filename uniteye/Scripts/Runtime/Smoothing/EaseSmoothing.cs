@@ -18,18 +18,30 @@ namespace UnitEye
             Factor = factor;
         }
 
+        public void Reset()
+        {
+            _easeMeasurement = Vector2.zero;
+            _lastUpdateTime = -1f;
+        }
+
         public override Vector2 Update(Vector2 measurement)
         {
-            //Frame-rate-independent easing: the effective factor is Factor at the 30 fps reference
-            //(so existing tuning is preserved) and stays consistent at other frame rates, instead of the
-            //old fixed-per-frame factor that made a 60 fps run ~twice as responsive as a 30 fps run.
-            //Uses the REAL elapsed time since the last filter update, not this frame's delta: HomulerGaze
-            //skips Update while the provider tick fails, and after such a gap the ease must cover the
-            //whole gap instead of crawling from the stale pre-gap position.
+            if (float.IsNaN(measurement.x) || float.IsNaN(measurement.y) ||
+                float.IsInfinity(measurement.x) || float.IsInfinity(measurement.y))
+                return _easeMeasurement;
+
             float now = Time.unscaledTime;
-            float dt = _lastUpdateTime < 0f ? Time.unscaledDeltaTime : now - _lastUpdateTime;
+            if (_lastUpdateTime < 0f)
+            {
+                _easeMeasurement = measurement;
+                _lastUpdateTime = now;
+                return _easeMeasurement;
+            }
+
+            float dt = Mathf.Max(0f, now - _lastUpdateTime);
             _lastUpdateTime = now;
-            float f = 1f - Mathf.Pow(1f - Mathf.Clamp01(Factor), dt * ReferenceRate);
+            float clamped = Mathf.Clamp01(Factor);
+            float f = clamped >= 1f ? 1f : 1f - Mathf.Pow(1f - clamped, dt * ReferenceRate);
 
             _easeMeasurement.x += (measurement.x - _easeMeasurement.x) * f;
             _easeMeasurement.y += (measurement.y - _easeMeasurement.y) * f;

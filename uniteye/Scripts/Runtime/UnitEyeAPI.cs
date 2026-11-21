@@ -13,6 +13,12 @@ namespace UnitEye
         // Migrated to the Barracuda-free HomulerGaze pipeline (native MediaPipe landmarks + Inference Engine).
         // Private: this is internal caching state, not API surface. It is resolved lazily on first use.
         private static HomulerGaze s_gazeScript;
+        private static Camera s_mainCamera;
+
+        internal static AOIManager TryGetAOIManagerInstance()
+        {
+            return s_gazeScript != null ? s_gazeScript.AOIManager : null;
+        }
 
         /// <summary>
         /// Checks if an instance of the HomulerGaze script is in the scene and activated.
@@ -104,14 +110,18 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
-            var cam = Camera.main;
+            if (s_mainCamera == null || !s_mainCamera.isActiveAndEnabled)
+                s_mainCamera = Camera.main;
+            if (s_mainCamera == null)
+                return Vector3.zero;
+
             if (depth == -1.0f)
-                depth = cam.nearClipPlane;
+                depth = s_mainCamera.nearClipPlane;
 
             var gazeScreen = new Vector3(s_gazeScript.gazeLocation.x,
                                             Screen.height - s_gazeScript.gazeLocation.y,
                                             depth);
-            return cam.ScreenToWorldPoint(gazeScreen);
+            return s_mainCamera.ScreenToWorldPoint(gazeScreen);
         }
 
         /// <summary>
@@ -133,7 +143,7 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
-            return s_gazeScript.OffscreenAOI.focused;
+            return s_gazeScript.OffscreenAOI != null && s_gazeScript.OffscreenAOI.focused;
         }
 
         /// <summary>
@@ -219,7 +229,8 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
-            s_gazeScript.CSVLogger.PrependLine(line);
+            if (s_gazeScript.CSVLogger != null)
+                s_gazeScript.CSVLogger.PrependLine(line);
         }
 
         /// <summary>
@@ -284,6 +295,8 @@ namespace UnitEye
         public static Quaternion GetHeadPose()
         {
             CheckIsInitialized();
+            if (s_gazeScript.Provider == null)
+                return Quaternion.identity;
 
             //IGazeProvider.HeadPoseEuler is in RADIANS (native provider derives it via Mathf.Atan on
             //the landmarks), but Quaternion.Euler expects DEGREES — convert, or the rotation is off by
@@ -300,7 +313,7 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
-            return s_gazeScript.Provider.LeftEyeTexture;
+            return s_gazeScript.Provider?.LeftEyeTexture;
         }
 
         /// <summary>
@@ -311,7 +324,7 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
-            return s_gazeScript.Provider.RightEyeTexture;
+            return s_gazeScript.Provider?.RightEyeTexture;
         }
 
         /// <summary>
@@ -326,18 +339,15 @@ namespace UnitEye
             foreach (AOI aoi in s_gazeScript.AOIManager.GetAOIs())
             {
                 var tagList = aoi as AOITagList;
-                //Ignore AOIs that are not a TagList or not focused or are xray TagLists
                 if (tagList == null || !tagList.focused || tagList.xray)
-                {
                     continue;
-                }
-                var gameObject = tagList.hitRaycast.collider.gameObject;
-                // Workaround: Only if Gazeable is enabled
+                var collider = tagList.hitRaycast.collider;
+                if (collider == null)
+                    continue;
+                var gameObject = collider.gameObject;
                 var gazeable = gameObject.GetComponent<Gazeable>();
-                if (gazeable != null)
-                {
-                    return gazeable.enabled ? gameObject : null;
-                }
+                if (gazeable != null && gazeable.enabled)
+                    return gameObject;
             }
             return null;
         }
@@ -351,28 +361,27 @@ namespace UnitEye
         {
             CheckIsInitialized();
 
+            List<GameObject> objectList = null;
             foreach (AOI aoi in s_gazeScript.AOIManager.GetAOIs())
             {
                 var tagList = aoi as AOITagList;
-                //Ignore AOIs that are not a TagList or not focused or are not xray TagLists
                 if (tagList == null || !tagList.focused || !tagList.xray)
-                {
                     continue;
-                }
-                var objectList = new List<GameObject>();
-                //Go through hitRaycastList and check for each entry if it has a GazeableXray script attached and enabled
                 foreach (var raycasthit in tagList.hitRaycastList)
                 {
+                    if (raycasthit.collider == null)
+                        continue;
                     var gameObject = raycasthit.collider.gameObject;
-                    // Workaround: Only if GazeableXray is enabled
                     var gazeablexray = gameObject.GetComponent<GazeableXray>();
                     if (gazeablexray != null && gazeablexray.enabled)
-                        objectList.Add(gameObject);
+                    {
+                        objectList ??= new List<GameObject>();
+                        if (!objectList.Contains(gameObject))
+                            objectList.Add(gameObject);
+                    }
                 }
-
-                return objectList;
             }
-            return null;
+            return objectList;
         }
     }
 }

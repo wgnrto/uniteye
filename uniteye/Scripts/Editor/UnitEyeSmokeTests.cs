@@ -73,6 +73,7 @@ public static class UnitEyeSmokeTests
             TestGazeErrorModel();
             TestInteriorPreset();
             TestEmbeddingProjection();
+            TestAuditRegressionFixes();
         }
         catch (Exception e)
         {
@@ -2118,6 +2119,157 @@ public static class UnitEyeSmokeTests
                 p.y < Screen.height * 0.2f || p.y > Screen.height * 0.8f)
                 interior = false;
         Check(interior, "InteriorPreset points are strictly interior (not on the boundary)");
+    }
+
+    private static void TestAuditRegressionFixes()
+    {
+        // 1. Inverse roll rotation of roll-normalized gaze angles + uncertainties
+        GazeEstimationRunner.UnrotateGazeAngles(0.25f, 0f, 0.08f, 0.03f, Mathf.PI * 0.5f,
+            out float camYaw90, out float camPitch90, out float camSigYaw90, out float camSigPitch90);
+        CheckClose(camYaw90, 0f, 1e-5f, "UnrotateGazeAngles: +90deg roll maps head yaw to 0 camera yaw");
+        CheckClose(camPitch90, 0.25f, 1e-5f, "UnrotateGazeAngles: +90deg roll maps head yaw to +camera pitch");
+        CheckClose(camSigYaw90, 0.03f, 1e-5f, "UnrotateGazeAngles: +90deg roll swaps sigma axes (yaw)");
+        CheckClose(camSigPitch90, 0.08f, 1e-5f, "UnrotateGazeAngles: +90deg roll swaps sigma axes (pitch)");
+
+        GazeEstimationRunner.UnrotateGazeAngles(camYaw90, camPitch90, camSigYaw90, camSigPitch90, -Mathf.PI * 0.5f,
+            out float rtYaw, out float rtPitch, out _, out _);
+        CheckClose(rtYaw, 0.25f, 1e-5f, "UnrotateGazeAngles: inverse roll round-trip recovers yaw");
+        CheckClose(rtPitch, 0f, 1e-5f, "UnrotateGazeAngles: inverse roll round-trip recovers pitch");
+
+        // 2. DriftCorrector partial-warmup centroid preservation when AffineUnlocked == true
+        var warmDrift = new DriftCorrector();
+        var corners = new[]
+        {
+            new Vector2(0.2f, 0.2f), new Vector2(0.8f, 0.2f),
+            new Vector2(0.2f, 0.8f), new Vector2(0.8f, 0.8f),
+        };
+        for (int r = 0; r < 2; r++)
+        {
+            foreach (var tgt in corners)
+            {
+                var pred = new Vector2(0.5f + (tgt.x - 0.5f) * 0.85f, 0.5f + (tgt.y - 0.5f) * 0.85f);
+                warmDrift.AddAnchor(pred, tgt, weight: 0.25f);
+            }
+        }
+        Check(warmDrift.AffineUnlocked, "DriftCorrector: symmetric spread anchors unlock affine at partial warmup");
+        var centerOut = warmDrift.Apply(new Vector2(0.5f, 0.5f));
+        CheckClose(centerOut.x, 0.5f, 1e-5f, "DriftCorrector: partial warmup preserves symmetric anchor centroid (x)");
+        CheckClose(centerOut.y, 0.5f, 1e-5f, "DriftCorrector: partial warmup preserves symmetric anchor centroid (y)");
+
+        // 3. FixationAggregator immediate post-saccade onset (<150ms) and non-self-breaking 6s stare
+        var fix = new FixationAggregator();
+        double t = 0.0;
+        for (int i = 0; i < 6; i++, t += 1.0 / 30.0)
+            fix.Add(new Vector2(200f, 200f), t);
+        Check(fix.InFixation, "FixationAggregator: initial cluster establishes fixation");
+        fix.Add(new Vector2(1400f, 800f), t); // saccade jump to new target
+        t += 1.0 / 30.0;
+        for (int i = 0; i < 4; i++, t += 1.0 / 30.0)
+            fix.Add(new Vector2(1402f + (i % 2), 801f - (i % 2)), t);
+        Check(fix.InFixation, "FixationAggregator: detects trailing fixation cluster immediately (<150ms) after saccade");
+
+        bool stayedInFixation = true;
+        var fixRng = new System.Random(1234);
+        for (int i = 0; i < 180; i++, t += 1.0 / 30.0)
+        {
+            float jx = ((float)fixRng.NextDouble() - 0.5f) * 8f;
+            float jy = ((float)fixRng.NextDouble() - 0.5f) * 8f;
+            fix.Add(new Vector2(1402f + jx, 801f + jy), t);
+            if (!fix.InFixation) stayedInFixation = false;
+        }
+        Check(stayedInFixation, "FixationAggregator: maintains steady fixation across 6s (180 frames) without self-breaking");
+        fix.Add(new Vector2(1402f, 801f), t + 2.0); // 2s face-loss gap
+        Check(!fix.InFixation, "FixationAggregator: resets fixation across a long camera/face-loss gap");
+
+        // 4. SimpleMLP normalized targets + resolution-independent scaling in CalibrationModelStore
+        var mlpRng = new System.Random(55);
+        const int nMlp = 200;
+        var mx = new float[nMlp][];
+        var my = new Vector2[nMlp];
+        for (int i = 0; i < nMlp; i++)
+        {
+            float a = (float)mlpRng.NextDouble();
+            float b = (float)mlpRng.NextDouble();
+            mx[i] = new float[] { a, b, 1f };
+            my[i] = new Vector2(0.1f + 0.8f * a, 0.15f + 0.7f * b);
+        }
+        var normMlp = new SimpleMLP(seed: 11);
+        normMlp.TrainNormalized(mx, my, 52f, 29f, balanceTraining: true);
+        Check(normMlp.NormalizedTargets, "SimpleMLP.TrainNormalized sets NormalizedTargets = true");
+        const string tempMlpName = "MLP_SmokeTempTest.json";
+        string tempMlpPath = CalibrationModelStore.GetWritablePath("MLP", tempMlpName);
+        try
+        {
+            normMlp.Save(tempMlpName);
+            Check(File.Exists(tempMlpPath), "SimpleMLP.Save writes to writable persistentDataPath");
+            var loadedNormMlp = SimpleMLP.Load(tempMlpName);
+            Check(loadedNormMlp != null && loadedNormMlp.NormalizedTargets,
+                "SimpleMLP.Load restores NormalizedTargets from persistentDataPath");
+            var pNorm = loadedNormMlp.Predict(new float[] { 0.5f, 0.5f, 1f });
+            Check(pNorm.x > 0.35f && pNorm.x < 0.65f && pNorm.y > 0.35f && pNorm.y < 0.65f,
+                $"Normalized SimpleMLP predicts in [0,1] space (got {pNorm})");
+        }
+        finally
+        {
+            CalibrationModelStore.DeleteCalibrationFile("MLP", tempMlpName);
+        }
+
+        // 5. RidgeCalibrationTrainer balanceTraining=true keeps holdout strictly disjoint from training
+        var leakFeats = new List<float[]>();
+        var leakX = new List<float>();
+        var leakY = new List<float>();
+        var leakRng = new System.Random(77);
+        for (int i = 0; i < 80; i++)
+        {
+            leakFeats.Add(new float[] { 0.5f + (float)leakRng.NextDouble() * 0.01f, 0.5f });
+            leakX.Add(0.5f); leakY.Add(0.5f);
+        }
+        for (int i = 0; i < 5; i++)
+        {
+            leakFeats.Add(new float[] { 0.1f + i * 0.001f, 0.1f });
+            leakX.Add(0.1f); leakY.Add(0.1f);
+        }
+        var balResult = RidgeCalibrationTrainer.Train(
+            leakFeats, leakX, leakY, 52f, 29f, rng: new System.Random(9), balanceTraining: true);
+        var holdoutSet = new HashSet<float[]>(balResult.HoldoutFeatures);
+        Check(holdoutSet.Count == balResult.HoldoutFeatures.Length,
+            "Balanced RidgeCalibrationTrainer holdout contains only unique sample references");
+
+        // 6. CSVData culture invariance, :D3 milliseconds, NaN guards, and semicolon/newline sanitization
+        var prevCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = new CultureInfo("de-DE");
+            var ts = new DateTime(2026, 7, 14, 9, 8, 7, 5, DateTimeKind.Utc);
+            var row = new CSVData(float.NaN, 540.4f, 0.25f, 0.75f, 0.25f, 0.75f, float.NaN, 0.31f, false,
+                ts, new List<string> { "Btn;A", "Panel\nB" }, captureLatencyMs: 12.3f);
+            row.notes = "RMSE X: 1.2cm; RMSE Y: 1.4cm\nDone";
+            string csv = row.SerializeCSVData();
+            string[] cols = csv.Split(';');
+            Check(cols.Length == 14, $"CSVData row must always have exactly 14 semicolon-separated columns (got {cols.Length}: {csv})");
+            Check(cols[0] == "0", $"CSVData NaN pixel X should serialize to 0, not int.MinValue (got {cols[0]})");
+            Check(cols[2] == "0.25", $"CSVData floats must use '.' under de-DE culture (got {cols[2]})");
+            Check(cols[9].EndsWith(":005", StringComparison.Ordinal), $"CSVData timestamp ms must be zero-padded :D3 (got {cols[9]})");
+            Check(!csv.Contains("\n") && !csv.Contains("\r"), "CSVData must strip embedded newlines from AOIs and notes");
+        }
+        finally
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = prevCulture;
+        }
+
+        // 7. AOI thin-bar margin hit test + degenerate capsule/polygon safety
+        var thinBar = new AOIBox("thin", new Vector2(0.495f, 0.2f), new Vector2(0.505f, 0.8f)) { margin = 0.04f };
+        Check(thinBar.CheckAOIWithMargin(new Vector2(0.480f, 0.5f)),
+            "AOI.CheckAOIWithMargin hits a thin bar narrower than margin via half-margin ring");
+        var degenCap = new AOICapsule("cap", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0.05f);
+        Check(degenCap.CheckAOI(new Vector2(0.52f, 0.5f)) && !degenCap.CheckAOI(new Vector2(0.7f, 0.5f)),
+            "Degenerate zero-length AOICapsule behaves as a circle without NaN");
+        var emptyPoly = new AOIPolygon("empty");
+        Check(!emptyPoly.CheckAOI(new Vector2(0.5f, 0.5f)), "Default-constructed empty AOIPolygon returns false safely");
+
+        // 8. Zero/NaN Screen.dpi fallback in Functions.PixelsToMm
+        CheckClose(Functions.PixelsToMm(96f, 0f), 25.4f, 1e-4f, "Functions.PixelsToMm falls back to 96 DPI when dpi == 0");
+        CheckClose(Functions.PixelsToMm(96f, float.NaN), 25.4f, 1e-4f, "Functions.PixelsToMm falls back to 96 DPI when dpi is NaN");
     }
 
     #endregion

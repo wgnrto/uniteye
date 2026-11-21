@@ -143,16 +143,9 @@ namespace UnitEye
             //Get Gaze reference
             _gaze = GetComponent<HomulerGaze>();
 
-            //If no crosshair is selected load the CalibrationDot Resource. Load it TYPED: the untyped
-            //overload returns whichever asset named "CalibrationDot" it finds first (the folder holds both
-            //a .png imported as a Sprite and a .svg), and casting that threw an InvalidCastException out of
-            //Start() — which also skipped BuildPoints() below, leaving the whole evaluation dead.
+            //If no crosshair is selected load the CalibrationDot Resource.
             if (evaluationDot == null)
                 evaluationDot = Resources.Load<Texture2D>("CalibrationDot");
-
-            //If can return after evaluation append string to GUI
-            if (returnAfter)
-                _guiMessage += "\nRight click to cancel and return";
 
             //Initial point grid (rebuilt on start-click, when rows/columns are final)
             BuildPoints();
@@ -185,20 +178,37 @@ namespace UnitEye
         // values are updated there. Running in Update could pair a newly moved target with stale gaze.
         void LateUpdate()
         {
+            if (_gaze == null)
+                _gaze = GetComponent<HomulerGaze>();
+
             //Mouse.current/Keyboard.current are NULL when no such device exists (headless players,
             //touch-only devices) and dereferencing them threw a NullReferenceException EVERY frame.
             var mouse = Mouse.current;
+            var keyboard = Keyboard.current;
             bool leftClick = mouse != null && mouse.leftButton.wasPressedThisFrame;
             bool rightClick = mouse != null && mouse.rightButton.wasPressedThisFrame;
+            bool escapePressed = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+            bool earlyStopPressed = keyboard != null && keyboard[Key.S].wasPressedThisFrame;
 
-            //If finished and leftclick, signal Returned (new Input System, matching HomulerGazeCalibration)
+#if ENABLE_LEGACY_INPUT_MANAGER
+            leftClick |= Input.GetMouseButtonDown(0);
+            rightClick |= Input.GetMouseButtonDown(1);
+            escapePressed |= Input.GetKeyDown(KeyCode.Escape);
+            earlyStopPressed |= Input.GetKeyDown(KeyCode.S);
+#endif
+
+            //If finished and leftclick, signal Returned
             if (leftClick && returnAfter && _finished)
                 Returned = true;
-            //If rightclick, signal Returned
-            if (rightClick && returnAfter)
+            //Right-click or Escape aborts evaluation and returns cleanly
+            if ((rightClick || escapePressed) && returnAfter)
+            {
                 Returned = true;
-            //If finished don't run through evaluation anymore
-            if (_finished) return;
+                if (!_finished)
+                    UnitEyeLog.Info("Evaluation cancelled by the user.");
+            }
+            //If finished or returning don't run through evaluation anymore
+            if (_finished || Returned) return;
 
             //Start on leftclick
             if (leftClick && !_started)
@@ -219,9 +229,8 @@ namespace UnitEye
                 _timeRemaining = duration;
             }
 
-            //Stop evaluation early when pressing S (null when no keyboard device exists)
-            var keyboard = Keyboard.current;
-            if (keyboard != null && keyboard[Key.S].wasPressedThisFrame && _started)
+            //Stop evaluation early when pressing S
+            if (earlyStopPressed && _started)
             {
                 _earlyStop = true;
             }
@@ -359,8 +368,8 @@ namespace UnitEye
             var corner = CalculateRMSE(predictions, ScreenRegion.Corner);
             var edge = CalculateRMSE(predictions, ScreenRegion.Edge);
             var center = CalculateRMSE(predictions, ScreenRegion.Center);
-            return $"{label} Evaluation: all {FormatError(all)}; corners {FormatError(corner)}; " +
-                $"edges {FormatError(edge)}; center {FormatError(center)}.";
+            return $"{label} Evaluation: all {FormatError(all)} | corners {FormatError(corner)} | " +
+                $"edges {FormatError(edge)} | center {FormatError(center)}.";
         }
 
         private static string FormatError((float x, float y) error)
@@ -429,10 +438,10 @@ namespace UnitEye
             if (_showMessage)
             {
                 float uiScale = Mathf.Max(1f, Mathf.Sqrt(0.001f * Screen.width * Screen.height / 2073.6f));
-                _guiStyle.fontSize = Mathf.RoundToInt((_finished ? 16 : 36) * uiScale);
-                if (_finished)
-                    _guiStyle.normal.textColor = ResultsText;
-                GUI.Label(new Rect(Screen.width / 2 - Screen.width * (_finished ? 0.15f : 0.1f), Screen.height / 2 - 20, 100, 60), $"{_guiMessage}", _guiStyle);
+                _guiStyle.fontSize = Mathf.RoundToInt((_finished ? 18 : 34) * uiScale);
+                _guiStyle.wordWrap = true;
+                _guiStyle.normal.textColor = _finished ? ResultsText : Color.white;
+                GUI.Label(new Rect(Screen.width * 0.1f, Screen.height * (_finished ? 0.25f : 0.40f), Screen.width * 0.8f, Screen.height * 0.60f), $"{_guiMessage}", _guiStyle);
             }
 
             //Nothing below is part of the results screen: the dot marks the target the participant should

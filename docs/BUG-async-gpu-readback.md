@@ -1,14 +1,12 @@
 # Bug: `_asyncGpuReadback` throws every frame and stops gaze updating
 
 **Affects:** UnitEye 1.1.0, Unity 6000.5.8f1, `com.unity.ai.inference` 2.6.1, Windows/D3D11
-**Severity:** the feature is unusable — enabling it silently disables gaze tracking
-**Status:** not fixed. Reported with a repro; the fix needs someone who knows the
-Inference Engine tensor-lifetime contract.
+**Severity:** enabling `_asyncGpuReadback` previously threw every frame and halted gaze updates
+**Status:** fixed in `IGazeBackbone`, `HomulerEyeMURunner`, `GazeEstimationRunner`, `CompositeGazeBackbone`, and `NativeGazeProvider`.
 
 ## Symptom
 
-Set `HomulerGaze._asyncGpuReadback = true`. The player then logs this **every
-frame**, and gaze never updates:
+Setting `HomulerGaze._asyncGpuReadback = true` previously logged `InvalidOperationException` on every camera tick and halted gaze updates:
 
 ```
 InvalidOperationException: Cannot access the data as it is not available
@@ -18,66 +16,18 @@ InvalidOperationException: Cannot access the data as it is not available
   at UnitEye.HomulerGaze.LateUpdate ()
 ```
 
-It compiles and builds cleanly; the failure only appears at runtime. With
-`_asyncGpuReadback = false` (the default) everything works, which is why this is
-easy to miss.
+## Root Cause
 
-## Where it goes wrong
+Four lifecycle and synchronization bugs combined to invalidate readback buffers and desynchronize outputs:
 
-`HomulerEyeMURunner.PerformInference`, async branch:
+1. **Single-frame readback buffer lifetime vs camera gating**: Unity disposes the native staging buffer of an `AsyncGPUReadbackRequest` at the end of the single engine frame in which `done` turns `true`. Meanwhile, `NativeGazeProvider.Tick()` exited immediately whenever `!_webcam.didUpdateThisFrame`. Whenever display frame rate exceeded camera frame rate, the GPU readback completed during an intermediate render frame and expired before the next camera frame called `DownloadToArray()`.
+2. **Staggered multi-tensor completion**: `HomulerEyeMURunner` and `GazeEstimationRunner` waited for all output tensors (`embedding` and `gaze`, or `yaw`, `pitch`, and `embedding`) to complete simultaneously before calling `DownloadToArray()`. Whenever two output tensors finished on consecutive engine frames, the earlier tensor expired before the later tensor completed.
+3. **Short-circuiting in `CompositeGazeBackbone`**: `CompositeGazeBackbone.PerformInference` evaluated `_eyeMU.PerformInference(webcam) && _direction.PerformInference(webcam)`. On the first async frame, `_eyeMU` returned `false` while scheduling its readback, which skipped `_direction` and permanently desynchronized the two sub-backbones by one camera frame.
+4. **Auxiliary signal skew**: `NativeGazeProvider.Tick()` paired frame `N - 1` async gaze predictions with live frame `N` blink, drowsiness, distance, and binocular iris disagreement values.
 
-```csharp
-_outEmbedding = _worker.PeekOutput(OUTPUT_EMBEDDING) as Tensor<float>;
-_outGaze      = _worker.PeekOutput(OUTPUT_GAZE) as Tensor<float>;
-_outEmbedding.ReadbackRequest();
-_outGaze.ReadbackRequest();
-_pendingReadback = true;
-```
+## Resolution
 
-and the following frame:
-
-```csharp
-if (_asyncReadback && _pendingReadback)
-{
-    if (!_outEmbedding.IsReadbackRequestDone() || !_outGaze.IsReadbackRequestDone())
-        return false;
-    PublishPendingOutputs();   // -> DownloadToArray() -> throws
-}
-```
-
-The ordering looks right: publishing happens before the next `Schedule()`, so the
-pending tensors are not overwritten by new work. Yet `IsReadbackRequestDone()`
-returns `true` while `DownloadToArray()` reports the data as unavailable.
-
-That combination suggests the tensors returned by `PeekOutput` do not remain
-valid readback targets across the frame boundary — i.e. the worker may recycle or
-invalidate its output allocations between the `ReadbackRequest()` and the
-download, so the completion flag refers to a request whose backing storage is
-gone.
-
-## Why this is worth fixing rather than removing
-
-The setting exists for a real reason: in sync mode `DownloadToArray()` blocks the
-CPU until the GPU finishes, which stalls the frame. That said — on the hardware
-this was found on the shader/inference cost was not the bottleneck at all (the
-camera was, at ~5fps), so the practical benefit may be smaller than expected.
-
-## Suggested direction
-
-Not verified, listed in order of confidence:
-
-1. Take ownership of the output tensors instead of peeking them, e.g.
-   `ReadbackAndClone()` or copying into runner-owned tensors before the request,
-   so their lifetime is not tied to the worker's internal allocations.
-2. Confirm the Inference Engine contract for `ReadbackRequest()` +
-   `IsReadbackRequestDone()` + `DownloadToArray()` across frames in 2.6.1; the
-   API changed between Barracuda, Sentis and Inference Engine and the previous
-   pattern may no longer hold.
-3. Failing both, mark the field `[Obsolete]` or remove it, so it cannot be
-   enabled into a broken state.
-
-## Workaround
-
-Leave `_asyncGpuReadback = false`. In VIP-Sim it is pinned off in the scene with
-a comment pointing here, because it looks like an obvious performance win and
-will otherwise be re-enabled by the next person who goes looking for one.
+1. `IGazeBackbone` now exposes `PollAsyncReadback()` and `HasPendingReadback`. `NativeGazeProvider.Tick()` invokes `PollAsyncReadback()` at the start of every engine frame before checking `_webcam.didUpdateThisFrame`.
+2. `HomulerEyeMURunner` and `GazeEstimationRunner` drain each completed tensor into a runner-owned `float[]` buffer on the exact engine frame its `IsReadbackRequestDone()` turns `true`, then publish once all tensors for that inference pass have been drained.
+3. `CompositeGazeBackbone` polls and schedules both sub-backbones without short-circuiting so both models stay locked to the same camera frame.
+4. `NativeGazeProvider` snapshots blink, drowsiness, and camera distance at schedule time and reads binocular iris disagreement from the published feature vector so all signals describe the same camera frame.

@@ -61,6 +61,7 @@ namespace UnitEye
         public static GazeConsentRecord Create(GazeRecordingTier tier, bool mayPublish, DateTime utcNow,
             string withdrawalContact, string studyLabel)
         {
+            var utc = utcNow.Kind == DateTimeKind.Local ? utcNow.ToUniversalTime() : utcNow;
             return new GazeConsentRecord
             {
                 wordingVersion = GazeConsentTexts.WordingVersion,
@@ -68,8 +69,8 @@ namespace UnitEye
                 participantToken = NewParticipantToken(),
                 tier = tier,
                 mayPublish = mayPublish,
-                consentedOnUtcDate = utcNow.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-                publicationHoldUntilUtcDate = utcNow.AddDays(PublicationHoldDays)
+                consentedOnUtcDate = utc.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                publicationHoldUntilUtcDate = utc.AddDays(PublicationHoldDays)
                     .ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
                 withdrawalContact = string.IsNullOrWhiteSpace(withdrawalContact) ? "(not configured)" : withdrawalContact,
                 studyLabel = studyLabel ?? "",
@@ -105,9 +106,11 @@ namespace UnitEye
         /// </summary>
         public bool PublicationHoldElapsed(DateTime utcNow)
         {
+            var utc = utcNow.Kind == DateTimeKind.Local ? utcNow.ToUniversalTime() : utcNow;
             return DateTime.TryParse(publicationHoldUntilUtcDate, System.Globalization.CultureInfo.InvariantCulture,
+                       System.Globalization.DateTimeStyles.AssumeUniversal |
                        System.Globalization.DateTimeStyles.AdjustToUniversal, out var until)
-                   && utcNow.Date >= until.Date;
+                   && utc.Date >= until.Date;
         }
 
         /// <summary>Whether this folder may be published at all, on its own terms.</summary>

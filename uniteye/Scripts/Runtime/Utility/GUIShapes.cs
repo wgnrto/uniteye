@@ -13,24 +13,8 @@ namespace UnitEye
     /// </summary>
     public static class GUIShapes
     {
-        //Reused 1x1 white texture. Not tied to any scene/asset: survives scene loads and never shows up
-        //as a leaked asset.
-        private static Texture2D _pixel;
-
         /// <summary>A 1x1 opaque white texture, tint it via GUI.color.</summary>
-        public static Texture2D Pixel
-        {
-            get
-            {
-                if (_pixel == null)
-                {
-                    _pixel = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
-                    _pixel.SetPixel(0, 0, Color.white);
-                    _pixel.Apply();
-                }
-                return _pixel;
-            }
-        }
+        public static Texture2D Pixel => Texture2D.whiteTexture;
 
         /// <summary>Fills a GUI-space rectangle with a solid colour. Restores GUI.color.</summary>
         public static void FillRect(Rect rect, Color color)

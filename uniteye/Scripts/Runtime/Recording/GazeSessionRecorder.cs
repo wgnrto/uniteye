@@ -47,7 +47,10 @@ namespace UnitEye
         private readonly float[] _landmarkBuffer;
         private readonly float[] _blendshapeBuffer = new float[10];
 
-        private RenderTexture _leftCopy, _rightCopy, _frameCopy;
+        private readonly List<RenderTexture> _allocatedRts = new List<RenderTexture>();
+        private readonly ConcurrentQueue<RenderTexture> _freeRts = new ConcurrentQueue<RenderTexture>();
+        private byte[] _floatWriteScratch = new byte[256];
+        private bool _disposed;
         private int _samples, _imagesWritten, _imagesDropped, _readbackFailures;
         private int _inFlight;
 
@@ -62,10 +65,11 @@ namespace UnitEye
         /// regression hides inside a median.
         ///
         /// 1 = the original layout. 2 = full-90-bin decode (8c66d89) + the appended softmax-breadth block.
+        /// 3 = camera-space inverse roll rotation on decoded direction angles (UnrotateGazeAngles).
         /// Sessions written before this field existed read back as 0 = "unknown", and analysis tools must
         /// keep those in their own group rather than assuming either generation.
         /// </summary>
-        public const int FeaturePipelineVersion = 2;
+        public const int FeaturePipelineVersion = 3;
         public string SessionFolder => _root;
         public int SampleCount => _samples;
         public int ImagesDropped => _imagesDropped;
@@ -103,27 +107,35 @@ namespace UnitEye
             _root = Path.Combine(RootFor(consent.mayPublish), consent.participantToken);
             Directory.CreateDirectory(_root);
 
-            File.WriteAllText(Path.Combine(_root, "consent.json"),
-                JsonUtility.ToJson(consent, prettyPrint: true), new UTF8Encoding(false));
-
-            _rows = new StreamWriter(Path.Combine(_root, "samples.jsonl"), append: false, new UTF8Encoding(false));
-            _features = new FileStream(Path.Combine(_root, "features.f32"), FileMode.Create, FileAccess.Write);
-            if (tier >= GazeRecordingTier.Landmarks)
+            try
             {
-                _landmarks = new FileStream(Path.Combine(_root, "landmarks.f32"), FileMode.Create, FileAccess.Write);
-                _landmarkBuffer = new float[Mathf.Max(1, landmarkCapacity) * 3];
-            }
+                File.WriteAllText(Path.Combine(_root, "consent.json"),
+                    JsonUtility.ToJson(consent, prettyPrint: true), new UTF8Encoding(false));
 
-            if (tier >= GazeRecordingTier.EyeCrops)
+                _rows = new StreamWriter(Path.Combine(_root, "samples.jsonl"), append: false, new UTF8Encoding(false));
+                _features = new FileStream(Path.Combine(_root, "features.f32"), FileMode.Create, FileAccess.Write);
+                if (tier >= GazeRecordingTier.Landmarks)
+                {
+                    _landmarks = new FileStream(Path.Combine(_root, "landmarks.f32"), FileMode.Create, FileAccess.Write);
+                    _landmarkBuffer = new float[Mathf.Max(1, landmarkCapacity) * 3];
+                }
+
+                if (tier >= GazeRecordingTier.EyeCrops)
+                {
+                    _imageQueue = new BlockingCollection<PendingImage>(MaxQueuedImages);
+                    _writer = new Thread(WriterLoop) { IsBackground = true, Name = "UnitEye recording writer" };
+                    _writer.Start();
+                    Directory.CreateDirectory(Path.Combine(_root, "eyes"));
+                    if (tier >= GazeRecordingTier.FaceVideo) Directory.CreateDirectory(Path.Combine(_root, "frames"));
+                }
+
+                Recording = true;
+            }
+            catch
             {
-                _imageQueue = new BlockingCollection<PendingImage>(MaxQueuedImages);
-                _writer = new Thread(WriterLoop) { IsBackground = true, Name = "UnitEye recording writer" };
-                _writer.Start();
-                Directory.CreateDirectory(Path.Combine(_root, "eyes"));
-                if (tier >= GazeRecordingTier.FaceVideo) Directory.CreateDirectory(Path.Combine(_root, "frames"));
+                Dispose();
+                throw;
             }
-
-            Recording = true;
         }
 
         /// <summary>
@@ -233,8 +245,11 @@ namespace UnitEye
                 Num(sb, "featureCount", features.Length);
                 //Omit rather than zero-fill anything the platform could not supply: a sentinel written as a
                 //measurement is indistinguishable from a real one downstream.
-                if (distanceMm > -999f) { sb.Append(","); Num(sb, "distanceMm", distanceMm); }
-                if (headPose != Vector3.zero)
+                if (!float.IsNaN(distanceMm) && !float.IsInfinity(distanceMm) && distanceMm > -999f)
+                {
+                    sb.Append(","); Num(sb, "distanceMm", distanceMm);
+                }
+                if (source != null || headPose != Vector3.zero)
                 {
                     sb.Append(","); Num(sb, "headPitch", headPose.x);
                     sb.Append(","); Num(sb, "headYaw", headPose.y);
@@ -274,26 +289,57 @@ namespace UnitEye
         {
             if (provider != null)
             {
-                //Blit into recorder-owned copies FIRST. The backbone's crop textures are the destination of a
-                //Graphics.Blit on the very next camera frame, so an async readback issued straight against
-                //them can complete holding a later frame's pixels — silently pairing the wrong image with
-                //this row. A copy costs one GPU blit and removes the race entirely.
-                Snapshot(provider.LeftEyeTexture, ref _leftCopy, $"eyes/{sampleIndex:D6}_L.png", lossless: true);
-                Snapshot(provider.RightEyeTexture, ref _rightCopy, $"eyes/{sampleIndex:D6}_R.png", lossless: true);
+                //Blit into pooled recorder-owned copies FIRST so in-flight GPU readbacks are never overwritten
+                //by the next camera frame. Direction backbones expose the same face crop on both properties, so
+                //avoid writing duplicate identical PNGs in that case.
+                var left = provider.LeftEyeTexture;
+                var right = provider.RightEyeTexture;
+                Snapshot(left, $"eyes/{sampleIndex:D6}_L.png", lossless: true);
+                if (right != null && !ReferenceEquals(right, left))
+                    Snapshot(right, $"eyes/{sampleIndex:D6}_R.png", lossless: true);
             }
 
             if (_tier >= GazeRecordingTier.FaceVideo && source != null && source.CameraTexture != null)
                 SnapshotFrame(sampleIndex, source);
         }
 
-        private void Snapshot(RenderTexture src, ref RenderTexture copy, string relativePath, bool lossless)
+        private RenderTexture AcquireCopyRT(int width, int height)
+        {
+            //Scan currently idle RTs for a matching resolution; release idle RTs whose size became stale
+            //(e.g. FaceVideo bounding-box size changed) so memory stays bounded while in-flight RTs remain untouched.
+            int idleCount = _freeRts.Count;
+            for (int i = 0; i < idleCount && _freeRts.TryDequeue(out var candidate); i++)
+            {
+                if (candidate == null) continue;
+                if (candidate.width == width && candidate.height == height)
+                    return candidate;
+                _allocatedRts.Remove(candidate);
+                candidate.Release();
+                UnityEngine.Object.Destroy(candidate);
+            }
+
+            if (_allocatedRts.Count >= MaxQueuedImages + 4)
+                return null;
+
+            var rt = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32);
+            rt.Create();
+            _allocatedRts.Add(rt);
+            return rt;
+        }
+
+        private void Snapshot(RenderTexture src, string relativePath, bool lossless)
         {
             if (src == null) return;
-            if (copy == null || copy.width != src.width || copy.height != src.height)
+            if (!SystemInfo.supportsAsyncGPUReadback || _inFlight >= MaxQueuedImages)
             {
-                if (copy != null) copy.Release();
-                copy = new RenderTexture(src.width, src.height, 0, RenderTextureFormat.ARGB32);
-                copy.Create();
+                Interlocked.Increment(ref _imagesDropped);
+                return;
+            }
+            var copy = AcquireCopyRT(src.width, src.height);
+            if (copy == null)
+            {
+                Interlocked.Increment(ref _imagesDropped);
+                return;
             }
             Graphics.Blit(src, copy);
             RequestReadback(copy, relativePath, lossless);
@@ -304,6 +350,11 @@ namespace UnitEye
             var cam = source.CameraTexture;
             int w = cam.width, h = cam.height;
             if (w <= 0 || h <= 0) return;
+            if (!SystemInfo.supportsAsyncGPUReadback || _inFlight >= MaxQueuedImages)
+            {
+                Interlocked.Increment(ref _imagesDropped);
+                return;
+            }
 
             //FaceVideo crops to the face box so the room (and any bystander) never enters the dataset; only
             //FullFrames keeps the background, and only behind its own confirmation screen.
@@ -322,37 +373,33 @@ namespace UnitEye
 
             int outW = Mathf.Max(16, Mathf.RoundToInt(w * rect.width));
             int outH = Mathf.Max(16, Mathf.RoundToInt(h * rect.height));
-            if (_frameCopy == null || _frameCopy.width != outW || _frameCopy.height != outH)
+            var frameCopy = AcquireCopyRT(outW, outH);
+            if (frameCopy == null)
             {
-                if (_frameCopy != null) _frameCopy.Release();
-                _frameCopy = new RenderTexture(outW, outH, 0, RenderTextureFormat.ARGB32);
-                _frameCopy.Create();
+                Interlocked.Increment(ref _imagesDropped);
+                return;
             }
-            //Landmarks are y-down while the GPU is y-up; the crop rect is flipped to match so the saved frame
-            //corresponds to the region the (y-down) face box describes.
-            var scale = new Vector2(rect.width, rect.height);
-            var offset = new Vector2(rect.xMin, 1f - rect.yMax);
-            Graphics.Blit(cam, _frameCopy, scale, offset);
-            RequestReadback(_frameCopy, $"frames/{sampleIndex:D6}.jpg", lossless: false);
+
+            //Match the exact horizontal/vertical flips FaceMeshSolution applied before landmark detection so
+            //FaceVideo crops the actual face on mirrored/180-rotated webcams and saves upright frames.
+            float scaleX = source.FrameFlippedHorizontally ? -rect.width : rect.width;
+            float offsetX = source.FrameFlippedHorizontally ? (1f - rect.xMin) : rect.xMin;
+            float scaleY = source.FrameFlippedVertically ? -rect.height : rect.height;
+            float offsetY = source.FrameFlippedVertically ? rect.yMax : (1f - rect.yMax);
+            Graphics.Blit(cam, frameCopy, new Vector2(scaleX, scaleY), new Vector2(offsetX, offsetY));
+            RequestReadback(frameCopy, $"frames/{sampleIndex:D6}.jpg", lossless: false);
         }
 
         private void RequestReadback(RenderTexture rt, string relativePath, bool lossless)
         {
-            if (!SystemInfo.supportsAsyncGPUReadback)
-            {
-                //No silent fallback to a synchronous ReadPixels: it would stall the main thread and change
-                //which samples the fixation gate accepts, i.e. corrupt the very data being recorded.
-                _imagesDropped++;
-                return;
-            }
-            if (_inFlight >= MaxQueuedImages) { _imagesDropped++; return; }
-
             int w = rt.width, h = rt.height;
             Interlocked.Increment(ref _inFlight);
             AsyncGPUReadback.Request(rt, 0, TextureFormat.RGBA32, req =>
             {
                 Interlocked.Decrement(ref _inFlight);
-                if (req.hasError) { _readbackFailures++; return; }
+                if (!_disposed && rt != null)
+                    _freeRts.Enqueue(rt);
+                if (req.hasError) { Interlocked.Increment(ref _readbackFailures); return; }
                 //The NativeArray is only valid inside this callback, so copy before handing it off.
                 var pixels = req.GetData<byte>().ToArray();
                 if (_imageQueue == null || _imageQueue.IsAddingCompleted) return;
@@ -363,7 +410,7 @@ namespace UnitEye
                 }))
                 {
                     //Bounded queue full: drop this image rather than block the main thread or grow without limit.
-                    _imagesDropped++;
+                    Interlocked.Increment(ref _imagesDropped);
                 }
             });
         }
@@ -447,30 +494,55 @@ namespace UnitEye
         /// Deletes everything recorded in this session. Backs the "delete my recording now" button, which has
         /// to exist: a participant who changes their mind thirty seconds later should not have to email anyone.
         /// </summary>
-        public void DeleteEverything()
+        public bool DeleteEverything()
         {
             Recording = false;
             Dispose();
-            try { if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true); }
-            catch (Exception e) { UnitEyeLog.Exception(e); }
+            try
+            {
+                if (Directory.Exists(_root))
+                    Directory.Delete(_root, recursive: true);
+            }
+            catch (Exception e)
+            {
+                UnitEyeLog.Exception(e);
+            }
+            return !Directory.Exists(_root);
         }
 
         public void Dispose()
         {
+            _disposed = true;
+            if (_inFlight > 0)
+            {
+                try { AsyncGPUReadback.WaitAllRequests(); } catch { }
+            }
+            try { if (_imageQueue != null && !_imageQueue.IsAddingCompleted) _imageQueue.CompleteAdding(); } catch { }
+            try { _writer?.Join(TimeSpan.FromSeconds(5)); } catch { }
+            try { _imageQueue?.Dispose(); } catch { }
             try { _rows?.Dispose(); } catch { } finally { _rows = null; }
             try { _features?.Dispose(); } catch { } finally { _features = null; }
             try { _landmarks?.Dispose(); } catch { } finally { _landmarks = null; }
-            try { if (_imageQueue != null && !_imageQueue.IsAddingCompleted) _imageQueue.CompleteAdding(); } catch { }
-            if (_leftCopy != null) { _leftCopy.Release(); _leftCopy = null; }
-            if (_rightCopy != null) { _rightCopy.Release(); _rightCopy = null; }
-            if (_frameCopy != null) { _frameCopy.Release(); _frameCopy = null; }
+            while (_freeRts.TryDequeue(out _)) { }
+            for (int i = 0; i < _allocatedRts.Count; i++)
+            {
+                var rt = _allocatedRts[i];
+                if (rt != null)
+                {
+                    rt.Release();
+                    UnityEngine.Object.Destroy(rt);
+                }
+            }
+            _allocatedRts.Clear();
         }
 
-        private static void WriteFloats(FileStream fs, float[] values, int count)
+        private void WriteFloats(FileStream fs, float[] values, int count)
         {
-            var bytes = new byte[count * 4];
-            Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
-            fs.Write(bytes, 0, bytes.Length);
+            int byteCount = count * 4;
+            if (_floatWriteScratch == null || _floatWriteScratch.Length < byteCount)
+                _floatWriteScratch = new byte[Math.Max(byteCount, (_floatWriteScratch?.Length ?? 128) * 2)];
+            Buffer.BlockCopy(values, 0, _floatWriteScratch, 0, byteCount);
+            fs.Write(_floatWriteScratch, 0, byteCount);
         }
 
         //InvariantCulture everywhere: the ambient culture would emit "0,4193" on a German machine and make
@@ -486,6 +558,12 @@ namespace UnitEye
         private static void Bool(StringBuilder sb, string key, bool v)
             => sb.Append('"').Append(key).Append("\":").Append(v ? "true" : "false");
         private static void Str(StringBuilder sb, string key, string v)
-            => sb.Append('"').Append(key).Append("\":\"").Append((v ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"")).Append('"');
+            => sb.Append('"').Append(key).Append("\":\"").Append(
+                (v ?? "")
+                    .Replace("\\", "\\\\")
+                    .Replace("\"", "\\\"")
+                    .Replace("\r", "\\r")
+                    .Replace("\n", "\\n")
+                    .Replace("\t", "\\t")).Append('"');
     }
 }

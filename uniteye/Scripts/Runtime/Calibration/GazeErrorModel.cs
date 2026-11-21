@@ -101,17 +101,15 @@ namespace UnitEye
 
         // ---- Persistence: rides the same per-backbone "Calibration Files" convention as the calibration
         // models (and therefore ships in builds + is picked up by calibration profiles' filename filter).
-        private static string PathFor(GazeBackbone backbone) =>
-            Application.streamingAssetsPath + "/Calibration Files/RidgeRegression/" +
-            CalibrationModelStore.FileName("ErrorModel.json", backbone);
-
         public void Save(GazeBackbone backbone)
         {
-            var dir = Application.streamingAssetsPath + "/Calibration Files/RidgeRegression/";
+            var dir = CalibrationModelStore.GetWritableDirectory("RidgeRegression");
             if (!Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
             var persisted = new Persisted { sourceCalibration = SourceCalibration.ToString(), anchors = _anchors };
-            File.WriteAllText(PathFor(backbone), JsonUtility.ToJson(persisted));
+            var fileName = CalibrationModelStore.FileName("ErrorModel.json", backbone);
+            File.WriteAllText(CalibrationModelStore.GetWritablePath("RidgeRegression", fileName),
+                JsonUtility.ToJson(persisted));
         }
 
         /// <summary>Deletes the persisted error model for a backbone. Called on RE-CALIBRATION: the model
@@ -119,19 +117,16 @@ namespace UnitEye
         /// stream until the next evaluation replaces it.</summary>
         public static void Delete(GazeBackbone backbone)
         {
-            try
-            {
-                var path = PathFor(backbone);
-                if (File.Exists(path)) File.Delete(path);
-            }
-            catch (System.Exception e) { UnitEyeLog.Exception(e); }
+            CalibrationModelStore.DeleteCalibrationFile(
+                "RidgeRegression", CalibrationModelStore.FileName("ErrorModel.json", backbone));
         }
 
         public static GazeErrorModel Load(GazeBackbone backbone)
         {
             try
             {
-                var path = PathFor(backbone);
+                var fileName = CalibrationModelStore.FileName("ErrorModel.json", backbone);
+                var path = CalibrationModelStore.GetReadablePath("RidgeRegression", fileName);
                 if (!File.Exists(path)) return null;
                 var persisted = JsonUtility.FromJson<Persisted>(File.ReadAllText(path));
                 if (persisted?.anchors == null || persisted.anchors.Count == 0) return null;

@@ -40,10 +40,11 @@ namespace UnitEye
         //The calibration-file subfolders a profile snapshots (mirrors RidgeRegression.Save / SimpleMLP.Save).
         private static readonly string[] Subfolders = { "RidgeRegression", "MLP" };
 
-        private static string CalibrationRoot =>
-            Path.Combine(Application.streamingAssetsPath, "Calibration Files");
+        private static string CalibrationRoot => CalibrationModelStore.PersistentCalibrationRoot;
         //Writable location for user-saved profiles (a sibling of the RidgeRegression/MLP folders).
         private static string UserProfilesDir => Path.Combine(CalibrationRoot, "Profiles");
+        private static string LegacyStreamingProfilesDir =>
+            Path.Combine(CalibrationModelStore.StreamingCalibrationRoot, "Profiles");
 
         /// <summary>
         /// Snapshots the current calibration files for <paramref name="backbone"/> into a user profile file.
@@ -113,21 +114,24 @@ namespace UnitEye
             if (written == 0)
                 return $"Profile '{name}' contained no usable calibration files.";
 
-            //Companion files NOT in the profile must not survive the restore: a TPS warp or per-region
-            //error model is only valid for the exact ridge fit it was measured on — leaving the previous
-            //calibration's on disk cross-pairs it with the restored fit and corrupts gaze/AOI output.
+            //Files NOT in the profile for this backbone must not survive the restore: a TPS warp, error model,
+            //or opposite model family (MLP vs Ridge) from an earlier calibration would otherwise remain on disk.
             if (!string.IsNullOrEmpty(profile.backbone))
             {
-                foreach (var companion in new[] { "Warp", "ErrorModel" })
+                var managedFiles = new (string sub, string stem)[]
                 {
-                    var rel = $"RidgeRegression/{companion}_{profile.backbone}{Extension}";
+                    ("RidgeRegression", "Reg_X"),
+                    ("RidgeRegression", "Reg_Y"),
+                    ("RidgeRegression", "Warp"),
+                    ("RidgeRegression", "ErrorModel"),
+                    ("MLP", "MLP"),
+                };
+                foreach (var (sub, stem) in managedFiles)
+                {
+                    var fileName = $"{stem}_{profile.backbone}{Extension}";
+                    var rel = $"{sub}/{fileName}";
                     if (profile.files.ContainsKey(rel)) continue;
-                    try
-                    {
-                        var stale = Path.Combine(CalibrationRoot, "RidgeRegression", $"{companion}_{profile.backbone}{Extension}");
-                        if (File.Exists(stale)) File.Delete(stale);
-                    }
-                    catch (Exception e) { UnitEyeLog.Exception(e); }
+                    CalibrationModelStore.DeleteCalibrationFile(sub, fileName);
                 }
             }
 
@@ -139,13 +143,56 @@ namespace UnitEye
             return $"Loaded profile '{name}' ({written} file(s)).{glassesWarning}";
         }
 
-        /// <summary>All available profile names: user-saved (StreamingAssets) + shipped (Resources), deduped and sorted.</summary>
+        /// <summary>
+        /// Inspects a saved profile's metadata without writing files so callers can synchronize the active
+        /// GazeBackbone and Calibrations mode when loading it.
+        /// </summary>
+        public static bool TryInspectProfile(string name, out GazeBackbone backbone, out bool hasRidge, out bool hasMlp)
+        {
+            backbone = GazeBackbone.EyeMU;
+            hasRidge = false;
+            hasMlp = false;
+            name = Sanitize(name);
+            var json = ReadProfileJson(name);
+            if (json == null) return false;
+            try
+            {
+                var profile = JsonConvert.DeserializeObject<CalibrationProfile>(json);
+                if (profile == null) return false;
+                bool parsedBackbone = !string.IsNullOrEmpty(profile.backbone) &&
+                                      Enum.TryParse(profile.backbone, out backbone);
+                if (profile.files != null)
+                {
+                    foreach (var key in profile.files.Keys)
+                    {
+                        if (key.StartsWith("RidgeRegression/Reg_X_", StringComparison.OrdinalIgnoreCase))
+                            hasRidge = true;
+                        else if (key.StartsWith("MLP/MLP_", StringComparison.OrdinalIgnoreCase))
+                            hasMlp = true;
+                    }
+                }
+                return parsedBackbone || hasRidge || hasMlp;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>All available profile names: user-saved (persistent + StreamingAssets) + shipped (Resources), deduped and sorted.</summary>
         public static List<string> List()
         {
             var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
             if (Directory.Exists(UserProfilesDir))
                 foreach (var f in Directory.GetFiles(UserProfilesDir, "*" + Extension))
                     names.Add(Path.GetFileNameWithoutExtension(f));
+            try
+            {
+                if (Directory.Exists(LegacyStreamingProfilesDir))
+                    foreach (var f in Directory.GetFiles(LegacyStreamingProfilesDir, "*" + Extension))
+                        names.Add(Path.GetFileNameWithoutExtension(f));
+            }
+            catch { }
             foreach (var ta in Resources.LoadAll<TextAsset>(ResourcesFolder))
                 names.Add(ta.name);
             return new List<string>(names);
@@ -156,17 +203,24 @@ namespace UnitEye
             //Only this backbone's files (they are named "..._<backbone>.json"), so a profile is one model's
             //calibration and does not drag in another backbone's or the legacy no-suffix files.
             var suffix = $"_{backbone}{Extension}";
-            var map = new Dictionary<string, string>();
-            foreach (var sub in Subfolders)
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var root in new[] { CalibrationModelStore.StreamingCalibrationRoot, CalibrationRoot })
             {
-                var dir = Path.Combine(CalibrationRoot, sub);
-                if (!Directory.Exists(dir)) continue;
-                foreach (var f in Directory.GetFiles(dir, "*" + Extension))
+                try
                 {
-                    var file = Path.GetFileName(f);
-                    if (file.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-                        map[$"{sub}/{file}"] = File.ReadAllText(f);
+                    foreach (var sub in Subfolders)
+                    {
+                        var dir = Path.Combine(root, sub);
+                        if (!Directory.Exists(dir)) continue;
+                        foreach (var f in Directory.GetFiles(dir, "*" + Extension))
+                        {
+                            var file = Path.GetFileName(f);
+                            if (file.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                                map[$"{sub}/{file}"] = File.ReadAllText(f);
+                        }
+                    }
                 }
+                catch { }
             }
             return map;
         }
@@ -176,7 +230,7 @@ namespace UnitEye
             if (!IsSafeRelativePath(relative))
                 return false;
             var parts = relative.Replace('\\', '/').Split('/');
-            var dir = Path.Combine(CalibrationRoot, parts[0]);
+            var dir = CalibrationModelStore.GetWritableDirectory(parts[0]);
             try
             {
                 Directory.CreateDirectory(dir);
@@ -195,6 +249,13 @@ namespace UnitEye
             var userPath = Path.Combine(UserProfilesDir, name + Extension);
             if (File.Exists(userPath))
                 return File.ReadAllText(userPath);
+            try
+            {
+                var legacyPath = Path.Combine(LegacyStreamingProfilesDir, name + Extension);
+                if (File.Exists(legacyPath))
+                    return File.ReadAllText(legacyPath);
+            }
+            catch { }
             var ta = Resources.Load<TextAsset>($"{ResourcesFolder}/{name}");
             return ta != null ? ta.text : null;
         }

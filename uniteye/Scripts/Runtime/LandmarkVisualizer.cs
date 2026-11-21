@@ -27,13 +27,18 @@ namespace UnitEye
         }
 
         private WebCamSource _webCamSource;
+        private bool _spawnedPointGO;
 
         public Vector2 ScreenSize
         {
             get
             {
+                if (_faceMesh == null)
+                    return new Vector2(Screen.width, Screen.height);
                 if (_webCamSource == null)
                     _webCamSource = _faceMesh.gameObject.GetComponent<WebCamSource>();
+                if (_webCamSource == null)
+                    return new Vector2(Screen.width, Screen.height);
                 var resolution = _webCamSource.resolution;
                 return new Vector2(resolution.width, resolution.height);
             }
@@ -47,13 +52,25 @@ namespace UnitEye
 
         void Update()
         {
+            if (_faceMesh == null) return;
             if (_pointGO == null)
+            {
                 _pointGO = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                _spawnedPointGO = true;
+                var col = _pointGO.GetComponent<Collider>();
+                if (col != null) Destroy(col);
+            }
 
-            //Cache Position/ScreenSize (each read hits the face mesh / a GetComponent); no per-frame log.
+            //Cache Position/ScreenSize (MediaPipe Y is top-down; flip to Unity Y-up).
             var pos = Position;
             var size = ScreenSize;
-            _pointGO.transform.position = new Vector3(pos.x * size.x, pos.y * size.y, 0);
+            _pointGO.transform.position = new Vector3(pos.x * size.x, (1f - pos.y) * size.y, 0f);
+        }
+
+        void OnDestroy()
+        {
+            if (_spawnedPointGO && _pointGO != null)
+                Destroy(_pointGO);
         }
     }
 }

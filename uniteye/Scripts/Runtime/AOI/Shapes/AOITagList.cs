@@ -14,7 +14,7 @@ namespace UnitEye
 
         private Vector3 _pointVector;
 
-        public Camera camera = Camera.main;
+        public Camera camera;
 
         public int maxNumberOfRaycastHits = 20;
 
@@ -26,6 +26,24 @@ namespace UnitEye
         private RaycastHit[] _raycastBuffer;
         private readonly List<RaycastHit> _hitListWithTag = new List<RaycastHit>();
 
+        //Central per-frame raycast cache shared across all AOITagList / Gazeable instances querying the same
+        //(camera, viewportPoint, layerMask, queryTriggerInteraction) in one frame, cutting N raycasts + N tag
+        //string allocations down to 1.
+        private static int s_singleFrame = -1, s_singleMask;
+        private static Camera s_singleCam;
+        private static Vector3 s_singlePoint;
+        private static QueryTriggerInteraction s_singleQti;
+        private static bool s_singleHasHit;
+        private static RaycastHit s_singleHit;
+        private static string s_singleTag, s_singleEntry;
+
+        private static int s_xrayFrame = -1, s_xrayMask, s_xrayMaxHits, s_xrayCount;
+        private static Camera s_xrayCam;
+        private static Vector3 s_xrayPoint;
+        private static QueryTriggerInteraction s_xrayQti;
+        private static RaycastHit[] s_xrayHits;
+        private static string[] s_xrayTags, s_xrayEntries;
+
         public AOITagList(string uID, bool xray = false, bool inverted = false, int layerMask = Physics.DefaultRaycastLayers, QueryTriggerInteraction queryTriggerInteraction = QueryTriggerInteraction.Ignore, bool enabled = true, bool visualized = true) : base(uID, inverted, enabled, visualized)
         {
             this.xray = xray;
@@ -35,7 +53,7 @@ namespace UnitEye
 
         public AOITagList(string uID, HashSet<string> tagList, bool xray = false, bool inverted = false, int layerMask = Physics.DefaultRaycastLayers, QueryTriggerInteraction queryTriggerInteraction = QueryTriggerInteraction.Ignore, bool enabled = true, bool visualized = true) : base(uID, inverted, enabled, visualized)
         {
-            _tagList = tagList;
+            _tagList = tagList ?? new HashSet<string>();
             this.xray = xray;
             this.layerMask = layerMask;
             this.queryTriggerInteraction = queryTriggerInteraction;
@@ -91,29 +109,53 @@ namespace UnitEye
         /// <param name="point"></param>
         /// <param name="hitAOI">out bool for caller</param>
         /// <returns>RaycastHit when a hit with tag was found, null if nothing was hit</returns>
+        private Camera ResolveCamera()
+        {
+            if (camera == null)
+                camera = Camera.main;
+            return camera;
+        }
+
         private RaycastHit CheckRaycast(Vector3 point, out bool hitAOI)
         {
-            RaycastHit hit;
-            Ray ray = camera.ViewportPointToRay(point);
-
             hitAOI = false;
+            var cam = ResolveCamera();
+            if (cam == null)
+                return default;
 
-            //Normal Raycast
-            if (Physics.Raycast(ray, out hit, Mathf.Infinity, layerMask))
+            int frame = Time.frameCount;
+            if (s_singleFrame != frame || !ReferenceEquals(s_singleCam, cam) || s_singleMask != layerMask ||
+                s_singleQti != queryTriggerInteraction || s_singlePoint != point)
             {
-                var tag = hit.collider.transform.tag;
-                //If tag in _tagList
-                if (_tagList.Contains(tag))
+                s_singleFrame = frame;
+                s_singleCam = cam;
+                s_singleMask = layerMask;
+                s_singleQti = queryTriggerInteraction;
+                s_singlePoint = point;
+
+                Ray ray = cam.ViewportPointToRay(point);
+                s_singleHasHit = Physics.Raycast(ray, out s_singleHit, Mathf.Infinity, layerMask, queryTriggerInteraction);
+                if (s_singleHasHit && s_singleHit.collider != null)
                 {
-                    //Add string to hitTagList and return true
-                    hitNameList.Add($"({tag}/{hit.collider.gameObject.name})");
-                    hitAOI = true;
+                    s_singleTag = s_singleHit.collider.transform.tag;
+                    s_singleEntry = $"({s_singleTag}/{s_singleHit.collider.gameObject.name})";
+                }
+                else
+                {
+                    s_singleHasHit = false;
+                    s_singleTag = null;
+                    s_singleEntry = null;
                 }
             }
 
-            //(hit is default(RaycastHit) when nothing was hit; the old hit.Equals(null) branch was dead
-            //because RaycastHit is a struct and never equals null.)
-            return hit;
+            if (s_singleHasHit && s_singleHit.collider != null && _tagList.Contains(s_singleTag))
+            {
+                hitNameList.Add(s_singleEntry);
+                hitAOI = true;
+                return s_singleHit;
+            }
+
+            return s_singleHasHit ? s_singleHit : default;
         }
 
         /// <summary>
@@ -124,29 +166,58 @@ namespace UnitEye
         /// <returns>List with all the found RaycastHit, is empty if nothing was found</returns>
         private List<RaycastHit> CheckRaycastXray(Vector3 point, out bool hitAOI)
         {
-            //Reuse the buffers instead of allocating a RaycastHit[] + List every frame. Resize the
-            //array only if maxNumberOfRaycastHits changed.
-            if (_raycastBuffer == null || _raycastBuffer.Length != maxNumberOfRaycastHits)
-                _raycastBuffer = new RaycastHit[maxNumberOfRaycastHits];
             _hitListWithTag.Clear();
-            Ray ray = camera.ViewportPointToRay(point);
-
             hitAOI = false;
 
-            //Xray RaycastNonAlloc that puts all hit targets into an array
-            int hits = Physics.RaycastNonAlloc(ray, _raycastBuffer, Mathf.Infinity, layerMask);
+            var cam = ResolveCamera();
+            int maxHits = Mathf.Max(1, maxNumberOfRaycastHits);
+            if (cam == null)
+                return _hitListWithTag;
 
-            //Go through the hit array and check if _raycastBuffer[i] has a tag in _tagList
-            for (int i = 0; i < hits; i++)
+            int frame = Time.frameCount;
+            if (s_xrayFrame != frame || !ReferenceEquals(s_xrayCam, cam) || s_xrayMask != layerMask ||
+                s_xrayQti != queryTriggerInteraction || s_xrayMaxHits != maxHits || s_xrayPoint != point)
             {
-                var tag = _raycastBuffer[i].collider.transform.tag;
-                //If tag in _tagList
-                if (_tagList.Contains(tag))
+                s_xrayFrame = frame;
+                s_xrayCam = cam;
+                s_xrayMask = layerMask;
+                s_xrayQti = queryTriggerInteraction;
+                s_xrayMaxHits = maxHits;
+                s_xrayPoint = point;
+
+                if (s_xrayHits == null || s_xrayHits.Length != maxHits)
                 {
-                    //Add string to hitTagList and set tagFound to true
-                    hitNameList.Add($"({tag}/{_raycastBuffer[i].collider.gameObject.name})");
+                    s_xrayHits = new RaycastHit[maxHits];
+                    s_xrayTags = new string[maxHits];
+                    s_xrayEntries = new string[maxHits];
+                }
+
+                Ray ray = cam.ViewportPointToRay(point);
+                s_xrayCount = Physics.RaycastNonAlloc(ray, s_xrayHits, Mathf.Infinity, layerMask, queryTriggerInteraction);
+                for (int i = 0; i < s_xrayCount; i++)
+                {
+                    var col = s_xrayHits[i].collider;
+                    if (col != null)
+                    {
+                        string tag = col.transform.tag;
+                        s_xrayTags[i] = tag;
+                        s_xrayEntries[i] = $"({tag}/{col.gameObject.name})";
+                    }
+                    else
+                    {
+                        s_xrayTags[i] = null;
+                        s_xrayEntries[i] = null;
+                    }
+                }
+            }
+
+            for (int i = 0; i < s_xrayCount; i++)
+            {
+                if (s_xrayHits[i].collider != null && s_xrayTags[i] != null && _tagList.Contains(s_xrayTags[i]))
+                {
+                    hitNameList.Add(s_xrayEntries[i]);
                     hitAOI = true;
-                    _hitListWithTag.Add(_raycastBuffer[i]);
+                    _hitListWithTag.Add(s_xrayHits[i]);
                 }
             }
 
