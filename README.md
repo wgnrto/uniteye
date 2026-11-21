@@ -70,7 +70,7 @@ Full details, the ONNX I/O, and the finish/hand-test steps are in [`docs/GAZE-BA
 Create an empty 3D Unity project (Unity 6.3 LTS / 6000.3), follow [Installation](#installation) to add the packages, then open `HomulerGazeScene` from the UnitEye package. [Getting started](#getting-started) walks through the pieces.
 
 ## Installation
-UnitEye targets **Unity 6.3 LTS (6000.3)** and is also verified on **Unity 6.5 (6000.5)** — the editor smoke suite passes on both (last verified: 252/252 checks on **6000.3.21f1** and **6000.5.5f1**, both with Input System 1.19.0). You need **two** package folders from the repository root: `uniteye` and `com.github.homuler.mediapipe`. Copy them into your project's `Packages/` folder (embedded packages), or reference them via `file:` in your `Packages/manifest.json`. No scoped registries are needed (HolisticBarracuda and the `jp.keijiro`/`jp.ikep` registries are gone); the remaining registry dependencies resolve from Unity's own registry:
+UnitEye targets **Unity 6.3 LTS (6000.3)** and is verified through **Unity 6.6 (6000.6)** (editor smoke suite: 489/489 checks on **6000.6.7f1** with Input System 1.20.1). You need **two** package folders from the repository root: `uniteye` and `com.github.homuler.mediapipe`. Copy them into your project's `Packages/` folder (embedded packages), or reference them via `file:` in your `Packages/manifest.json`. No scoped registries are needed (HolisticBarracuda and the `jp.keijiro`/`jp.ikep` registries are gone); the remaining registry dependencies resolve from Unity's own registry:
 
 ```json
 {
@@ -78,19 +78,17 @@ UnitEye targets **Unity 6.3 LTS (6000.3)** and is also verified on **Unity 6.5 (
         "de.uniulm.uniteye": "file:../../path/to/uniteye",
         "com.github.homuler.mediapipe": "file:../../path/to/com.github.homuler.mediapipe",
         "com.unity.ai.inference": "2.6.1",
-        "com.unity.inputsystem": "1.19.0",
-        "com.unity.nuget.newtonsoft-json": "3.2.1"
+        "com.unity.inputsystem": "1.20.1",
+        "com.unity.nuget.newtonsoft-json": "3.2.2"
     }
 }
 ```
 
-> **Do not lower the Input System version.** Unity 6.4 turned the non-generic IMGUI
+> **Do not lower the Input System version below 1.19.0.** Unity 6.4 turned the non-generic IMGUI
 > `TreeView`/`TreeViewState`/`TreeViewItem` into obsolete-as-error (`CS0619`), and Input System
-> **1.8.2** — pinned here previously — still uses them in its editor windows, so on Unity 6.5 the
-> project fails to compile before any UnitEye code is even reached. Input System 1.15.0 fixed that
-> (ISX-2349) and 1.19.0 additionally moved off the deprecated `GetInstanceID()`. **1.19.0 is the
-> version actually verified on both 6.3 and 6.5**; intermediate versions were not tested, and UPM
-> installs exactly the version declared here rather than upgrading automatically.
+> **1.8.2** still uses them in its editor windows. Input System 1.15.0 fixed that (ISX-2349), 1.19.0 moved
+> off the deprecated `GetInstanceID()`, and **1.20.1** is the version verified on Unity 6.6; UPM
+> installs the exact version declared in your manifest.
 
 (`uniteye`'s own [`package.json`](uniteye/package.json) declares these, so Unity resolves them automatically once the package is added; the block above is just what ends up in the manifest.)
 

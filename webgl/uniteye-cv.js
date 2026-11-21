@@ -13,16 +13,16 @@
  * Verified in-browser: EyeMU runs in onnxruntime-web (correct I/O names, finite output) and
  * FaceLandmarker initializes; the model/CDN versions below are the ones confirmed working.
  *
- * MediaPipe is pinned to tasks-vision 1.0.0 (Google's first stable release, July 2026). The bump from
- * 0.10.35 was verified to be behaviour-preserving: on the same face image both versions return 478
+ * MediaPipe is pinned to tasks-vision 1.2.3 (1.x stable line). The bump from
+ * 0.10.35 / 1.0.0 was verified to be behaviour-preserving: on the same face image the runtime returns 478
  * landmarks whose coordinates are bit-identical (the .task model is pinned, so only the runtime moved).
  * Pin the version deliberately — @latest can break without notice.
  */
 
-const ORT_URL = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.mjs';
-const ORT_WASM = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-const MP_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.0/vision_bundle.mjs';
-const MP_WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.0/wasm';
+const ORT_URL = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort.mjs';
+const ORT_WASM = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/';
+const MP_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.3/vision_bundle.mjs';
+const MP_WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.3/wasm';
 const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
 // MediaPipe canonical face-mesh indices (match the native UnitEye eye-corner + EAR indices)

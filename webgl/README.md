@@ -107,10 +107,10 @@ loaded in the browser, and vice versa. Per-user, per-setup calibration is requir
 
 ## Pinned versions (confirmed working)
 
-- `onnxruntime-web@1.20.1`
-- `@mediapipe/tasks-vision@1.0.0` + MediaPipe `face_landmarker.task` (float16/1)
+- `onnxruntime-web@1.31.1`
+- `@mediapipe/tasks-vision@1.2.3` + MediaPipe `face_landmarker.task` (float16/1)
 
-`tasks-vision` was moved from `0.10.35` to **1.0.0** (Google's first stable MediaPipe release, July 2026).
+`tasks-vision` was moved from `0.10.35` to the **1.x** stable release line (`1.2.3`).
 The bump is behaviour-preserving and was verified rather than assumed: feeding both versions the same
 face image produces 478 landmarks with **bit-identical** coordinates (max abs difference `0`) at the eye
 corners and iris centres the pipeline reads. Only the WASM runtime moved — the `.task` model URL is
