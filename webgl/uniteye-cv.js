@@ -49,20 +49,48 @@ export class UnitEyeWeb {
     this.mock = !!opts.mock;
     this.modelUrl = opts.modelUrl || 'models/eyemu.onnx';
     this.onGaze = opts.onGaze || function () {};
+    this._fixedScreen = !!(opts.screenW && opts.screenH);
+    this._canvas = opts.canvas || null;
     this.screenW = opts.screenW || window.innerWidth;
     this.screenH = opts.screenH || window.innerHeight;
+    this._updateViewportSize();
     this.blinkThreshold = opts.blinkThreshold ?? 0.15;
     this.calibX = null; this.calibY = null;       // UnitEyeCore.RidgeModel per axis (optional)
     // One-Euro tuned for coarse, stable output; adjust to taste
     this.filter = new C.OneEuro2D(60, opts.mincutoff ?? 0.5, opts.beta ?? 0.01, opts.dcutoff ?? 1.0);
     this._running = false;
+    this._paused = false;
     this._lastVideoTime = -1;
     this._mouse = { x: this.screenW / 2, y: this.screenH / 2 };
+    this._onMouseMove = null;
     this._crop = document.createElement('canvas'); this._crop.width = 128; this._crop.height = 128;
     this._cropCtx = this._crop.getContext('2d', { willReadFrequently: true });
+    // Reused typed-array buffers so each frame allocates zero EyeMU input arrays.
+    this._leftBuf = new Float32Array(128 * 128 * 3);
+    this._rightBuf = new Float32Array(128 * 128 * 3);
+    this._cornersBuf = new Float32Array(8);
+    this._poseBuf = new Float32Array(4);
+    this._feeds = null;
     // Reused calibration-feature buffer (mirrors the native runner's reused float[]); valid only until
     // the next frame — a consumer that retains the vector must copy it.
     this._features = new Array(C.EYEMU_FEATURE_COUNT);
+  }
+
+  _updateViewportSize() {
+    if (this._fixedScreen) return;
+    const canvas = this._canvas || (typeof document !== 'undefined' && document.querySelector('#unity-canvas'));
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      this._canvas = canvas;
+      this.screenW = canvas.width;
+      this.screenH = canvas.height;
+    } else if (typeof window !== 'undefined') {
+      this.screenW = window.innerWidth || this.screenW;
+      this.screenH = window.innerHeight || this.screenH;
+    }
+  }
+
+  setPaused(paused) {
+    this._paused = !!paused;
   }
 
   /** Load a shipped Reg_X.json / Reg_Y.json (or in-browser trained models) to calibrate. */
@@ -105,12 +133,30 @@ export class UnitEyeWeb {
 
   start() {
     this._running = true;
+    this._paused = false;
     if (this.mock) {
-      window.addEventListener('mousemove', e => { this._mouse.x = e.clientX; this._mouse.y = e.clientY; });
+      if (this._onMouseMove) window.removeEventListener('mousemove', this._onMouseMove);
+      this._onMouseMove = e => {
+        this._updateViewportSize();
+        if (this._canvas) {
+          const r = this._canvas.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) {
+            this._mouse.x = (e.clientX - r.left) * (this.screenW / r.width);
+            this._mouse.y = (e.clientY - r.top) * (this.screenH / r.height);
+            return;
+          }
+        }
+        this._mouse.x = e.clientX;
+        this._mouse.y = e.clientY;
+      };
+      window.addEventListener('mousemove', this._onMouseMove);
       const tickMock = () => {
         if (!this._running) return;
-        const t = performance.now() / 1000;
-        this._emit(this._mouse.x, this._mouse.y, null, false, true, t);
+        if (!this._paused) {
+          this._updateViewportSize();
+          const t = performance.now() / 1000;
+          this._emit(this._mouse.x, this._mouse.y, null, false, true, t);
+        }
         requestAnimationFrame(tickMock);
       };
       requestAnimationFrame(tickMock);
@@ -118,22 +164,40 @@ export class UnitEyeWeb {
     }
     const tick = async () => {
       if (!this._running) return;
-      try { await this._processFrame(); } catch (e) { console.warn('UnitEye frame error', e); }
-      requestAnimationFrame(tick);
+      if (!this._paused) {
+        try { await this._processFrame(); } catch (e) { console.warn('UnitEye frame error', e); }
+      }
+      if (this._running) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   }
 
   stop() {
     this._running = false;
-    if (this.video && this.video.srcObject) this.video.srcObject.getTracks().forEach(t => t.stop());
+    if (this._onMouseMove) {
+      window.removeEventListener('mousemove', this._onMouseMove);
+      this._onMouseMove = null;
+    }
+    if (this.video && this.video.srcObject) {
+      this.video.srcObject.getTracks().forEach(t => t.stop());
+      this.video.srcObject = null;
+    }
+    if (this._feeds) {
+      for (const k of Object.keys(this._feeds)) {
+        try { this._feeds[k]?.dispose?.(); } catch (_) {}
+      }
+      this._feeds = null;
+    }
+    try { this.faceLandmarker?.close?.(); } catch (_) {}
+    this.faceLandmarker = null;
+    try { this.session?.release?.(); } catch (_) {}
+    this.session = null;
   }
 
   async _processFrame() {
+    this._updateViewportSize();
     const now = performance.now();
-    // requestAnimationFrame often runs faster than the webcam. Do not turn a single camera frame into
-    // multiple identical observations: that distorts calibration/evaluation sample weighting and adds
-    // misleading filter updates without new visual evidence.
+    if (!this.video || !this.faceLandmarker || !this.session) return;
     if (this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
         this.video.currentTime === this._lastVideoTime) return;
     this._lastVideoTime = this.video.currentTime;
@@ -145,44 +209,46 @@ export class UnitEyeWeb {
     const lm = res.faceLandmarks[0]; // 478 {x,y,z} normalized, y top-left
     const vw = this.video.videoWidth, vh = this.video.videoHeight;
 
-    // eye crops (128x128, NHWC, RGB-0.5). Left eye is flipped to match EyeMU (native flips left).
-    // Argument order matches the native GetEyeTexture calls: left (362=lInner, 263=lOuter),
-    // right (33=rOuter, 133=rInner) — first index is the smaller-x corner, so eyeLength > 0.
-    const leftTensor = this._eyeTensor(lm, IDX.lInner, IDX.lOuter, vw, vh, true);
-    const rightTensor = this._eyeTensor(lm, IDX.rOuter, IDX.rInner, vw, vh, false);
+    const leftTensor = this._eyeTensor(lm, IDX.lInner, IDX.lOuter, vw, vh, true, this._leftBuf);
+    const rightTensor = this._eyeTensor(lm, IDX.rOuter, IDX.rInner, vw, vh, false, this._rightBuf);
     if (!leftTensor || !rightTensor) { this._emit(0, 0, null, false, false, now / 1000); return; }
 
-    // eye corners (8) and head pose (4)
-    const corners = Float32Array.from([
-      lm[IDX.lOuter].x, lm[IDX.lOuter].y, lm[IDX.lInner].x, lm[IDX.lInner].y,
-      lm[IDX.rOuter].x, lm[IDX.rOuter].y, lm[IDX.rInner].x, lm[IDX.rInner].y,
-    ]);
-    const pose = this._headPose(lm);
+    const corners = this._cornersBuf;
+    corners[0] = lm[IDX.lOuter].x; corners[1] = lm[IDX.lOuter].y;
+    corners[2] = lm[IDX.lInner].x; corners[3] = lm[IDX.lInner].y;
+    corners[4] = lm[IDX.rOuter].x; corners[5] = lm[IDX.rOuter].y;
+    corners[6] = lm[IDX.rInner].x; corners[7] = lm[IDX.rInner].y;
+    const pose = this._headPose(lm, res, this._poseBuf);
 
-    const ort = this.ort;
-    const feeds = {
-      'input_1:0': new ort.Tensor('float32', leftTensor, [1, 128, 128, 3]),
-      'input_2:0': new ort.Tensor('float32', rightTensor, [1, 128, 128, 3]),
-      'input_4': new ort.Tensor('float32', corners, [1, 8]),
-      'input_5': new ort.Tensor('float32', pose, [1, 4]),
-    };
-    const out = await this.session.run(feeds);
-    const emb = out['dense_7'].data;   // 4
-    const gaze = out['dense_8'].data;  // 2 (normalized 0..1)
+    if (!this._feeds) {
+      const ort = this.ort;
+      this._feeds = {
+        'input_1:0': new ort.Tensor('float32', leftTensor, [1, 128, 128, 3]),
+        'input_2:0': new ort.Tensor('float32', rightTensor, [1, 128, 128, 3]),
+        'input_4': new ort.Tensor('float32', corners, [1, 8]),
+        'input_5': new ort.Tensor('float32', pose, [1, 4]),
+      };
+    }
+    const out = await this.session.run(this._feeds);
+    if (!this._running || this._paused) {
+      try { out['dense_7']?.dispose?.(); out['dense_8']?.dispose?.(); } catch (_) {}
+      return;
+    }
 
-    const rawX = gaze[0] * this.screenW;
-    const rawY = gaze[1] * this.screenH;
+    const embData = out['dense_7'].data;
+    const gazeData = out['dense_8'].data;
+    const gx = gazeData[0], gy = gazeData[1];
+    const emb0 = embData[0], emb1 = embData[1], emb2 = embData[2], emb3 = embData[3];
+    try { out['dense_7']?.dispose?.(); out['dense_8']?.dispose?.(); } catch (_) {}
 
-    // 36-feature vector, matching HomulerEyeMURunner.Features / FeatureCount exactly:
-    // [embedding 4, polynomial of the normalized gaze point 7, head pose 4, iris offsets 4, context 17].
-    // NOTE these use gaze[0]/gaze[1] — the model's NORMALIZED 0..1 output, not the pixel values:
-    // the native runner divides its pixel NetworkOutput back by Screen.width/height for exactly this
-    // reason (keeps the squared/cubed terms in a sane range).
-    const features = this.C.buildEyeMUFeatures(emb, gaze[0], gaze[1], pose, lm, this._features,
+    const rawX = gx * this.screenW;
+    const rawY = gy * this.screenH;
+
+    const embArr = this._embScratch || (this._embScratch = [0, 0, 0, 0]);
+    embArr[0] = emb0; embArr[1] = emb1; embArr[2] = emb2; embArr[3] = emb3;
+    const features = this.C.buildEyeMUFeatures(embArr, gx, gy, pose, lm, this._features,
       this._contextFromResult(res));
 
-    //Blink gate: prefer the eyeBlink blendshapes (dedicated lid-closure signal, no downward-gaze false
-    //positives) when the landmarker provides them; fall back to the EAR heuristic (mirrors native).
     const blinkScore = this._blinkFromResult(res);
     const blink = blinkScore !== null ? blinkScore > 0.5 : this._blink(lm, vw, vh);
     this._emit(rawX, rawY, features, blink, true, now / 1000);
@@ -231,34 +297,69 @@ export class UnitEyeWeb {
     return ctx;
   }
 
-  _eyeTensor(lm, aIdx, bIdx, vw, vh, flip) {
+  _eyeTensor(lm, aIdx, bIdx, vw, vh, flip, outBuf) {
     const r = this.C.eyeCropRect(lm, aIdx, bIdx, vw, vh);
     if (!r) return null;
-    // Reject crops that leave the frame — mirrors the native BlitEyeCrop bounds check. drawImage clips
-    // out-of-bounds source rects instead of failing, so without this the canvas keeps PREVIOUS-frame
-    // pixels in the uncovered region and EyeMU infers from a stale composite.
     if (r.x < 0 || r.y < 0 || r.x + r.size > vw || r.y + r.size > vh) return null;
     const ctx = this._cropCtx;
     ctx.save();
     if (flip) { ctx.translate(128, 0); ctx.scale(-1, 1); }
-    // draw the source crop scaled to 128x128
     ctx.drawImage(this.video, r.x, r.y, r.size, r.size, 0, 0, 128, 128);
     ctx.restore();
     const img = ctx.getImageData(0, 0, 128, 128);
-    return this.C.eyeCropToTensor(img, new Float32Array(128 * 128 * 3));
+    return this.C.eyeCropToTensor(img, outBuf || new Float32Array(128 * 128 * 3));
   }
 
-  _headPose(lm) {
-    const [y0, y1] = IDX.yaw, [p0, p1] = IDX.pitch, [r0, r1] = IDX.roll;
-    const yaw = Math.atan((lm[y0].z - lm[y1].z) / ((lm[y0].x - lm[y1].x) || 1e-6));
-    const pitch = Math.atan((lm[p0].z - lm[p1].z) / ((lm[p1].y - lm[p0].y) || 1e-6));
-    let roll = Math.atan2(lm[r1].x - lm[r0].x, lm[r0].y - lm[r1].y);
-    roll = (roll >= 0 ? roll - Math.PI : roll + Math.PI) / 2;
-    // head "area": landmark bounding-box area (proxy for FaceRects area)
+  _headPose(lm, res, outBuf) {
+    let yaw, pitch, roll;
+    const m = res && res.facialTransformationMatrixes && res.facialTransformationMatrixes[0];
+    if (m && m.data && m.data.length >= 16) {
+      // Match FaceMeshSolution.ExtractTransformMatrix() (Unity Quaternion.LookRotation(col2, col1).eulerAngles)
+      let fx = m.data[8], fy = m.data[9], fz = m.data[10];
+      let ux = m.data[4], uy = m.data[5], uz = m.data[6];
+      const fLen = Math.hypot(fx, fy, fz);
+      const uLen = Math.hypot(ux, uy, uz);
+      if (fLen > 1e-4 && uLen > 1e-4) {
+        fx /= fLen; fy /= fLen; fz /= fLen;
+        let rx = uy * fz - uz * fy;
+        let ry = uz * fx - ux * fz;
+        let rz = ux * fy - uy * fx;
+        const rLen = Math.hypot(rx, ry, rz);
+        if (rLen > 1e-4) {
+          rx /= rLen; ry /= rLen; rz /= rLen;
+          const oux = fy * rz - fz * ry;
+          const ouy = fz * rx - fx * rz;
+          pitch = Math.asin(Math.max(-1, Math.min(1, -fy)));
+          const cosPitch = Math.cos(pitch);
+          if (cosPitch > 1e-4) {
+            yaw = Math.atan2(fx, fz);
+            roll = Math.atan2(ry, ouy);
+          } else {
+            yaw = Math.atan2(-rx, oux);
+            roll = 0;
+          }
+        }
+      }
+    }
+    if (yaw === undefined) {
+      const [y0, y1] = IDX.yaw, [p0, p1] = IDX.pitch, [r0, r1] = IDX.roll;
+      yaw = Math.atan((lm[y0].z - lm[y1].z) / ((lm[y0].x - lm[y1].x) || 1e-6));
+      pitch = Math.atan((lm[p0].z - lm[p1].z) / ((lm[p1].y - lm[p0].y) || 1e-6));
+      roll = Math.atan2(lm[r1].x - lm[r0].x, lm[r0].y - lm[r1].y);
+      roll = (roll >= 0 ? roll - Math.PI : roll + Math.PI) / 2;
+    }
+    // Canonical 468-mesh bounding-box area (0..467, matching FaceMeshSolution.FaceBoundsNormalized)
     let minx = 1, miny = 1, maxx = 0, maxy = 0;
-    for (const p of lm) { if (p.x < minx) minx = p.x; if (p.x > maxx) maxx = p.x; if (p.y < miny) miny = p.y; if (p.y > maxy) maxy = p.y; }
-    const area = (maxx - minx) * (maxy - miny);
-    return Float32Array.from([yaw, pitch, roll, area]);
+    const meshCount = Math.min(468, lm.length);
+    for (let i = 0; i < meshCount; i++) {
+      const p = lm[i];
+      if (p.x < minx) minx = p.x; if (p.x > maxx) maxx = p.x;
+      if (p.y < miny) miny = p.y; if (p.y > maxy) maxy = p.y;
+    }
+    const area = Math.max(0, maxx - minx) * Math.max(0, maxy - miny);
+    const out = outBuf || new Float32Array(4);
+    out[0] = yaw; out[1] = pitch; out[2] = roll; out[3] = area;
+    return out;
   }
 
   _blink(lm, vw, vh) {

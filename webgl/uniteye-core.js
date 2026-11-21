@@ -44,21 +44,16 @@
       return new RidgeModel(obj.W, obj.Affine !== false, obj.FeatureMean || null, obj.FeatureStd || null);
     }
     predict(features) {
-      // Dimensionality guard — mirrors RidgeRegression.Predict's NaN contract: a model trained on a
-      // DIFFERENT feature layout (e.g. a saved calibration from before the vector grew to 36) must
-      // return NaN so the pipeline falls back to raw gaze, not silently produce garbage by multiplying
-      // whatever prefix happens to line up.
-      const expected = features.length + (this.affine ? 1 : 0);
+      // Dimensionality guard — mirrors RidgeRegression.Predict's NaN contract.
+      const bias = this.affine ? 1 : 0;
+      const expected = features.length + bias;
       if (!this.w || this.w.length !== expected) return NaN;
-      const xs = [];
-      if (this.affine) xs.push(1.0);
-      if (this.featureMean && this.featureStd && this.featureMean.length === features.length) {
-        for (let i = 0; i < features.length; i++) xs.push((features[i] - this.featureMean[i]) / this.featureStd[i]);
-      } else {
-        for (let i = 0; i < features.length; i++) xs.push(features[i]);
+      let y = this.affine ? this.w[0] : 0;
+      const std = this.featureMean && this.featureStd && this.featureMean.length === features.length && this.featureStd.length === features.length;
+      for (let i = 0; i < features.length; i++) {
+        const xi = std ? (features[i] - this.featureMean[i]) / this.featureStd[i] : features[i];
+        y += this.w[bias + i] * xi;
       }
-      let y = 0;
-      for (let i = 0; i < this.w.length; i++) y += this.w[i] * xs[i];
       return y;
     }
   }
@@ -86,7 +81,9 @@
       for (let j = 0; j < d; j++) row[j + 1] = (features[i][j] - mean[j]) / std[j];
       for (let r = 0; r < D; r++) { bvec[r] += row[r] * targets[i]; for (let c = 0; c < D; c++) A[r][c] += row[r] * row[c]; }
     }
-    for (let r = 0; r < D; r++) A[r][r] += lambda;
+    // Do NOT penalize the intercept column (index 0): matches RidgeRegression.cs so a constant target
+    // is recovered without shrinkage toward 0.
+    for (let r = 1; r < D; r++) A[r][r] += lambda;
     const w = solveLinear(A, bvec);
     return new RidgeModel(w, true, mean, std);
   }
@@ -105,13 +102,18 @@
   }
   class OneEuro {
     constructor(freq, mincutoff, beta, dcutoff) {
-      this.freq = freq; this.mincutoff = mincutoff != null ? mincutoff : 1.0;
-      this.beta = beta || 0.0; this.dcutoff = dcutoff != null ? dcutoff : 1.0;
+      this.freq = freq > 0 ? freq : 60.0; this.mincutoff = mincutoff > 0 ? mincutoff : 1.0;
+      this.beta = beta || 0.0; this.dcutoff = dcutoff > 0 ? dcutoff : 1.0;
       this.x = new LowPass(); this.dx = new LowPass(); this.lasttime = -1;
     }
     filterScalar(value, timestamp) {
-      if (this.lasttime !== -1 && timestamp !== -1) this.freq = 1.0 / Math.max(1e-6, timestamp - this.lasttime);
-      this.lasttime = timestamp;
+      if (timestamp == null) timestamp = -1;
+      if (this.lasttime !== -1 && timestamp !== -1 && timestamp > this.lasttime) {
+        this.freq = 1.0 / (timestamp - this.lasttime);
+      }
+      if (timestamp === -1 || this.lasttime === -1 || timestamp > this.lasttime) {
+        this.lasttime = timestamp;
+      }
       const dvalue = this.x.hasLast() ? (value - this.x.last()) * this.freq : 0.0;
       const edvalue = this.dx.filter(dvalue, alpha(this.dcutoff, this.freq));
       const cutoff = this.mincutoff + this.beta * Math.abs(edvalue);
@@ -129,9 +131,10 @@
     return inverted ? !inside : inside;
   }
   function pointInCircle(px, py, cx, cy, radius, aspect, inverted) {
-    // aspect = screen width/height; circle is defined in normalized space (aspect-influenced, like Unity)
-    const dx = (px - cx), dy = (py - cy) / (aspect || 1);
-    const inside = (dx * dx + dy * dy) <= radius * radius;
+    // Matches C# AOICircle.CheckCircle: radius is evaluated directly in normalized [0,1] space.
+    if (typeof aspect === 'boolean') { inverted = aspect; }
+    const dx = px - cx, dy = py - cy;
+    const inside = radius >= 0 && (dx * dx + dy * dy) <= radius * radius;
     return inverted ? !inside : inside;
   }
 
