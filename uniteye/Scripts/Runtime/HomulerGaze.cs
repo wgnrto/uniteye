@@ -129,6 +129,7 @@ namespace UnitEye
         private Calibrations _lastValidatedCalibrations = Calibrations.RidgeRegression;
         private readonly List<float> _medianScratchX = new List<float>(16);
         private readonly List<float> _medianScratchY = new List<float>(16);
+        private bool _mediaPipePausedWithoutProvider;
         #endregion
 
         #region Public accessors
@@ -580,12 +581,35 @@ namespace UnitEye
 
         protected virtual void OnEnable()
         {
-            _provider?.SetActive(true);
+            if (_provider != null)
+                _provider.SetActive(true);
+            else
+                SetMediaPipePausedWithoutProvider(false);
         }
 
         protected virtual void OnDisable()
         {
-            _provider?.SetActive(false);
+            if (_provider != null)
+                _provider.SetActive(false);
+            else
+                SetMediaPipePausedWithoutProvider(true);
+        }
+
+        //_provider is built in Start. A disable before Start (UnitEyeAPI.DisableGaze() in the first frame) or
+        //after a failed provider setup cannot pause the pipeline through it, so WebCamSource kept the camera
+        //open and FaceMeshSolution kept running landmark inference with no consumer. Toggle the same two
+        //components NativeGazeProvider.SetActive does. The flag keeps the initial OnEnable a no-op.
+        private void SetMediaPipePausedWithoutProvider(bool paused)
+        {
+    #if !UNITY_WEBGL || UNITY_EDITOR
+            if (_mediaPipeGO == null || paused == _mediaPipePausedWithoutProvider)
+                return;
+            _mediaPipePausedWithoutProvider = paused;
+            var faceMesh = _mediaPipeGO.GetComponent<FaceMeshSolution>();
+            if (faceMesh != null) faceMesh.enabled = !paused;
+            var webcam = _mediaPipeGO.GetComponent<WebCamSource>();
+            if (webcam != null) webcam.enabled = !paused;
+    #endif
         }
 
         public virtual void OnValidate()
